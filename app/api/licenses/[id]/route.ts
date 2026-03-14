@@ -13,11 +13,12 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 );
 
-type RouteParams = { params: { id: string } };
+type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: RouteParams) {
   try {
-    const id = params?.id?.trim();
+    const { id: idParam } = await params;
+    const id = idParam?.trim();
     if (!id) {
       return NextResponse.json({ error: 'License id is required' }, { status: 400 });
     }
@@ -41,7 +42,8 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
   try {
-    const id = params?.id?.trim();
+    const { id: idParam } = await params;
+    const id = idParam?.trim();
     if (!id) {
       return NextResponse.json({ error: 'License id is required' }, { status: 400 });
     }

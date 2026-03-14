@@ -1426,7 +1426,16 @@ export const usePosStore = create<PosState>()(
     }),
     {
       name: 'pos-storage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => {
+        if (typeof window === 'undefined') {
+          return {
+            getItem: () => null,
+            setItem: () => {},
+            removeItem: () => {},
+          };
+        }
+        return localStorage;
+      }),
       partialize: (state) => ({
         items: state.items,
         categories: state.categories,
