@@ -24,16 +24,6 @@ export default function LoginPage() {
   const [licenseChecking, setLicenseChecking] = useState(false);
   const [manualKey, setManualKey] = useState('');
 
-  // Normalize expires_at from various possible field names
-  const normalizeExpiresAt = (payload: Record<string, any>) =>
-    payload?.expires_at ??
-    payload?.expiresAt ??
-    payload?.expiry_date ??
-    payload?.expiryDate ??
-    payload?.expiration_date ??
-    payload?.expirationDate ??
-    '';
-
   // --- License expiry logic ---
   const checkLicenseExpiry = (overrideExpiresAt?: string) => {
     const expiresAt = overrideExpiresAt ?? licenseInfo?.expiresAt;
@@ -76,19 +66,14 @@ export default function LoginPage() {
       const machineId = licenseInfo?.machineId || `mach-${Math.random().toString(36).substring(2, 10)}`;
 
       try {
-        // Get URLs from environment variables with fallback to local paths
-        const verifyUrl = (process.env.NEXT_PUBLIC_LICENSE_VERIFY_URL || 'https://pos-license-manager.vercel.app/api/verify').trim();
-        const activateUrl = (process.env.NEXT_PUBLIC_LICENSE_ACTIVATE_URL || 'https://pos-license-manager.vercel.app/api/activate').trim();
-        const publicToken = (process.env.NEXT_PUBLIC_LICENSE_API_TOKEN || '').trim();
-        const authHeaders = {
-          ...(publicToken ? { Authorization: `Bearer ${publicToken}` } : {}),
-          ...(publicToken ? { 'x-api-key': publicToken } : {})
-        };
+        // Use local API routes which handle external API calls with fallbacks
+        const verifyUrl = '/api/verify';
+        const activateUrl = '/api/activate';
 
         // First try verify endpoint
         const response = await fetch(verifyUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ license_key: key, machine_id: machineId })
         });
         const data = await response.json();
@@ -127,7 +112,7 @@ export default function LoginPage() {
         // If verify didn't work, try activate endpoint
         const activateRes = await fetch(activateUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ license_key: key, machine_id: machineId })
         });
         const activateData = await activateRes.json();
@@ -156,102 +141,6 @@ export default function LoginPage() {
           }
           if (!isInitialSync) setError('');
           return true;
-        }
-
-        // Fallback: call license API directly from browser if server fetch failed
-        if (typeof window !== 'undefined') {
-          try {
-            const directVerifyUrl = verifyUrl.startsWith('http') ? verifyUrl : 'https://pos-license-manager.vercel.app/api/verify';
-            const directActivateUrl = activateUrl.startsWith('http') ? activateUrl : 'https://pos-license-manager.vercel.app/api/activate';
-
-            // Try verify endpoint first
-            const directVerifyRes = await fetch(directVerifyUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...authHeaders },
-              body: JSON.stringify({
-                license_key: key,
-                machine_id: machineId,
-                key,
-                licenseKey: key,
-                api_key: key
-              })
-            });
-
-            const directVerifyData = await directVerifyRes.json().catch(() => ({}));
-            const verifyPayload = (directVerifyData as any)?.data ?? (directVerifyData as any)?.result ?? directVerifyData;
-            const verifyExpiresAt = normalizeExpiresAt(verifyPayload as Record<string, any>);
-
-            if (directVerifyRes.ok && verifyExpiresAt) {
-              const dateStr = verifyExpiresAt.includes('T') ? verifyExpiresAt : verifyExpiresAt.replace(' ', 'T');
-              const expiryDate = new Date(dateStr);
-              expiryDate.setHours(23, 59, 59, 999);
-              const now = new Date();
-              const stillExpired = expiryDate < now;
-
-              updateLicenseInfo({
-                key: key,
-                machineId: machineId,
-                active: true,
-                expiresAt: verifyExpiresAt,
-                renewDate: (verifyPayload as any)?.renew_date || new Date().toISOString().replace('T', ' ').split('.')[0],
-                activationData: (verifyPayload as any)?.activation_data || (verifyPayload as any)?.activationData || licenseInfo?.activationData
-              });
-
-              setLicenseExpiry(checkLicenseExpiry(verifyExpiresAt));
-
-              if (stillExpired) {
-                if (!isInitialSync) setError('License is expired. Please contact your administrator.');
-                return false;
-              }
-              if (!isInitialSync) setError('');
-              return true;
-            }
-
-            // Try activate endpoint
-            const directActivateRes = await fetch(directActivateUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...authHeaders },
-              body: JSON.stringify({
-                license_key: key,
-                machine_id: machineId,
-                key,
-                licenseKey: key,
-                api_key: key
-              })
-            });
-
-            const directActivateData = await directActivateRes.json().catch(() => ({}));
-            const activatePayload = (directActivateData as any)?.data ?? (directActivateData as any)?.result ?? directActivateData;
-            const activateExpiresAt = normalizeExpiresAt(activatePayload as Record<string, any>);
-
-            if (directActivateRes.ok && activateExpiresAt) {
-              const dateStr = activateExpiresAt.includes('T') ? activateExpiresAt : activateExpiresAt.replace(' ', 'T');
-              const expiryDate = new Date(dateStr);
-              expiryDate.setHours(23, 59, 59, 999);
-              const now = new Date();
-              const stillExpired = expiryDate < now;
-
-              updateLicenseInfo({
-                key: key,
-                machineId: machineId,
-                active: true,
-                expiresAt: activateExpiresAt,
-                renewDate: (activatePayload as any)?.renew_date || new Date().toISOString().replace('T', ' ').split('.')[0],
-                activationData: (activatePayload as any)?.activation_data || (activatePayload as any)?.activationData || licenseInfo?.activationData
-              });
-
-              setLicenseExpiry(checkLicenseExpiry(activateExpiresAt));
-
-              if (stillExpired) {
-                if (!isInitialSync) setError('License is expired. Please contact your administrator.');
-                return false;
-              }
-              if (!isInitialSync) setError('');
-              return true;
-            }
-          } catch (err) {
-            console.error('Direct API call failed:', err);
-          }
         }
 
         if (!isInitialSync) {
