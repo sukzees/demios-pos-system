@@ -21,7 +21,7 @@ export default function LoginPage() {
   const [syncing, setSyncing] = useState(true);
   const [initialSyncComplete, setInitialSyncComplete] = useState(false);
   const router = useRouter();
-  const { login, isSupabaseConfigured, checkSupabaseConfig, licenseInfo, licenseSyncAt, updateLicenseInfo, syncLicenseDaily } = usePosStore();
+  const { login, isSupabaseConfigured, checkSupabaseConfig, licenseInfo, updateLicenseInfo } = usePosStore();
   const [licenseChecking, setLicenseChecking] = useState(false);
   const [manualKey, setManualKey] = useState('');
 
@@ -35,28 +35,17 @@ export default function LoginPage() {
     payload?.expirationDate ??
     '';
 
-  const parseLicenseDate = (value: string) => {
-    const raw = String(value || '').trim();
-    if (!raw) return null;
-    const iso = raw.includes('T') ? raw : raw.replace(' ', 'T');
-    const isoDate = new Date(iso);
-    if (!Number.isNaN(isoDate.getTime())) return isoDate;
-    const match = raw.match(/^(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
-    if (!match) return null;
-    const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = match;
-    const parsed = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  };
-
   // --- License expiry logic ---
   const checkLicenseExpiry = (overrideExpiresAt?: string) => {
     const expiresAt = overrideExpiresAt ?? licenseInfo?.expiresAt;
     if (!expiresAt) return { isExpired: true, daysRemaining: 0 };
 
-    const expiryDate = parseLicenseDate(expiresAt);
+    // Parse the date properly - handle both "YYYY-MM-DD HH:MM:SS" and "YYYY-MM-DDTHH:MM:SS" formats
+    const dateStr = expiresAt.includes('T') ? expiresAt : expiresAt.replace(' ', 'T');
+    const expiryDate = new Date(dateStr);
     
     // If date parsing failed, consider it expired
-    if (!expiryDate || isNaN(expiryDate.getTime())) {
+    if (isNaN(expiryDate.getTime())) {
       return { isExpired: true, daysRemaining: 0 };
     }
     
@@ -88,23 +77,9 @@ export default function LoginPage() {
       const machineId = licenseInfo?.machineId || `mach-${Math.random().toString(36).substring(2, 10)}`;
 
       try {
-        if (licenseInfo?.key && licenseInfo.key === key && licenseInfo.active && licenseInfo.expiresAt) {
-          const lastSync = licenseSyncAt ? new Date(licenseSyncAt).getTime() : 0;
-          const now = Date.now();
-          const expiryDate = parseLicenseDate(licenseInfo.expiresAt);
-          if (expiryDate) expiryDate.setHours(23, 59, 59, 999);
-          const isExpiredNow = expiryDate.getTime() < now;
-
-          if (!isExpiredNow && now - lastSync < 24 * 60 * 60 * 1000) {
-            if (!isInitialSync) setError('');
-            return true;
-          }
-        }
-
         // Get URLs from environment variables with fallback to local paths
-        // Always use same-origin API to avoid browser connection resets to external hosts
-        const verifyUrl = '/api/verify';
-        const activateUrl = '/api/activate';
+        const verifyUrl = (process.env.NEXT_PUBLIC_LICENSE_VERIFY_URL || 'https://pos-license-manager.vercel.app/api/verify').trim();
+        const activateUrl = (process.env.NEXT_PUBLIC_LICENSE_ACTIVATE_URL || 'https://pos-license-manager.vercel.app/api/activate').trim();
         const publicToken = (process.env.NEXT_PUBLIC_LICENSE_API_TOKEN || '').trim();
         const authHeaders = {
           ...(publicToken ? { Authorization: `Bearer ${publicToken}` } : {}),
@@ -118,28 +93,26 @@ export default function LoginPage() {
           body: JSON.stringify({ license_key: key, machine_id: machineId })
         });
         const data = await response.json();
-        const verifyPayload = (data as any)?.data ?? (data as any)?.result ?? data;
-        const verifyExpiresAt = normalizeExpiresAt(verifyPayload as Record<string, any>);
-        const verifyRenewDate = (verifyPayload as any)?.renew_date || (verifyPayload as any)?.renewDate || new Date().toISOString().replace('T', ' ').split('.')[0];
 
-        if (verifyExpiresAt) {
-          const expiryDate = parseLicenseDate(verifyExpiresAt);
-          if (expiryDate) expiryDate.setHours(23, 59, 59, 999);
+        if (data.valid && data.expires_at) {
+          const dateStr = data.expires_at.includes('T') ? data.expires_at : data.expires_at.replace(' ', 'T');
+          const expiryDate = new Date(dateStr);
+          expiryDate.setHours(23, 59, 59, 999);
           const now = new Date();
-          const stillExpired = expiryDate ? expiryDate < now : true;
+          const stillExpired = expiryDate < now;
 
           updateLicenseInfo({
             key: key,
             machineId: machineId,
-            active: data.valid === true,
-            expiresAt: verifyExpiresAt,
-            renewDate: verifyRenewDate,
-            activationData: (verifyPayload as any)?.activation_data || (verifyPayload as any)?.activationData || licenseInfo?.activationData
+            active: true,
+            expiresAt: data.expires_at,
+            renewDate: data.renew_date || new Date().toISOString().replace('T', ' ').split('.')[0],
+            activationData: data.activation_data || licenseInfo?.activationData
           });
 
-          setLicenseExpiry(checkLicenseExpiry(verifyExpiresAt));
+          setLicenseExpiry(checkLicenseExpiry(data.expires_at));
 
-          if (data.valid !== true || stillExpired) {
+          if (stillExpired) {
             if (!isInitialSync) setError('License is still expired. Please contact your administrator.');
             return false;
           } else {
@@ -159,28 +132,26 @@ export default function LoginPage() {
           body: JSON.stringify({ license_key: key, machine_id: machineId })
         });
         const activateData = await activateRes.json();
-        const activatePayload = (activateData as any)?.data ?? (activateData as any)?.result ?? activateData;
-        const activateExpiresAt = normalizeExpiresAt(activatePayload as Record<string, any>);
-        const activateRenewDate = (activatePayload as any)?.renew_date || (activatePayload as any)?.renewDate || new Date().toISOString().replace('T', ' ').split('.')[0];
 
-        if (activateExpiresAt) {
-          const expiryDate = parseLicenseDate(activateExpiresAt);
-          if (expiryDate) expiryDate.setHours(23, 59, 59, 999);
+        if (activateRes.ok && activateData.success && activateData.expires_at) {
+          const dateStr = activateData.expires_at.includes('T') ? activateData.expires_at : activateData.expires_at.replace(' ', 'T');
+          const expiryDate = new Date(dateStr);
+          expiryDate.setHours(23, 59, 59, 999);
           const now = new Date();
-          const stillExpired = expiryDate ? expiryDate < now : true;
+          const stillExpired = expiryDate < now;
 
           updateLicenseInfo({
             key: key,
             machineId: machineId,
-            active: activateData.success === true,
-            expiresAt: activateExpiresAt,
-            renewDate: activateRenewDate,
-            activationData: (activatePayload as any)?.activation_data || (activatePayload as any)?.activationData
+            active: true,
+            expiresAt: activateData.expires_at,
+            renewDate: activateData.renew_date || new Date().toISOString().replace('T', ' ').split('.')[0],
+            activationData: activateData.activation_data
           });
 
-          setLicenseExpiry(checkLicenseExpiry(activateExpiresAt));
+          setLicenseExpiry(checkLicenseExpiry(activateData.expires_at));
 
-          if (activateData.success !== true || stillExpired) {
+          if (stillExpired) {
             if (!isInitialSync) setError('License is expired. Please contact your administrator.');
             return false;
           }
@@ -191,8 +162,11 @@ export default function LoginPage() {
         // Fallback: call license API directly from browser if server fetch failed
         if (typeof window !== 'undefined') {
           try {
+            const directVerifyUrl = verifyUrl.startsWith('http') ? verifyUrl : 'https://pos-license-manager.vercel.app/api/verify';
+            const directActivateUrl = activateUrl.startsWith('http') ? activateUrl : 'https://pos-license-manager.vercel.app/api/activate';
+
             // Try verify endpoint first
-            const directVerifyRes = await fetch(verifyUrl, {
+            const directVerifyRes = await fetch(directVerifyUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', ...authHeaders },
               body: JSON.stringify({
@@ -209,10 +183,11 @@ export default function LoginPage() {
             const verifyExpiresAt = normalizeExpiresAt(verifyPayload as Record<string, any>);
 
             if (directVerifyRes.ok && verifyExpiresAt) {
-              const expiryDate = parseLicenseDate(verifyExpiresAt);
-              if (expiryDate) expiryDate.setHours(23, 59, 59, 999);
+              const dateStr = verifyExpiresAt.includes('T') ? verifyExpiresAt : verifyExpiresAt.replace(' ', 'T');
+              const expiryDate = new Date(dateStr);
+              expiryDate.setHours(23, 59, 59, 999);
               const now = new Date();
-              const stillExpired = expiryDate ? expiryDate < now : true;
+              const stillExpired = expiryDate < now;
 
               updateLicenseInfo({
                 key: key,
@@ -234,7 +209,7 @@ export default function LoginPage() {
             }
 
             // Try activate endpoint
-            const directActivateRes = await fetch(activateUrl, {
+            const directActivateRes = await fetch(directActivateUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', ...authHeaders },
               body: JSON.stringify({
@@ -251,10 +226,11 @@ export default function LoginPage() {
             const activateExpiresAt = normalizeExpiresAt(activatePayload as Record<string, any>);
 
             if (directActivateRes.ok && activateExpiresAt) {
-              const expiryDate = parseLicenseDate(activateExpiresAt);
-              if (expiryDate) expiryDate.setHours(23, 59, 59, 999);
+              const dateStr = activateExpiresAt.includes('T') ? activateExpiresAt : activateExpiresAt.replace(' ', 'T');
+              const expiryDate = new Date(dateStr);
+              expiryDate.setHours(23, 59, 59, 999);
               const now = new Date();
-              const stillExpired = expiryDate ? expiryDate < now : true;
+              const stillExpired = expiryDate < now;
 
               updateLicenseInfo({
                 key: key,
@@ -294,7 +270,7 @@ export default function LoginPage() {
 
   // --- Refresh button handler ---
   const handleRefreshLicense = async () => {
-    const key = (licenseInfo?.key || manualKey).trim();
+    const key = licenseInfo?.key || manualKey.trim();
     if (!key) {
       setError('Please enter a license key first.');
       return;
@@ -306,7 +282,7 @@ export default function LoginPage() {
     if (success) {
       const expiresAt = licenseInfo?.expiresAt || '';
       if (expiresAt) {
-        const formattedDate = format(parseLicenseDate(expiresAt) || new Date(expiresAt), 'MMM dd, yyyy');
+        const formattedDate = format(new Date(expiresAt.replace(' ', 'T')), 'MMM dd, yyyy');
         alert(`License active until ${formattedDate}! System unlocked.`);
       }
     }
@@ -318,16 +294,6 @@ export default function LoginPage() {
   useEffect(() => {
     checkSupabaseConfig();
   }, [checkSupabaseConfig]);
-
-  useEffect(() => {
-    if (licenseInfo?.key) {
-      setManualKey(licenseInfo.key);
-    }
-  }, [licenseInfo?.key]);
-
-  useEffect(() => {
-    syncLicenseDaily();
-  }, [syncLicenseDaily, licenseInfo?.key]);
 
   const hasSynced = useRef(false);
   useEffect(() => {
@@ -419,12 +385,12 @@ export default function LoginPage() {
                     <AlertTitle className="text-red-950 font-black text-base leading-none">System Locked</AlertTitle>
                     <AlertDescription className="text-red-800 text-xs leading-snug font-medium space-y-1">
                       {licenseInfo?.expiresAt ? (
-                        <p>License expired <span className="underline decoration-red-300 font-bold">({format(parseLicenseDate(licenseInfo.expiresAt) || new Date(licenseInfo.expiresAt), 'MMM dd, yyyy')})</span>.</p>
+                        <p>License expired <span className="underline decoration-red-300 font-bold">({format(new Date(licenseInfo.expiresAt.replace(' ', 'T')), 'MMM dd, yyyy')})</span>.</p>
                       ) : (
                         <p>No active license found.</p>
                       )}
                       {licenseInfo?.renewDate && (
-                        <p className="opacity-60 italic">Last attempt: {format(parseLicenseDate(licenseInfo.renewDate) || new Date(licenseInfo.renewDate), 'MMM dd, yyyy')}</p>
+                        <p className="opacity-60 italic">Last attempt: {format(new Date(licenseInfo.renewDate.replace(' ', 'T')), 'MMM dd, yyyy')}</p>
                       )}
                       <span className="block pt-1 border-t border-red-100 font-black text-red-600">
                         Contact admin: <a href="https://wa.me/2052957534" target="_blank" className="underline hover:text-red-700 break-all">020 52957534</a>
@@ -527,7 +493,7 @@ export default function LoginPage() {
                       <AlertDescription className="text-amber-800 text-xs leading-tight font-medium space-y-0.5">
                         <p>Expires in <span className="font-black text-amber-600">{daysRemaining === 0 ? 'today' : `${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}`}</span>.</p>
                         {licenseInfo.renewDate && (
-                          <p className="opacity-60 italic">Last verified: {format(parseLicenseDate(licenseInfo.renewDate) || new Date(licenseInfo.renewDate), 'MMM dd, yyyy')}</p>
+                          <p className="opacity-60 italic">Last verified: {format(new Date(licenseInfo.renewDate.replace(' ', 'T')), 'MMM dd, yyyy')}</p>
                         )}
                         <p>Please contact admin for renewal.</p>
                       </AlertDescription>
