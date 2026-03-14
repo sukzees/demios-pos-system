@@ -1,0 +1,1 @@
+const fs = require('fs'); const txt = fs.readFileSync('app/settings/page.tsx', 'utf8'); try { require('@babel/core').transformSync(txt, {presets: ['@babel/preset-react', '@babel/preset-typescript'], filename: 'app/settings/page.tsx'}); console.log('Parsed successfully'); } catch(e) { console.error(e.message); }

@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+@theme {
+  --font-lao: var(--font-lao);
+  --font-thai: var(--font-thai);
+}
