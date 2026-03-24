@@ -85,6 +85,8 @@ const TRANSLATIONS = {
     activating: 'Activating...',
     activate: 'Activate License',
     returnLicense: 'Return License',
+    refreshActivation: 'Refresh Activation Status',
+    checkActivation: 'Check Activation Status',
     activeMachineId: 'Machine ID',
     syncSuccess: 'Settings saved!',
     fillAllFields: 'Please fill in all fields',
@@ -197,6 +199,8 @@ const TRANSLATIONS = {
     activating: 'ກຳລັງເປີດໃຊ້...',
     activate: 'ເປີດໃຊ້ລິຂະສິດ',
     returnLicense: 'ຄືນລິຂະສິດ',
+    refreshActivation: 'ໂຫຼດສະຖານະໃໝ່',
+    checkActivation: 'ກວດສອບສະຖານະ',
     activeMachineId: 'ລະຫັດເຄື່ອງ (Machine ID)',
     syncSuccess: 'ບັນທຶກການຕັ້ງຄ່າແລ້ວ!',
     fillAllFields: 'ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບຖ້ວນ',
@@ -309,6 +313,8 @@ const TRANSLATIONS = {
     activating: 'กำลังเปิดใช้งาน...',
     activate: 'เปิดใช้งานลิขสิทธิ์',
     returnLicense: 'คืนลิขสิทธิ์',
+    refreshActivation: 'รีเฟรชสถานะ',
+    checkActivation: 'ตรวจสอบสถานะ',
     activeMachineId: 'รหัสเครื่อง (Machine ID)',
     syncSuccess: 'บันทึกการตั้งค่าแล้ว!',
     fillAllFields: 'กรุณากรอกข้อมูลให้ครบถ้วน',
@@ -349,6 +355,7 @@ import { Save, Trash2, Plus, Printer, RefreshCw, Eye } from 'lucide-react';
 import { usePosStore } from '@/lib/store';
 
 export default function SettingsPage() {
+  const envLicenseKey = (process.env.NEXT_PUBLIC_POS_LICENSE_KEY || '').trim();
   const {
     receiptSettings,
     updateReceiptSettings,
@@ -427,8 +434,7 @@ export default function SettingsPage() {
   const [localSilentPrint, setLocalSilentPrint] = useState(silentPrint ?? false);
 
   // License
-  const [licenseKey, setLicenseKey] = useState(licenseInfo?.key || '');
-  const [apiToken, setApiToken] = useState('');
+  const [licenseKey, setLicenseKey] = useState(envLicenseKey || licenseInfo?.key || '');
   const [isActivating, setIsActivating] = useState(false);
   const [activationMessage, setActivationMessage] = useState('');
   const [daysRemaining, setDaysRemaining] = useState(0);
@@ -455,7 +461,7 @@ export default function SettingsPage() {
     setLocalStationMappings(stationMappings);
 
     if (licenseInfo) {
-      setLicenseKey(licenseInfo.key);
+      setLicenseKey(envLicenseKey || licenseInfo.key);
       // Calculate days remaining from expires_at
       if (licenseInfo.expiresAt) {
         const expiryDate = parseLicenseDate(licenseInfo.expiresAt);
@@ -472,7 +478,7 @@ export default function SettingsPage() {
     }
     setLocalAutoPrint(autoPrint ?? false);
     setLocalSilentPrint(silentPrint ?? false);
-  }, [receiptSettings, currencySettings, generalSettings, bankConfigs, printerConfigs, stationMappings, licenseInfo, autoPrint, silentPrint]);
+  }, [receiptSettings, currencySettings, generalSettings, bankConfigs, printerConfigs, stationMappings, licenseInfo, autoPrint, silentPrint, envLicenseKey]);
 
   useEffect(() => {
     if (isSupabaseConfigured) {
@@ -520,16 +526,7 @@ export default function SettingsPage() {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   };
 
-  const getLicenseAuthHeaders = () => {
-    const publicToken = (process.env.NEXT_PUBLIC_LICENSE_API_TOKEN || '').trim();
-    return {
-      ...(publicToken ? { Authorization: `Bearer ${publicToken}` } : {}),
-      ...(publicToken ? { 'x-api-key': publicToken } : {})
-    };
-  };
-
   const getLicenseEndpoints = () => {
-    // Always use same-origin API to avoid browser connection resets to external hosts
     return {
       verifyUrl: '/api/verify',
       activateUrl: '/api/activate',
@@ -537,112 +534,65 @@ export default function SettingsPage() {
     };
   };
 
+  const updateLicenseState = (key: string, machineId: string, data: any) => {
+    const payload = (data as any)?.data ?? (data as any)?.result ?? data;
+    const expiresAt = normalizeExpiresAt(payload as Record<string, any>);
+
+    if (expiresAt) {
+      updateLicenseInfo({
+        key,
+        machineId,
+        active: data.success === true || data.valid === true,
+        expiresAt,
+        renewDate: (payload as any)?.renew_date || (payload as any)?.renewDate || new Date().toISOString().replace('T', ' ').split('.')[0],
+        activationData: (payload as any)?.activation_data || (payload as any)?.activationData || payload
+      });
+
+      const expiryDate = parseLicenseDate(expiresAt);
+      if (expiryDate) {
+        expiryDate.setHours(23, 59, 59, 999);
+        const diffTime = expiryDate.getTime() - Date.now();
+        setDaysRemaining(Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24))));
+      } else {
+        setDaysRemaining(0);
+      }
+      return true;
+    }
+    return false;
+  };
+
   const handleActivateLicense = async () => {
-      if (!licenseKey.trim()) {
-        setActivationMessage(t.noKey);
+    if (!(envLicenseKey || licenseKey.trim())) {
+      setActivationMessage(t.noKey);
+      return;
+    }
+
+    setIsActivating(true);
+    setActivationMessage('');
+
+    try {
+      const normalizedKey = envLicenseKey || licenseKey.trim();
+      const machineId = licenseInfo?.machineId || `mach-${Math.random().toString(36).substring(2, 10)}`;
+      const { activateUrl } = getLicenseEndpoints();
+
+      const response = await fetch(activateUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: normalizedKey,
+          machine_id: machineId,
+          force_refresh: true
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (data.success && updateLicenseState(normalizedKey, machineId, data)) {
+        setActivationMessage(t.licenseActivated);
         return;
       }
 
-      setIsActivating(true);
-      setActivationMessage('');
-
-      try {
-        const normalizedKey = licenseKey.trim();
-        const machineId = licenseInfo?.machineId || `mach-${Math.random().toString(36).substring(2, 10)}`;
-        const { activateUrl, verifyUrl } = getLicenseEndpoints();
-        const authHeaders = getLicenseAuthHeaders();
-
-        const response = await fetch(activateUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({
-            license_key: normalizedKey,
-            machine_id: machineId,
-            key: normalizedKey,
-            licenseKey: normalizedKey,
-            api_key: normalizedKey
-          })
-        });
-
-        const data = await response.json().catch(() => ({}));
-        const payload = (data as any)?.data ?? (data as any)?.result ?? data;
-        const expiresAt = normalizeExpiresAt(payload as Record<string, any>);
-
-        if (expiresAt) {
-          setActivationMessage(t.licenseActivated);
-          updateLicenseInfo({
-            key: normalizedKey,
-            machineId: machineId,
-            active: data.success === true,
-            expiresAt: expiresAt,
-            renewDate: (payload as any)?.renew_date || new Date().toISOString().replace('T', ' ').split('.')[0],
-            activationData: (payload as any)?.activation_data || (payload as any)?.activationData
-        });
-        // Recalculate days remaining
-        const expiryDate = parseLicenseDate(expiresAt);
-        if (!expiryDate) {
-          setDaysRemaining(0);
-          return;
-        }
-        expiryDate.setHours(23, 59, 59, 999);
-        const now = new Date();
-        const diffTime = expiryDate.getTime() - now.getTime();
-        const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          setDaysRemaining(Math.max(0, days));
-          return;
-        }
-
-        // Fallback: verify endpoint in case activate doesn't return expiry
-        const verifyRes = await fetch(verifyUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({
-            license_key: normalizedKey,
-            machine_id: machineId,
-            key: normalizedKey,
-            licenseKey: normalizedKey,
-            api_key: normalizedKey
-          })
-        });
-        const verifyData = await verifyRes.json().catch(() => ({}));
-        const verifyPayload = (verifyData as any)?.data ?? (verifyData as any)?.result ?? verifyData;
-        const verifyLicensePayload =
-          (verifyPayload as any)?.license ??
-          (verifyPayload as any)?.license_info ??
-          (verifyPayload as any)?.licenseInfo ??
-          verifyPayload;
-        const verifyExpiresAt = normalizeExpiresAt(verifyLicensePayload as Record<string, any>);
-
-        if (verifyExpiresAt) {
-          setActivationMessage(t.licenseActivated);
-          updateLicenseInfo({
-            key: normalizedKey,
-            machineId: machineId,
-            active: verifyData.valid === true,
-            expiresAt: verifyExpiresAt,
-            renewDate: (verifyLicensePayload as any)?.renew_date || new Date().toISOString().replace('T', ' ').split('.')[0],
-            activationData: (verifyLicensePayload as any)?.activation_data || (verifyLicensePayload as any)?.activationData
-          });
-          const expiryDate = parseLicenseDate(verifyExpiresAt);
-          if (!expiryDate) {
-            setDaysRemaining(0);
-            return;
-          }
-          expiryDate.setHours(23, 59, 59, 999);
-          const now = new Date();
-          const diffTime = expiryDate.getTime() - now.getTime();
-          const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          setDaysRemaining(Math.max(0, days));
-          return;
-        }
-
-        const activationError =
-          (data as any)?.error ||
-          (payload as any)?.error ||
-          (data as any)?.message ||
-        (payload as any)?.message ||
-        t.licenseError;
-
+      const activationError = data?.error || data?.message || t.licenseError;
       if (String(activationError).toLowerCase().includes('not found')) {
         setActivationMessage('License key not found');
       } else {
@@ -659,29 +609,85 @@ export default function SettingsPage() {
   const handleSyncLicense = async () => {
     setActivationMessage('');
     setIsActivating(true);
-    
+
     try {
-      // First, fetch all licenses from external API and save to local Supabase
-      const syncAllResponse = await fetch('/api/license/sync', {
+      const keyToSync = envLicenseKey || licenseKey.trim() || licenseInfo?.key || '';
+      const machineId = licenseInfo?.machineId || '';
+
+      if (!keyToSync) {
+        setActivationMessage(t.noKey);
+        return;
+      }
+
+      const syncResponse = await fetch('/api/license/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fetch_all: true, api_token: apiToken.trim() || undefined })
+        body: JSON.stringify({
+          license_key: keyToSync
+        })
       });
-      const syncAllData = await syncAllResponse.json();
-      
-      if (syncAllData.success) {
-        setActivationMessage(`Synced ${syncAllData.count || 0} licenses from pos-license-manager.vercel.app`);
-        
-        // If we have a license key, also sync that specific one
-        if (licenseKey.trim()) {
-          await syncLicenseNow(licenseKey);
-        }
-      } else {
-        setActivationMessage(syncAllData.error || 'Failed to sync licenses from external API');
+      const syncData = await syncResponse.json();
+
+      if (!syncData.success) {
+        setActivationMessage(syncData.error || 'Failed to sync license from verify-license API');
+        return;
       }
-    } catch (error: any) {
+
+      const verifyResponse = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: keyToSync,
+          machine_id: machineId
+        })
+      });
+      const verifyData = await verifyResponse.json();
+
+      if (verifyData.valid && updateLicenseState(keyToSync, machineId, verifyData)) {
+        setActivationMessage('Sync complete. License active (from local database)');
+        return;
+      }
+
+      setActivationMessage(verifyData.error || 'License is still not available in local database after refresh.');
+    } catch (error) {
       const errorMsg = error?.message || 'Failed to sync license. Please check your network connection.';
       setActivationMessage(errorMsg);
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
+  const handleCheckActivationStatus = async () => {
+    setActivationMessage('');
+    setIsActivating(true);
+
+    try {
+      const keyToCheck = envLicenseKey || licenseKey.trim() || licenseInfo?.key || '';
+      const machineId = licenseInfo?.machineId || '';
+
+      if (!keyToCheck) {
+        setActivationMessage(t.noKey);
+        return;
+      }
+
+      const response = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: keyToCheck,
+          machine_id: machineId
+        })
+      });
+      const data = await response.json();
+
+      if (data.valid && updateLicenseState(keyToCheck, machineId, data)) {
+        setActivationMessage('License is active (from local database)');
+        return;
+      }
+
+      setActivationMessage(data.error || 'License is not available in local database yet. Try "Refresh Activation Status".');
+    } catch (error) {
+      setActivationMessage('Failed to check activation status.');
     } finally {
       setIsActivating(false);
     }
@@ -705,7 +711,7 @@ export default function SettingsPage() {
   };
 
   const handleReturnLicense = async () => {
-    if (!licenseKey.trim()) return;
+    if (!(envLicenseKey || licenseKey.trim())) return;
 
     if (!window.confirm(t.confirmDeactivate)) {
       return;
@@ -716,16 +722,12 @@ export default function SettingsPage() {
 
     try {
       const { returnUrl } = getLicenseEndpoints();
-      const authHeaders = getLicenseAuthHeaders();
       const response = await fetch(returnUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          license_key: licenseKey,
-          machine_id: licenseInfo?.machineId,
-          key: licenseKey,
-          licenseKey: licenseKey,
-          api_key: licenseKey
+          license_key: envLicenseKey || licenseKey,
+          machine_id: licenseInfo?.machineId
         })
       });
 
@@ -740,7 +742,7 @@ export default function SettingsPage() {
           expiresAt: '',
           activationData: null
         });
-        setLicenseKey('');
+        setLicenseKey(envLicenseKey || '');
       } else {
         setActivationMessage(data.error || t.returnError);
       }
@@ -756,16 +758,12 @@ export default function SettingsPage() {
 
     try {
       const { verifyUrl } = getLicenseEndpoints();
-      const authHeaders = getLicenseAuthHeaders();
       const response = await fetch(verifyUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           license_key: licenseInfo.key,
-          machine_id: licenseInfo.machineId,
-          key: licenseInfo.key,
-          licenseKey: licenseInfo.key,
-          api_key: licenseInfo.key
+          machine_id: licenseInfo.machineId
         })
       });
 
@@ -1733,16 +1731,6 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-4 max-w-lg">
-                {/* <div className="space-y-2">
-                  <Label htmlFor="api-token">API Token (for sync)</Label>
-                  <Input
-                    id="api-token"
-                    type="password"
-                    placeholder="Enter API token from pos-license-manager.vercel.app"
-                    value={apiToken}
-                    onChange={(e) => setApiToken(e.target.value)}
-                  />
-                </div> */}
                 <div className="space-y-2">
                   <Label htmlFor="license-key">{t.licenseKey}</Label>
                   <div className="flex gap-2">
@@ -1761,7 +1749,7 @@ export default function SettingsPage() {
                       placeholder="POS-XXXX-XXXX-XXXX-XXXX"
                       value={licenseKey}
                       onChange={(e) => setLicenseKey(e.target.value)}
-                      disabled={licenseInfo?.active}
+                      disabled={!!envLicenseKey || licenseInfo?.active}
                     />
                     <Button
                       type="button"
@@ -1822,6 +1810,27 @@ export default function SettingsPage() {
                           </ul>
                         </div>
                       )} */}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2"
+                        onClick={handleSyncLicense}
+                        disabled={isActivating}
+                      >
+                        <RefreshCw className={isActivating ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+                        {t.refreshActivation}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2"
+                        onClick={handleCheckActivationStatus}
+                        disabled={isActivating}
+                      >
+                        <Eye className="h-4 w-4" />
+                        {t.checkActivation}
+                      </Button>
                     </div>
 
                     <Button
@@ -1886,14 +1895,26 @@ export default function SettingsPage() {
                       {isActivating ? t.activating : t.activate}
                     </Button>
                     
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={handleViewLicenseData}
-                      disabled={isActivating}
-                    >
-                      View License Data
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2"
+                        onClick={handleSyncLicense}
+                        disabled={isActivating}
+                      >
+                        <RefreshCw className={isActivating ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+                        {t.refreshActivation}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2"
+                        onClick={handleCheckActivationStatus}
+                        disabled={isActivating}
+                      >
+                        <Eye className="h-4 w-4" />
+                        {t.checkActivation}
+                      </Button>
+                    </div>
                   </div>
                 )}
 
@@ -1941,3 +1962,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+

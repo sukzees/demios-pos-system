@@ -8,10 +8,12 @@ import { cn } from '@/lib/utils';
 import { MobileNav } from '@/components/mobile-nav';
 import { TopBar } from '@/components/top-bar';
 
+const LICENSE_AUTO_SYNC_INTERVAL_MS = Number(process.env.NEXT_PUBLIC_LICENSE_SYNC_INTERVAL_MS || 60 * 60 * 1000);
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, generalSettings } = usePosStore();
+  const { user, generalSettings, licenseInfo, syncLicenseDaily } = usePosStore();
   const [isMounted, setIsMounted] = useState(false);
   const currentLanguage = generalSettings?.language || 'en';
 
@@ -28,6 +30,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.push('/');
     }
   }, [user, pathname, router, isMounted]);
+
+  useEffect(() => {
+    if (!isMounted || !licenseInfo?.key) return;
+
+    syncLicenseDaily();
+
+    const intervalId = window.setInterval(() => {
+      syncLicenseDaily();
+    }, LICENSE_AUTO_SYNC_INTERVAL_MS);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncLicenseDaily();
+      }
+    };
+
+    window.addEventListener('focus', syncLicenseDaily);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', syncLicenseDaily);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isMounted, licenseInfo?.key, syncLicenseDaily]);
 
   // Don't render anything until mounted to prevent hydration mismatch
   if (!isMounted) return null;

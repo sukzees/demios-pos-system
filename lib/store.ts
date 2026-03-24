@@ -7,6 +7,9 @@ import { addItemWithStockWorkaround, addItemViaRPC } from '@/lib/supabase-workar
 
 export type { Employee };
 
+const ENV_LICENSE_KEY = (process.env.NEXT_PUBLIC_POS_LICENSE_KEY || '').trim();
+const LICENSE_SYNC_INTERVAL_MS = Number(process.env.NEXT_PUBLIC_LICENSE_SYNC_INTERVAL_MS || 60 * 60 * 1000);
+
 const isMissingColumnInSchemaCache = (error: any, table: string, column: string): boolean => {
   const message = String(error?.message || '').toLowerCase();
   return message.includes('schema cache') && message.includes(table.toLowerCase()) && message.includes(column.toLowerCase());
@@ -211,7 +214,7 @@ export const usePosStore = create<PosState>()(
       ],
       stationMappings: [],
       licenseInfo: {
-        key: '',
+        key: ENV_LICENSE_KEY,
         machineId: typeof window !== 'undefined' ? (localStorage.getItem('machine_id') || `mach-${Math.random().toString(36).substring(2, 10)}`) : '',
         active: false,
         expiresAt: '',
@@ -237,17 +240,22 @@ export const usePosStore = create<PosState>()(
         if (typeof window !== 'undefined' && info.machineId) {
           localStorage.setItem('machine_id', info.machineId);
         }
-        set({ licenseInfo: info });
+        set({
+          licenseInfo: {
+            ...info,
+            key: ENV_LICENSE_KEY || info.key
+          }
+        });
       },
       syncLicenseDaily: async (force = false, keyOverride) => {
         const { licenseInfo, licenseSyncAt, isOnline } = get();
-        const keyToUse = (keyOverride || licenseInfo?.key || '').trim();
+        const keyToUse = (ENV_LICENSE_KEY || keyOverride || licenseInfo?.key || '').trim();
         if (!keyToUse) return;
         if (!force && !isOnline) return;
 
         const lastSync = licenseSyncAt ? new Date(licenseSyncAt).getTime() : 0;
         const now = Date.now();
-        if (!force && now - lastSync < 24 * 60 * 60 * 1000) return;
+        if (!force && now - lastSync < LICENSE_SYNC_INTERVAL_MS) return;
 
         try {
           const toUtcDateTime = (value: number) => {
@@ -330,7 +338,7 @@ export const usePosStore = create<PosState>()(
       },
       syncLicenseNow: async (keyOverride) => {
         const { licenseInfo } = get();
-        const keyToUse = (keyOverride || licenseInfo?.key || '').trim();
+        const keyToUse = (ENV_LICENSE_KEY || keyOverride || licenseInfo?.key || '').trim();
         if (!keyToUse) return;
 
         try {
@@ -1436,6 +1444,20 @@ export const usePosStore = create<PosState>()(
         }
         return localStorage;
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = (persistedState as Partial<PosState>) || {};
+        const current = currentState as PosState;
+
+        return {
+          ...current,
+          ...persisted,
+          licenseInfo: {
+            ...current.licenseInfo,
+            ...(persisted.licenseInfo || {}),
+            key: ENV_LICENSE_KEY || persisted.licenseInfo?.key || current.licenseInfo.key
+          }
+        };
+      },
       partialize: (state) => ({
         items: state.items,
         categories: state.categories,

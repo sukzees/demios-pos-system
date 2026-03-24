@@ -6,367 +6,457 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseServiceRoleKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SERVICE_ROLE ||
+    process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
     '';
-const supabase = createClient(
-    supabaseUrl,
-    supabaseServiceRoleKey || supabaseAnonKey,
-    { auth: { persistSession: false } }
-);
 
-const LICENSE_TABLES = (process.env.LICENSE_TABLES || '')
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
-const LICENSE_KEY_COLUMNS = (process.env.LICENSE_KEY_COLUMNS || '')
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
+const projectRefFromUrl = (supabaseUrl.match(/^https:\/\/([^.]+)\.supabase\.co/i) || [])[1] || '';
 
-const FALLBACK_TABLES = ['licenses', 'license_keys', 'license'];
-const FALLBACK_COLUMNS = ['license_key', 'key', 'license'];
+const decodeJwtRef = (token: string) => {
+    try {
+        const payload = token.split('.')[1] || '';
+        if (!payload) return '';
+        const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+        return String(decoded?.ref || '');
+    } catch {
+        return '';
+    }
+};
 
-const TABLES_TO_TRY = LICENSE_TABLES.length > 0 ? LICENSE_TABLES : FALLBACK_TABLES;
-const COLUMNS_TO_TRY = LICENSE_KEY_COLUMNS.length > 0 ? LICENSE_KEY_COLUMNS : FALLBACK_COLUMNS;
+const serviceRoleRef = decodeJwtRef(supabaseServiceRoleKey);
+const shouldUseServiceRole = !!supabaseServiceRoleKey && !!projectRefFromUrl && serviceRoleRef === projectRefFromUrl;
+const supabaseServerKey = shouldUseServiceRole ? supabaseServiceRoleKey : supabaseAnonKey;
+
+if (supabaseServiceRoleKey && !shouldUseServiceRole) {
+    console.warn('SUPABASE_SERVICE_ROLE_KEY project ref does not match NEXT_PUBLIC_SUPABASE_URL project ref. Falling back to anon key.');
+}
+
+const supabase = createClient(supabaseUrl, supabaseServerKey, {
+    auth: { persistSession: false }
+});
+
 const LICENSE_SCHEMA = (process.env.LICENSE_SCHEMA || 'public').trim() || 'public';
-const LICENSE_AUTO_SEED = (process.env.LICENSE_AUTO_SEED || 'true').toLowerCase() === 'true';
-const LICENSE_AUTO_SEED_EXPIRES_AT = (
-    process.env.LICENSE_AUTO_SEED_EXPIRES_AT ||
-    new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').split('.')[0]
+const TARGET_LICENSE_TABLE = 'license_keys';
+const TARGET_LICENSE_COLUMN = 'license_key';
+const LICENSE_VERIFY_FUNCTION_URL = (
+    process.env.LICENSE_VERIFY_FUNCTION_URL ||
+    process.env.NEXT_PUBLIC_LICENSE_VERIFY_FUNCTION_URL ||
+    'https://qrdfkugddyeqwkbijiuo.supabase.co/functions/v1/verify-license'
 ).trim();
-const LICENSE_ACTIVATE_URL = (
-    process.env.LICENSE_ACTIVATE_URL ||
-    process.env.NEXT_PUBLIC_LICENSE_ACTIVATE_URL ||
+const ENV_LICENSE_KEY = (
+    process.env.POS_LICENSE_KEY ||
+    process.env.NEXT_PUBLIC_POS_LICENSE_KEY ||
     ''
 ).trim();
-const LICENSE_API_TOKEN = (
-    process.env.LICENSE_API_TOKEN ||
-    process.env.NEXT_PUBLIC_LICENSE_API_TOKEN ||
-    ''
-).trim();
+const EXTERNAL_FETCH_TIMEOUT_MS = Number(process.env.LICENSE_EXTERNAL_TIMEOUT_MS || 20000);
+const EXTERNAL_FETCH_RETRIES = Number(process.env.LICENSE_EXTERNAL_RETRIES || 3);
 
-const toUtcDateTime = (value: number) => {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    const pad = (v: number) => String(v).padStart(2, '0');
-    return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+const buildKeyCandidates = (rawKey: string) => {
+    const trimmed = String(rawKey || '').trim();
+    const noSpaces = trimmed.replace(/\s+/g, '');
+    const noDashes = noSpaces.replace(/-/g, '');
+
+    return Array.from(
+        new Set([
+            rawKey,
+            trimmed,
+            noSpaces,
+            noDashes,
+            trimmed.toUpperCase(),
+            trimmed.toLowerCase()
+        ].filter(Boolean))
+    );
 };
 
-const normalizeExpiresAt = (row: Record<string, any>) => {
-    const raw =
-        row.expires_at ??
-        row.expiresAt ??
-        row.expiry_date ??
-        row.expiryDate ??
-        row.expiration_date ??
-        row.expirationDate ??
-        row.expires ??
-        row.expiry ??
-        row.expire_date ??
-        '';
+const pad = (value: number) => String(value).padStart(2, '0');
 
-    if (raw === null || raw === undefined) return '';
-    if (typeof raw === 'number') {
-        const ms = raw > 1e12 ? raw : raw * 1000;
-        return toUtcDateTime(ms);
+const toUtcDateTime = (date: Date) =>
+    `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+
+const normalizeDateTime = (value: unknown) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number') {
+        const ms = value > 1e12 ? value : value * 1000;
+        const parsed = new Date(ms);
+        return Number.isNaN(parsed.getTime()) ? null : toUtcDateTime(parsed);
     }
-    const rawStr = String(raw).trim();
-    if (/^\d+$/.test(rawStr)) {
-        const num = Number(rawStr);
-        const ms = num > 1e12 ? num : num * 1000;
-        return toUtcDateTime(ms);
-    }
-    return rawStr;
-};
 
-const normalizeRenewDate = (row: Record<string, any>) =>
-    row.renew_date ?? row.renewDate ?? row.last_verified ?? row.lastVerified ?? null;
-
-const normalizeActivationData = (row: Record<string, any>) =>
-    row.activation_data ?? row.activationData ?? row.features ?? null;
-
-const unwrapLicensePayload = (payload: Record<string, any>) =>
-    payload?.license ??
-    payload?.license_info ??
-    payload?.licenseInfo ??
-    payload;
-
-const parseLicenseDate = (value: string) => {
-    const raw = String(value || '').trim();
+    const raw = String(value).trim();
     if (!raw) return null;
-    const iso = raw.includes('T') ? raw : raw.replace(' ', 'T');
-    const isoDate = new Date(iso);
-    if (!Number.isNaN(isoDate.getTime())) return isoDate;
-    const match = raw.match(/^(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
-    if (!match) return null;
-    const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = match;
-    const parsed = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
+
+    const dmyMatch = raw.match(/^(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (dmyMatch) {
+        const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = dmyMatch;
+        return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+    }
+
+    const parsed = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'));
+    if (Number.isNaN(parsed.getTime())) return raw;
+    return toUtcDateTime(parsed);
+};
+
+const parseLicenseDate = (value: unknown) => {
+    const normalized = normalizeDateTime(value);
+    if (!normalized) return null;
+    const parsed = new Date(normalized.replace(' ', 'T'));
     return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
-const buildKeyCandidates = (rawKey: string) => {
-    const trimmed = rawKey.trim();
-    const noSpaces = trimmed.replace(/\s+/g, '');
-    const noDashes = noSpaces.replace(/-/g, '');
-    const candidates = [
-        rawKey,
-        trimmed,
-        noSpaces,
-        noDashes,
-        trimmed.toUpperCase(),
-        trimmed.toLowerCase()
-    ];
-    return Array.from(new Set(candidates.filter(Boolean)));
+const normalizeExternalLicense = (row: Record<string, any>, requestedKey: string) => {
+    const payload = row?.data ?? row?.license ?? row?.result ?? row;
+    const licenseKey =
+        String(
+            payload.license_key ??
+            payload.licenseKey ??
+            payload.key ??
+            payload.code ??
+            requestedKey
+        ).trim();
+
+    return {
+        license_key: licenseKey,
+        expires_at: normalizeDateTime(
+            payload.expires_at ??
+            payload.expiresAt ??
+            payload.expiry_date ??
+            payload.expiryDate ??
+            payload.expiration_date ??
+            payload.expirationDate
+        ),
+        renew_date: normalizeDateTime(payload.renew_date ?? payload.renewDate),
+        activation_data: payload
+    };
 };
 
-async function fetchLicense(licenseKey: string) {
-    const candidates = buildKeyCandidates(licenseKey);
-    for (const table of TABLES_TO_TRY) {
-        for (const column of COLUMNS_TO_TRY) {
-            try {
-                const { data, error } = await supabase
-                    .schema(LICENSE_SCHEMA)
-                    .from(table)
-                    .select('*')
-                    .in(column, candidates)
-                    .limit(1);
+const extractExternalStatus = (row: Record<string, any>) => {
+    const payload = row?.data ?? row?.license ?? row?.result ?? row;
+    const valid = payload?.valid;
+    const found = payload?.found;
+    const status = String(payload?.status ?? '').trim().toLowerCase();
+    const error = String(payload?.error ?? payload?.message ?? '').trim();
 
-                if (!error && data && data.length > 0) {
-                    return data[0] as Record<string, any>;
-                }
+    const notFound =
+        found === false ||
+        valid === false ||
+        status === 'not_found' ||
+        /license not found/i.test(error);
 
-                for (const candidate of candidates) {
-                    const { data: ilikeData, error: ilikeError } = await supabase
-                        .schema(LICENSE_SCHEMA)
-                        .from(table)
-                        .select('*')
-                        .ilike(column, candidate)
-                        .limit(1);
+    return {
+        valid,
+        found,
+        notFound,
+        error
+    };
+};
 
-                    if (!ilikeError && ilikeData && ilikeData.length > 0) {
-                        return ilikeData[0] as Record<string, any>;
-                    }
-                }
-            } catch {
-                continue;
+const buildExternalHeaders = () => ({
+    Accept: 'application/json',
+    'Content-Type': 'application/json'
+});
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+class ExternalApiError extends Error {
+    status: number;
+    payload: Record<string, any>;
+
+    constructor(message: string, status: number, payload: Record<string, any> = {}) {
+        super(message);
+        this.name = 'ExternalApiError';
+        this.status = status;
+        this.payload = payload;
+    }
+}
+
+const getFetchErrorMessage = (error: any) => {
+    const causeCode = error?.cause?.code || error?.code || '';
+    if (causeCode === 'UND_ERR_CONNECT_TIMEOUT' || causeCode === 'ETIMEDOUT') {
+        return 'Connection to verify-license API timed out. Please try again.';
+    }
+    if (causeCode === 'ENOTFOUND') {
+        return 'verify-license API host could not be resolved.';
+    }
+    if (causeCode === 'ECONNREFUSED') {
+        return 'verify-license API refused the connection.';
+    }
+    if (error?.name === 'AbortError') {
+        return 'verify-license API request timed out. Please try again.';
+    }
+    return error?.message || 'Failed to reach verify-license API.';
+};
+
+async function fetchJsonWithRetry(url: string, init: RequestInit, logLabel: string) {
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= EXTERNAL_FETCH_RETRIES; attempt += 1) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), EXTERNAL_FETCH_TIMEOUT_MS);
+
+        try {
+            const response = await fetch(url, {
+                cache: 'no-store',
+                ...init,
+                signal: controller.signal
+            });
+
+            const data = await response.json().catch(() => ({}));
+            console.log(`${logLabel} attempt ${attempt} status:`, response.status);
+            console.log(`${logLabel} response:`, JSON.stringify(data, null, 2));
+
+            if (!response.ok) {
+                throw new ExternalApiError(
+                    String(data?.error || data?.message || `External API error: ${response.status}`),
+                    response.status,
+                    data
+                );
             }
+
+            return data as Record<string, any>;
+        } catch (error: any) {
+            if (error instanceof ExternalApiError && error.status >= 400 && error.status < 500) {
+                throw error;
+            }
+
+            lastError = new Error(getFetchErrorMessage(error));
+            console.warn(`${logLabel} attempt ${attempt} failed:`, error);
+
+            if (attempt < EXTERNAL_FETCH_RETRIES) {
+                await delay(1000 * attempt);
+            }
+        } finally {
+            clearTimeout(timeoutId);
         }
     }
+
+    throw lastError || new Error('Failed to reach verify-license API.');
+}
+
+async function fetchLocalLicense(licenseKey: string) {
+    const candidates = buildKeyCandidates(licenseKey);
+
+    try {
+        const { data, error } = await supabase
+            .schema(LICENSE_SCHEMA)
+            .from(TARGET_LICENSE_TABLE)
+            .select('*')
+            .in(TARGET_LICENSE_COLUMN, candidates)
+            .limit(1);
+
+        if (!error && data && data.length > 0) {
+            return data[0] as Record<string, any>;
+        }
+
+        for (const candidate of candidates) {
+            const { data: ilikeData, error: ilikeError } = await supabase
+                .schema(LICENSE_SCHEMA)
+                .from(TARGET_LICENSE_TABLE)
+                .select('*')
+                .ilike(TARGET_LICENSE_COLUMN, candidate)
+                .limit(1);
+
+            if (!ilikeError && ilikeData && ilikeData.length > 0) {
+                return ilikeData[0] as Record<string, any>;
+            }
+        }
+    } catch (error) {
+        console.error('Failed to fetch local license:', error);
+    }
+
     return null;
 }
 
-async function autoSeedLicense(licenseKey: string) {
-    if (!LICENSE_AUTO_SEED || !LICENSE_AUTO_SEED_EXPIRES_AT) return null;
-    const table = TABLES_TO_TRY[0];
-    const column = COLUMNS_TO_TRY[0];
-    if (!table || !column) return null;
-
+async function saveLicenseToSupabase(record: {
+    license_key: string;
+    expires_at: string | null;
+    renew_date: string | null;
+    activation_data: any;
+    machine_id?: string | null;
+}) {
     const payload: Record<string, any> = {
-        [column]: licenseKey.trim(),
-        expires_at: LICENSE_AUTO_SEED_EXPIRES_AT,
-        renew_date: new Date().toISOString().replace('T', ' ').split('.')[0]
+        [TARGET_LICENSE_COLUMN]: record.license_key,
+        expires_at: record.expires_at,
+        renew_date: record.renew_date,
+        activation_data: record.activation_data
     };
+
+    if (record.machine_id) {
+        payload.machine_id = record.machine_id;
+    }
 
     const { data, error } = await supabase
         .schema(LICENSE_SCHEMA)
-        .from(table)
-        .upsert(payload, { onConflict: column })
+        .from(TARGET_LICENSE_TABLE)
+        .upsert(payload, { onConflict: TARGET_LICENSE_COLUMN })
         .select('*')
         .single();
 
-    if (error) return null;
+    if (error) {
+        throw new Error(`Failed to save license to Supabase: ${error.message}`);
+    }
+
     return data as Record<string, any>;
 }
 
-async function getTableDiagnostics() {
-    const diagnostics: string[] = [];
-    for (const table of TABLES_TO_TRY) {
+async function fetchExternalLicenseByKey(licenseKey: string) {
+    const candidates = buildKeyCandidates(licenseKey);
+    let notFoundError: ExternalApiError | null = null;
+
+    for (const candidate of candidates) {
         try {
-            const { count, error } = await supabase
-                .schema(LICENSE_SCHEMA)
-                .from(table)
-                .select('*', { count: 'exact', head: true });
-            if (error) {
-                diagnostics.push(`${table}: error=${error.message}`);
-            } else {
-                diagnostics.push(`${table}: ok (count=${count ?? 0})`);
+            return await fetchJsonWithRetry(
+                LICENSE_VERIFY_FUNCTION_URL,
+                {
+                    method: 'POST',
+                    headers: buildExternalHeaders(),
+                    body: JSON.stringify({ license_key: candidate })
+                },
+                `verify-license POST (${candidate})`
+            );
+        } catch (postError: any) {
+            if (postError instanceof ExternalApiError && postError.status === 404) {
+                notFoundError = postError;
+            } else if (!(postError instanceof ExternalApiError)) {
+                throw postError;
             }
-        } catch (err) {
-            diagnostics.push(`${table}: error=${(err as Error)?.message || 'unknown'}`);
+        }
+
+        try {
+            const url = new URL(LICENSE_VERIFY_FUNCTION_URL);
+            url.searchParams.set('license_key', candidate);
+
+            return await fetchJsonWithRetry(
+                url.toString(),
+                {
+                    method: 'GET',
+                    headers: { Accept: 'application/json' }
+                },
+                `verify-license GET (${candidate})`
+            );
+        } catch (getError: any) {
+            if (getError instanceof ExternalApiError && getError.status === 404) {
+                notFoundError = getError;
+                continue;
+            }
+            throw getError;
         }
     }
-    return diagnostics.join(' | ');
+
+    throw notFoundError || new Error('License not found in verify-license API');
 }
 
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const license_key =
-            body?.license_key ||
-            body?.licenseKey ||
-            body?.key ||
-            body?.api_key ||
-            '';
-        const machine_id = body?.machine_id;
-        const normalizedKey = String(license_key || '').trim();
+        const licenseKey = String(ENV_LICENSE_KEY || body?.license_key || body?.licenseKey || body?.key || '').trim();
+        const machineId = String(body?.machine_id || '').trim() || null;
+        const forceRefresh = body?.force_refresh === true || body?.force_external === true;
 
-        if (!normalizedKey) {
+        if (!licenseKey) {
             return NextResponse.json({ error: 'License key is required' }, { status: 400 });
-        }
-
-        console.log('Activating via API Key / License key:', {
-            api_key: normalizedKey,
-            machine_id
-        });
-
-        // First, check local Supabase for the license
-        const localLicense = await fetchLicense(normalizedKey);
-        if (localLicense) {
-            const localExpiresAt = normalizeExpiresAt(localLicense);
-            if (localExpiresAt) {
-                const expiryDate = parseLicenseDate(String(localExpiresAt));
-                const isExpired = expiryDate ? expiryDate < new Date() : false;
-                
-                if (!isExpired) {
-                    console.log('License found in local Supabase:', normalizedKey);
-                    return NextResponse.json({
-                        success: true,
-                        message: 'License activated successfully (from local database)',
-                        expires_at: localExpiresAt,
-                        renew_date: normalizeRenewDate(localLicense),
-                        activation_data: normalizeActivationData(localLicense)
-                    });
-                }
-            }
-        }
-
-        // If not found locally, try external API
-        if (LICENSE_ACTIVATE_URL) {
-            let activateRes: Response | null = null;
-            let lastError: Error | null = null;
-            const maxRetries = 3;
-            
-            // Retry loop for network issues
-            for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                try {
-                    const url = new URL(LICENSE_ACTIVATE_URL);
-                    url.searchParams.set('ts', Date.now().toString());
-                    url.searchParams.set('attempt', attempt.toString());
-                    
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 10000);
-                    
-                    try {
-                        console.log(`Activation attempt ${attempt}/${maxRetries}...`);
-                        activateRes = await fetch(url.toString(), {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'x-api-token': LICENSE_API_TOKEN
-                            },
-                            body: JSON.stringify({
-                                license_key: normalizedKey,
-                                machine_id,
-                                key: normalizedKey,
-                                licenseKey: normalizedKey,
-                                api_key: normalizedKey
-                            }),
-                            cache: 'no-store',
-                            signal: controller.signal
-                        });
-                        
-                        // If we got a response, break out of retry loop
-                        if (activateRes) break;
-                    } finally {
-                        clearTimeout(timeoutId);
-                    }
-                } catch (err) {
-                    lastError = err as Error;
-                    console.error(`Activation attempt ${attempt} failed:`, (err as Error)?.message);
-                    
-                    // Wait before retrying (exponential backoff)
-                    if (attempt < maxRetries) {
-                        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-                    }
-                }
-            }
-            
-            // If all retries failed
-            if (!activateRes) {
-                const errorMsg = lastError?.name === 'AbortError'
-                    ? 'License API request timed out after multiple attempts. Please check your network connection.'
-                    : `License API unreachable after ${maxRetries} attempts. Please check your network and try again.`;
-                console.error('All activation attempts failed:', lastError);
-                return NextResponse.json({
-                    error: errorMsg
-                }, { status: 500 });
-            }
-
-            let activateData: Record<string, any> = {};
-            let rawText = '';
-            try {
-                activateData = await activateRes.json();
-                console.log('External API response:', JSON.stringify(activateData, null, 2));
-            } catch {
-                rawText = await activateRes.text().catch(() => '');
-                console.log('External API raw text:', rawText);
-            }
-
-            const payload = (activateData as any)?.data ?? (activateData as any)?.result ?? activateData;
-            const licensePayload = unwrapLicensePayload(payload as Record<string, any>);
-            const expiresAt = normalizeExpiresAt(licensePayload as Record<string, any>);
-            if (activateRes.ok && expiresAt) {
-                return NextResponse.json({
-                    success: true,
-                    message: (activateData as any).message || (payload as any).message || (licensePayload as any).message || 'License activated successfully',
-                    expires_at: expiresAt,
-                    renew_date: normalizeRenewDate(licensePayload as Record<string, any>),
-                    activation_data: normalizeActivationData(licensePayload as Record<string, any>)
-                });
-            }
-
-            return NextResponse.json({
-                error:
-                    (activateData as any).error ||
-                    (payload as any).error ||
-                    (licensePayload as any).error ||
-                    (activateData as any).message ||
-                    (payload as any).message ||
-                    (licensePayload as any).message ||
-                    rawText ||
-                    `License activation failed (status ${activateRes.status})`,
-                expires_at: expiresAt || null
-            });
         }
 
         if (!supabaseUrl || !supabaseAnonKey) {
             return NextResponse.json({ error: 'Supabase is not configured' }, { status: 500 });
         }
 
-        let data = await fetchLicense(normalizedKey);
-        if (!data) {
-            data = await autoSeedLicense(normalizedKey);
-        }
-        if (!data) {
-            return NextResponse.json({
-                error: 'License key not found'
-            });
+        if (!forceRefresh) {
+            const localLicense = await fetchLocalLicense(licenseKey);
+            if (localLicense) {
+                const expiresAt = normalizeDateTime(localLicense.expires_at ?? localLicense.expiresAt);
+                const renewDate = normalizeDateTime(localLicense.renew_date ?? localLicense.renewDate);
+                const expiryDate = parseLicenseDate(expiresAt);
+                const isExpired = expiryDate ? expiryDate < new Date() : false;
+
+                if (expiresAt && !isExpired) {
+                    return NextResponse.json({
+                        success: true,
+                        message: 'License loaded from local database',
+                        expires_at: expiresAt,
+                        renew_date: renewDate,
+                        activation_data: localLicense.activation_data ?? localLicense,
+                        source: 'local_license_keys'
+                    });
+                }
+            }
         }
 
-        const expiresAt = normalizeExpiresAt(data);
-        if (!expiresAt) {
-            return NextResponse.json({ error: 'License missing expiry date' });
+        let externalLicense: Record<string, any>;
+        try {
+            externalLicense = await fetchExternalLicenseByKey(licenseKey);
+        } catch (error: any) {
+            if (error instanceof ExternalApiError && error.status === 404) {
+                const localLicense = await fetchLocalLicense(licenseKey);
+                if (localLicense) {
+                    const expiresAt = normalizeDateTime(localLicense.expires_at ?? localLicense.expiresAt);
+                    const renewDate = normalizeDateTime(localLicense.renew_date ?? localLicense.renewDate);
+                    const expiryDate = parseLicenseDate(expiresAt);
+                    const isExpired = expiryDate ? expiryDate < new Date() : false;
+
+                    return NextResponse.json({
+                        success: !isExpired,
+                        message: 'License not found in verify-license API. Using local database record.',
+                        error: isExpired ? 'License has expired' : undefined,
+                        expires_at: expiresAt,
+                        renew_date: renewDate,
+                        activation_data: localLicense.activation_data ?? localLicense,
+                        source: 'local_license_keys_fallback'
+                    }, { status: isExpired ? 409 : 200 });
+                }
+            }
+            throw error;
+        }
+        const externalStatus = extractExternalStatus(externalLicense);
+        if (externalStatus.notFound) {
+            return NextResponse.json({
+                error: externalStatus.error || 'License not found in verify-license API'
+            }, { status: 404 });
+        }
+
+        const normalized = normalizeExternalLicense(externalLicense, licenseKey);
+
+        if (!normalized.expires_at) {
+            return NextResponse.json({
+                error: externalStatus.error || 'verify-license API returned no expires_at'
+            }, { status: 502 });
+        }
+
+        await saveLicenseToSupabase({
+            ...normalized,
+            machine_id: machineId
+        });
+
+        const expiryDate = parseLicenseDate(normalized.expires_at);
+        const isExpired = expiryDate ? expiryDate < new Date() : false;
+
+        if (isExpired) {
+            return NextResponse.json({
+                success: false,
+                error: 'License has expired',
+                expires_at: normalized.expires_at,
+                renew_date: normalized.renew_date,
+                activation_data: normalized.activation_data,
+                source: 'external_license_by_key'
+            });
         }
 
         return NextResponse.json({
             success: true,
-            message: 'License activated successfully',
-            expires_at: expiresAt,
-            renew_date: normalizeRenewDate(data),
-            activation_data: normalizeActivationData(data)
+            message: 'License synced from verify-license API',
+            expires_at: normalized.expires_at,
+            renew_date: normalized.renew_date,
+            activation_data: normalized.activation_data,
+            source: 'external_license_by_key'
         });
-
-    } catch (error) {
+    } catch (error: any) {
         console.error('License activation error:', error);
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+        return NextResponse.json({
+            error: error?.message || 'Internal server error'
+        }, {
+            status:
+                error instanceof ExternalApiError && error.status === 404
+                    ? 404
+                    : /timed out|verify-license API|resolved|refused/i.test(String(error?.message || ''))
+                        ? 504
+                        : 500
+        });
     }
 }
