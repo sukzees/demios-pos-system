@@ -9,6 +9,7 @@ export type { Employee };
 
 const ENV_LICENSE_KEY = (process.env.NEXT_PUBLIC_POS_LICENSE_KEY || '').trim();
 const LICENSE_SYNC_INTERVAL_MS = Number(process.env.NEXT_PUBLIC_LICENSE_SYNC_INTERVAL_MS || 60 * 60 * 1000);
+const INACTIVE_LICENSE_STATUSES = ['inactive', 'expired', 'revoked', 'suspended', 'blocked', 'disabled'];
 
 const isMissingColumnInSchemaCache = (error: any, table: string, column: string): boolean => {
   const message = String(error?.message || '').toLowerCase();
@@ -389,18 +390,34 @@ export const usePosStore = create<PosState>()(
             };
             const normalizeRenewDate = (payload: Record<string, any>) =>
               payload?.renew_date ?? payload?.renewDate ?? payload?.last_verified ?? payload?.lastVerified ?? '';
+            const getLicenseStatus = (payload: Record<string, any>) =>
+              String(
+                payload?.status ??
+                payload?.license_status ??
+                payload?.activation_data?.status ??
+                payload?.activationData?.status ??
+                ''
+              ).trim().toLowerCase();
 
             const payload = data?.data ?? data?.result ?? data;
             const licensePayload = payload?.license ?? payload?.license_info ?? payload?.licenseInfo ?? payload;
             const expiresAt = normalizeExpiresAt(licensePayload as Record<string, any>);
             const renewDate = normalizeRenewDate(licensePayload as Record<string, any>);
+            const licenseStatus = getLicenseStatus(licensePayload as Record<string, any>);
+            const parsedExpiryDate = expiresAt ? new Date(expiresAt.includes('T') ? expiresAt : expiresAt.replace(' ', 'T')) : null;
+            if (parsedExpiryDate && !Number.isNaN(parsedExpiryDate.getTime())) {
+              parsedExpiryDate.setHours(23, 59, 59, 999);
+            }
+            const isExpired = !!(parsedExpiryDate && !Number.isNaN(parsedExpiryDate.getTime()) && parsedExpiryDate < new Date());
+            const isStatusInactive = INACTIVE_LICENSE_STATUSES.includes(licenseStatus);
+            const isActive = !isExpired && !isStatusInactive && (data.valid !== false);
 
             if (expiresAt) {
               set({
                 licenseInfo: {
                   ...licenseInfo,
                   key: keyToUse,
-                  active: data.valid === true,
+                  active: isActive,
                   expiresAt: expiresAt,
                   renewDate: renewDate || licenseInfo.renewDate,
                   activationData: licensePayload

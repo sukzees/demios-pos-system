@@ -92,6 +92,15 @@ export default function LoginPage() {
     return parsed ? format(parsed, 'MMM dd, yyyy') : null;
   };
 
+  const getLicenseStatus = (data: any) =>
+    String(
+      data?.status ??
+      data?.license_status ??
+      data?.activation_data?.status ??
+      data?.activationData?.status ??
+      ''
+    ).trim().toLowerCase();
+
   // Recalculate whenever license info changes (but not while syncing)
   useEffect(() => {
     if (!syncing) {
@@ -109,7 +118,9 @@ export default function LoginPage() {
     if (isNaN(expiryDate.getTime())) return false;
 
     expiryDate.setHours(23, 59, 59, 999);
-    const isStillExpired = expiryDate < new Date();
+    const status = getLicenseStatus(data);
+    const isStatusInactive = ['inactive', 'expired', 'revoked', 'suspended', 'blocked', 'disabled'].includes(status);
+    const isStillExpired = expiryDate < new Date() || isStatusInactive;
 
     updateLicenseInfo({
       key,
@@ -447,12 +458,17 @@ export default function LoginPage() {
                         </div>
                       </div>
                       <div className="space-y-1 my-auto min-w-0">
-                        <AlertTitle className="text-amber-950 font-black text-sm leading-none">License Required</AlertTitle>
+                        <AlertTitle className="text-amber-950 font-black text-sm leading-none">verify-license Status Required</AlertTitle>
                         <AlertDescription className="text-amber-800 text-xs leading-snug font-medium">
-                          {licenseInfo?.expiresAt ? (
-                            <p>License expired on {formatLicenseDate(licenseInfo.expiresAt) || licenseInfo.expiresAt}. Sign in is disabled.</p>
+                          {getLicenseStatus(licenseInfo?.activationData) ? (
+                            <p>
+                              Current API status: <span className="font-bold uppercase">{getLicenseStatus(licenseInfo?.activationData)}</span>.
+                              Sign in is disabled.
+                            </p>
+                          ) : licenseInfo?.expiresAt ? (
+                            <p>verify-license / local `license_keys` reports this license expired on {formatLicenseDate(licenseInfo.expiresAt) || licenseInfo.expiresAt}. Sign in is disabled.</p>
                           ) : (
-                            <p>No active license found. Sign in is disabled.</p>
+                            <p>No active license was returned by verify-license or found in local `license_keys`. Sign in is disabled.</p>
                           )}
                         </AlertDescription>
                       </div>

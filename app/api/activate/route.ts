@@ -144,6 +144,8 @@ const extractExternalStatus = (row: Record<string, any>) => {
         valid,
         found,
         notFound,
+        inactive: ['inactive', 'expired', 'revoked', 'suspended', 'blocked', 'disabled'].includes(status),
+        status,
         error
     };
 };
@@ -427,10 +429,12 @@ export async function POST(req: NextRequest) {
         const expiryDate = parseLicenseDate(normalized.expires_at);
         const isExpired = expiryDate ? expiryDate < new Date() : false;
 
-        if (isExpired) {
+        if (isExpired || externalStatus.inactive) {
             return NextResponse.json({
                 success: false,
-                error: 'License has expired',
+                error: externalStatus.inactive
+                    ? `License status is ${externalStatus.status || 'inactive'}`
+                    : 'License has expired',
                 expires_at: normalized.expires_at,
                 renew_date: normalized.renew_date,
                 activation_data: normalized.activation_data,

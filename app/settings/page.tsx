@@ -534,15 +534,29 @@ export default function SettingsPage() {
     };
   };
 
+  const getLicenseStatus = (data: any) => {
+    const payload = (data as any)?.data ?? (data as any)?.result ?? data;
+    const activationData = payload?.activation_data ?? payload?.activationData ?? payload;
+    return String(
+      payload?.status ??
+      payload?.license_status ??
+      activationData?.status ??
+      activationData?.license_status ??
+      ''
+    ).trim().toLowerCase();
+  };
+
   const updateLicenseState = (key: string, machineId: string, data: any) => {
     const payload = (data as any)?.data ?? (data as any)?.result ?? data;
     const expiresAt = normalizeExpiresAt(payload as Record<string, any>);
+    const status = getLicenseStatus(data);
+    const isStatusInactive = ['inactive', 'expired', 'revoked', 'suspended', 'blocked', 'disabled'].includes(status);
 
     if (expiresAt) {
       updateLicenseInfo({
         key,
         machineId,
-        active: data.success === true || data.valid === true,
+        active: (data.success === true || data.valid === true) && !isStatusInactive,
         expiresAt,
         renewDate: (payload as any)?.renew_date || (payload as any)?.renewDate || new Date().toISOString().replace('T', ' ').split('.')[0],
         activationData: (payload as any)?.activation_data || (payload as any)?.activationData || payload

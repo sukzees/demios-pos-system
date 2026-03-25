@@ -80,6 +80,20 @@ const normalizeRenewDate = (row: Record<string, any>) =>
 const normalizeActivationData = (row: Record<string, any>) =>
     row.activation_data ?? row.activationData ?? row.features ?? null;
 
+const extractLicenseStatus = (row: Record<string, any>) => {
+    const activationData = normalizeActivationData(row) || {};
+    return String(
+        row.status ??
+        row.license_status ??
+        activationData.status ??
+        activationData.license_status ??
+        ''
+    ).trim().toLowerCase();
+};
+
+const isInactiveStatus = (status: string) =>
+    ['inactive', 'expired', 'revoked', 'suspended', 'blocked', 'disabled'].includes(status);
+
 const parseLicenseDate = (value: string) => {
     const raw = String(value || '').trim();
     if (!raw) return null;
@@ -162,6 +176,17 @@ export async function POST(req: NextRequest) {
         const localLicense = await fetchLicense(normalizedKey);
         if (localLicense) {
             const localExpiresAt = normalizeExpiresAt(localLicense);
+            const licenseStatus = extractLicenseStatus(localLicense);
+            if (isInactiveStatus(licenseStatus)) {
+                return NextResponse.json({
+                    valid: false,
+                    error: `License status is ${licenseStatus} (from Supabase license_keys)`,
+                    expires_at: localExpiresAt || null,
+                    renew_date: normalizeRenewDate(localLicense),
+                    activation_data: normalizeActivationData(localLicense),
+                    source: 'local_license_keys'
+                });
+            }
             if (localExpiresAt) {
                 const expiryDate = parseLicenseDate(String(localExpiresAt));
                 const isExpired = expiryDate ? expiryDate < new Date() : false;
@@ -201,6 +226,17 @@ export async function POST(req: NextRequest) {
         }
 
         const expiresAt = normalizeExpiresAt(data);
+        const licenseStatus = extractLicenseStatus(data);
+        if (isInactiveStatus(licenseStatus)) {
+            return NextResponse.json({
+                valid: false,
+                error: `License status is ${licenseStatus} (from Supabase license_keys)`,
+                expires_at: expiresAt || null,
+                renew_date: normalizeRenewDate(data),
+                activation_data: normalizeActivationData(data),
+                source: 'local_license_keys'
+            });
+        }
         if (!expiresAt) {
             return NextResponse.json({
                 valid: false,
