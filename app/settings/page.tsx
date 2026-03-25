@@ -664,7 +664,9 @@ export default function SettingsPage() {
 
       setActivationMessage(verifyData.error || 'License is still not available in local database after refresh.');
     } catch (error) {
-      const errorMsg = error?.message || 'Failed to sync license. Please check your network connection.';
+      const errorMsg = error instanceof Error
+        ? error.message
+        : 'Failed to sync license. Please check your network connection.';
       setActivationMessage(errorMsg);
     } finally {
       setIsActivating(false);

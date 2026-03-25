@@ -46,12 +46,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       }
     };
 
-    window.addEventListener('focus', syncLicenseNow);
+    const handleWindowFocus = () => {
+      syncLicenseNow();
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.clearInterval(intervalId);
-      window.removeEventListener('focus', syncLicenseNow);
+      window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [isMounted, licenseInfo?.key, syncLicenseNow]);
