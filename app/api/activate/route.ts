@@ -47,6 +47,7 @@ const ENV_LICENSE_KEY = (
     process.env.NEXT_PUBLIC_POS_LICENSE_KEY ||
     ''
 ).trim();
+const LICENSE_TIMEZONE_OFFSET = (process.env.LICENSE_TIMEZONE_OFFSET || '+07:00').trim() || '+07:00';
 const EXTERNAL_FETCH_TIMEOUT_MS = Number(process.env.LICENSE_EXTERNAL_TIMEOUT_MS || 20000);
 const EXTERNAL_FETCH_RETRIES = Number(process.env.LICENSE_EXTERNAL_RETRIES || 3);
 
@@ -89,7 +90,9 @@ const normalizeDateTime = (value: unknown) => {
         return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
     }
 
-    const parsed = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'));
+    const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(raw);
+    const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+    const parsed = new Date(hasTimezone ? normalized : `${normalized}${LICENSE_TIMEZONE_OFFSET}`);
     if (Number.isNaN(parsed.getTime())) return raw;
     return toUtcDateTime(parsed);
 };

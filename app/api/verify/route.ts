@@ -39,6 +39,7 @@ const ENV_LICENSE_KEY = (
     process.env.NEXT_PUBLIC_POS_LICENSE_KEY ||
     ''
 ).trim();
+const LICENSE_TIMEZONE_OFFSET = (process.env.LICENSE_TIMEZONE_OFFSET || '+07:00').trim() || '+07:00';
 
 const toUtcDateTime = (value: number) => {
     const date = new Date(value);
@@ -97,7 +98,9 @@ const isInactiveStatus = (status: string) =>
 const parseLicenseDate = (value: string) => {
     const raw = String(value || '').trim();
     if (!raw) return null;
-    const iso = raw.includes('T') ? raw : raw.replace(' ', 'T');
+    const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(raw);
+    const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+    const iso = hasTimezone ? normalized : `${normalized}${LICENSE_TIMEZONE_OFFSET}`;
     const isoDate = new Date(iso);
     if (!Number.isNaN(isoDate.getTime())) return isoDate;
     const match = raw.match(/^(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
@@ -105,6 +108,12 @@ const parseLicenseDate = (value: string) => {
     const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = match;
     const parsed = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
     return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const isLicenseExpired = (value: string) => {
+    const expiryDate = parseLicenseDate(String(value || ''));
+    if (!expiryDate) return false;
+    return expiryDate.getTime() < Date.now();
 };
 
 const buildKeyCandidates = (rawKey: string) => {
@@ -188,8 +197,7 @@ export async function POST(req: NextRequest) {
                 });
             }
             if (localExpiresAt) {
-                const expiryDate = parseLicenseDate(String(localExpiresAt));
-                const isExpired = expiryDate ? expiryDate < new Date() : false;
+                const isExpired = isLicenseExpired(String(localExpiresAt));
                 if (isExpired) {
                     return NextResponse.json({
                         valid: false,
@@ -245,11 +253,7 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        const expiryDate = parseLicenseDate(String(expiresAt));
-        if (expiryDate) {
-            expiryDate.setHours(23, 59, 59, 999);
-        }
-        const isExpired = expiryDate ? expiryDate < new Date() : false;
+        const isExpired = isLicenseExpired(String(expiresAt));
 
         if (isExpired) {
             return NextResponse.json({
