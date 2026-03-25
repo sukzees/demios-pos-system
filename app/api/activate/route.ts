@@ -401,7 +401,7 @@ export async function POST(req: NextRequest) {
                         renew_date: renewDate,
                         activation_data: localLicense.activation_data ?? localLicense,
                         source: 'local_license_keys_fallback'
-                    }, { status: isExpired ? 409 : 200 });
+                    }, { status: 200 });
                 }
             }
             throw error;
