@@ -244,13 +244,13 @@ export const usePosStore = create<PosState>()(
         set({
           licenseInfo: {
             ...info,
-            key: ENV_LICENSE_KEY || info.key
+            key: info.key || ENV_LICENSE_KEY
           }
         });
       },
       syncLicenseDaily: async (force = false, keyOverride) => {
         const { licenseInfo, licenseSyncAt, isOnline } = get();
-        const keyToUse = (ENV_LICENSE_KEY || keyOverride || licenseInfo?.key || '').trim();
+        const keyToUse = (keyOverride || licenseInfo?.key || ENV_LICENSE_KEY || '').trim();
         if (!keyToUse) return;
         if (!force && !isOnline) return;
 
@@ -339,7 +339,7 @@ export const usePosStore = create<PosState>()(
       },
       syncLicenseNow: async (keyOverride) => {
         const { licenseInfo } = get();
-        const keyToUse = (ENV_LICENSE_KEY || keyOverride || licenseInfo?.key || '').trim();
+        const keyToUse = (keyOverride || licenseInfo?.key || ENV_LICENSE_KEY || '').trim();
         if (!keyToUse) return;
 
         try {
@@ -1471,7 +1471,7 @@ export const usePosStore = create<PosState>()(
           licenseInfo: {
             ...current.licenseInfo,
             ...(persisted.licenseInfo || {}),
-            key: ENV_LICENSE_KEY || persisted.licenseInfo?.key || current.licenseInfo.key
+            key: current.licenseInfo.key || ''
           }
         };
       },

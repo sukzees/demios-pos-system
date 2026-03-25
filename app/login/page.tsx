@@ -16,7 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 export const dynamic = 'force-dynamic';
 
 export default function LoginPage() {
-  const envLicenseKey = (process.env.NEXT_PUBLIC_POS_LICENSE_KEY || '').trim();
+  const [serverLicenseKey, setServerLicenseKey] = useState('');
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
@@ -36,18 +36,39 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    if (!isMounted || !envLicenseKey) return;
-    if (licenseInfo?.key !== envLicenseKey) {
-      updateLicenseInfo({
-        key: envLicenseKey,
-        machineId: licenseInfo?.machineId || `mach-${Math.random().toString(36).substring(2, 10)}`,
-        active: licenseInfo?.active || false,
-        expiresAt: licenseInfo?.expiresAt || '',
-        renewDate: licenseInfo?.renewDate || '',
-        activationData: licenseInfo?.activationData || null
-      });
-    }
-  }, [envLicenseKey, isMounted, licenseInfo?.active, licenseInfo?.activationData, licenseInfo?.expiresAt, licenseInfo?.key, licenseInfo?.machineId, licenseInfo?.renewDate, updateLicenseInfo]);
+    if (!isMounted) return;
+
+    let active = true;
+
+    const loadServerLicenseKey = async () => {
+      try {
+        const response = await fetch('/api/license/current', { cache: 'no-store' });
+        const data = await response.json().catch(() => ({}));
+        const keyFromServer = String(data?.license_key || '').trim();
+        if (!active || !keyFromServer) return;
+
+        setServerLicenseKey(keyFromServer);
+        if (licenseInfo?.key !== keyFromServer) {
+          updateLicenseInfo({
+            key: keyFromServer,
+            machineId: licenseInfo?.machineId || `mach-${Math.random().toString(36).substring(2, 10)}`,
+            active: licenseInfo?.active || false,
+            expiresAt: licenseInfo?.expiresAt || '',
+            renewDate: licenseInfo?.renewDate || '',
+            activationData: licenseInfo?.activationData || null
+          });
+        }
+      } catch {
+        // Ignore bootstrap errors and fall back to existing state.
+      }
+    };
+
+    loadServerLicenseKey();
+
+    return () => {
+      active = false;
+    };
+  }, [isMounted, licenseInfo?.active, licenseInfo?.activationData, licenseInfo?.expiresAt, licenseInfo?.key, licenseInfo?.machineId, licenseInfo?.renewDate, updateLicenseInfo]);
 
   // --- License expiry logic ---
   const checkLicenseExpiry = (overrideExpiresAt?: string) => {
@@ -177,7 +198,7 @@ export default function LoginPage() {
 
   // --- Refresh button handler: pull fresh dates from verify-license API -> update license_keys -> verify locally ---
   const handleRefreshLicense = async () => {
-    const key = envLicenseKey || licenseInfo?.key || manualKey.trim();
+    const key = serverLicenseKey || licenseInfo?.key || manualKey.trim();
     if (!key) {
       setError('Please enter a license key first.');
       return;
@@ -259,7 +280,7 @@ export default function LoginPage() {
 
   // --- Check Activation Status from Supabase ---
   const handleCheckActivationStatus = async () => {
-    const key = envLicenseKey || licenseInfo?.key || manualKey.trim();
+    const key = serverLicenseKey || licenseInfo?.key || manualKey.trim();
     if (!key) {
       setError('Please enter a license key first.');
       return;
@@ -331,7 +352,7 @@ export default function LoginPage() {
       }
     }, 15000); // 15 second timeout
 
-    if (!(envLicenseKey || licenseInfo?.key)) {
+    if (!(serverLicenseKey || licenseInfo?.key)) {
       clearTimeout(syncTimeout);
       setSyncing(false);
       setInitialSyncComplete(true);
@@ -347,7 +368,7 @@ export default function LoginPage() {
       setError(''); // Clear any previous errors before syncing
       try {
         // Local-only license gate on page load
-        await verifyKey(envLicenseKey || licenseInfo.key, true);
+        await verifyKey(serverLicenseKey || licenseInfo.key, true);
       } catch (err) {
         console.error('Initial sync error:', err);
         // Don't block login on local verification errors - allow user to proceed
@@ -358,7 +379,7 @@ export default function LoginPage() {
     sync();
 
     return () => clearTimeout(syncTimeout);
-  }, [envLicenseKey, licenseInfo?.key, isMounted]);
+  }, [serverLicenseKey, licenseInfo?.key, isMounted]);
 
   // --- Login handler ---
   const handleLogin = async (e: React.FormEvent) => {
@@ -416,7 +437,7 @@ export default function LoginPage() {
   };
 
   // --- Has a stored key? ---
-  const hasKey = !!(envLicenseKey || licenseInfo?.key);
+  const hasKey = !!(serverLicenseKey || licenseInfo?.key);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-zinc-100 to-indigo-50 p-4">
@@ -505,9 +526,9 @@ export default function LoginPage() {
                   />
                 </div>
               )}
-              {envLicenseKey && (
+              {serverLicenseKey && (
                 <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-3 text-xs text-zinc-600 font-mono">
-                  License Key: {envLicenseKey}
+                  License Key: {serverLicenseKey}
                 </div>
               )}
 

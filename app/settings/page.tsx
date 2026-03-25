@@ -355,7 +355,7 @@ import { Save, Trash2, Plus, Printer, RefreshCw, Eye } from 'lucide-react';
 import { usePosStore } from '@/lib/store';
 
 export default function SettingsPage() {
-  const envLicenseKey = (process.env.NEXT_PUBLIC_POS_LICENSE_KEY || '').trim();
+  const [serverLicenseKey, setServerLicenseKey] = useState('');
   const {
     receiptSettings,
     updateReceiptSettings,
@@ -434,10 +434,45 @@ export default function SettingsPage() {
   const [localSilentPrint, setLocalSilentPrint] = useState(silentPrint ?? false);
 
   // License
-  const [licenseKey, setLicenseKey] = useState(envLicenseKey || licenseInfo?.key || '');
+  const [licenseKey, setLicenseKey] = useState(serverLicenseKey || licenseInfo?.key || '');
   const [isActivating, setIsActivating] = useState(false);
   const [activationMessage, setActivationMessage] = useState('');
   const [daysRemaining, setDaysRemaining] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadServerLicenseKey = async () => {
+      try {
+        const response = await fetch('/api/license/current', { cache: 'no-store' });
+        const data = await response.json().catch(() => ({}));
+        const keyFromServer = String(data?.license_key || '').trim();
+        if (!active || !keyFromServer) return;
+
+        setServerLicenseKey(keyFromServer);
+        setLicenseKey(keyFromServer);
+
+        if (licenseInfo?.key !== keyFromServer) {
+          updateLicenseInfo({
+            key: keyFromServer,
+            machineId: licenseInfo?.machineId || `mach-${Math.random().toString(36).substring(2, 10)}`,
+            active: licenseInfo?.active || false,
+            expiresAt: licenseInfo?.expiresAt || '',
+            renewDate: licenseInfo?.renewDate || '',
+            activationData: licenseInfo?.activationData || null
+          });
+        }
+      } catch {
+        // Ignore bootstrap errors and keep current local state.
+      }
+    };
+
+    loadServerLicenseKey();
+
+    return () => {
+      active = false;
+    };
+  }, [licenseInfo?.active, licenseInfo?.activationData, licenseInfo?.expiresAt, licenseInfo?.key, licenseInfo?.machineId, licenseInfo?.renewDate, updateLicenseInfo]);
 
   useEffect(() => {
     setHeaderText(receiptSettings.headerText);
@@ -461,7 +496,7 @@ export default function SettingsPage() {
     setLocalStationMappings(stationMappings);
 
     if (licenseInfo) {
-      setLicenseKey(envLicenseKey || licenseInfo.key);
+      setLicenseKey(serverLicenseKey || licenseInfo.key);
       // Calculate days remaining from expires_at
       if (licenseInfo.expiresAt) {
         const expiryDate = parseLicenseDate(licenseInfo.expiresAt);
@@ -478,7 +513,7 @@ export default function SettingsPage() {
     }
     setLocalAutoPrint(autoPrint ?? false);
     setLocalSilentPrint(silentPrint ?? false);
-  }, [receiptSettings, currencySettings, generalSettings, bankConfigs, printerConfigs, stationMappings, licenseInfo, autoPrint, silentPrint, envLicenseKey]);
+  }, [receiptSettings, currencySettings, generalSettings, bankConfigs, printerConfigs, stationMappings, licenseInfo, autoPrint, silentPrint, serverLicenseKey]);
 
   useEffect(() => {
     if (isSupabaseConfigured) {
@@ -576,7 +611,7 @@ export default function SettingsPage() {
   };
 
   const handleActivateLicense = async () => {
-    if (!(envLicenseKey || licenseKey.trim())) {
+    if (!(serverLicenseKey || licenseKey.trim())) {
       setActivationMessage(t.noKey);
       return;
     }
@@ -585,7 +620,7 @@ export default function SettingsPage() {
     setActivationMessage('');
 
     try {
-      const normalizedKey = envLicenseKey || licenseKey.trim();
+      const normalizedKey = serverLicenseKey || licenseKey.trim();
       const machineId = licenseInfo?.machineId || `mach-${Math.random().toString(36).substring(2, 10)}`;
       const { activateUrl } = getLicenseEndpoints();
 
@@ -625,7 +660,7 @@ export default function SettingsPage() {
     setIsActivating(true);
 
     try {
-      const keyToSync = envLicenseKey || licenseKey.trim() || licenseInfo?.key || '';
+      const keyToSync = serverLicenseKey || licenseKey.trim() || licenseInfo?.key || '';
       const machineId = licenseInfo?.machineId || '';
 
       if (!keyToSync) {
@@ -678,7 +713,7 @@ export default function SettingsPage() {
     setIsActivating(true);
 
     try {
-      const keyToCheck = envLicenseKey || licenseKey.trim() || licenseInfo?.key || '';
+      const keyToCheck = serverLicenseKey || licenseKey.trim() || licenseInfo?.key || '';
       const machineId = licenseInfo?.machineId || '';
 
       if (!keyToCheck) {
@@ -727,7 +762,7 @@ export default function SettingsPage() {
   };
 
   const handleReturnLicense = async () => {
-    if (!(envLicenseKey || licenseKey.trim())) return;
+    if (!(serverLicenseKey || licenseKey.trim())) return;
 
     if (!window.confirm(t.confirmDeactivate)) {
       return;
@@ -742,7 +777,7 @@ export default function SettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          license_key: envLicenseKey || licenseKey,
+          license_key: serverLicenseKey || licenseKey,
           machine_id: licenseInfo?.machineId
         })
       });
@@ -758,7 +793,7 @@ export default function SettingsPage() {
           expiresAt: '',
           activationData: null
         });
-        setLicenseKey(envLicenseKey || '');
+        setLicenseKey(serverLicenseKey || '');
       } else {
         setActivationMessage(data.error || t.returnError);
       }
@@ -1765,7 +1800,7 @@ export default function SettingsPage() {
                       placeholder="POS-XXXX-XXXX-XXXX-XXXX"
                       value={licenseKey}
                       onChange={(e) => setLicenseKey(e.target.value)}
-                      disabled={!!envLicenseKey || licenseInfo?.active}
+                      disabled={!!serverLicenseKey || licenseInfo?.active}
                     />
                     <Button
                       type="button"
