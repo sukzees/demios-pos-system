@@ -510,7 +510,7 @@ export default function ReportsPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{t.salesReport}</h2>
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-          <div className="grid grid-cols-2 xs:flex items-center gap-1.5 rounded-2xl border border-zinc-200 bg-zinc-50/50 p-1.5 w-full sm:w-auto shadow-sm">
+          <div className="grid grid-cols-2 sm:flex items-center gap-1.5 rounded-2xl border border-zinc-200 bg-zinc-50/50 p-1.5 w-full sm:w-auto shadow-sm">
             <Button
               variant={dateRange === 'daily' ? 'default' : 'ghost'}
               size="sm"
@@ -550,7 +550,7 @@ export default function ReportsPage() {
           </div>
 
           <Button
-            className="w-full sm:w-auto h-12 rounded-xl gap-2 bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-100 font-bold transition-all active:scale-95"
+            className="w-full sm:w-auto h-12 rounded-xl gap-2 bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-100 font-bold transition-all active:scale-95"
             onClick={handleExportCSV}
           >
             <Download className="h-4 w-4" />
@@ -560,30 +560,30 @@ export default function ReportsPage() {
       </div>
 
       {dateRange === 'custom' && (
-        <Card className="border-indigo-100 bg-indigo-50/30 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
+        <Card className="border-blue-100 bg-blue-50/30 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
           <CardContent className="p-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-indigo-900/60 uppercase ml-1">{t.startDate}</label>
+                <label className="text-[10px] font-bold text-blue-900/60 uppercase ml-1">{t.startDate}</label>
                 <div className="relative">
-                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-indigo-400" />
+                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-400" />
                   <Input
                     type="date"
                     value={customDateFrom}
                     onChange={(e) => setCustomDateFrom(e.target.value)}
-                    className="h-11 pl-9 rounded-xl border-indigo-200 bg-white shadow-sm focus:ring-indigo-500"
+                    className="h-11 pl-9 rounded-xl border-blue-200 bg-white shadow-sm focus:ring-blue-500"
                   />
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-indigo-900/60 uppercase ml-1">{t.endDate}</label>
+                <label className="text-[10px] font-bold text-blue-900/60 uppercase ml-1">{t.endDate}</label>
                 <div className="relative">
-                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-indigo-400" />
+                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-400" />
                   <Input
                     type="date"
                     value={customDateTo}
                     onChange={(e) => setCustomDateTo(e.target.value)}
-                    className="h-11 pl-9 rounded-xl border-indigo-200 bg-white shadow-sm focus:ring-indigo-500"
+                    className="h-11 pl-9 rounded-xl border-blue-200 bg-white shadow-sm focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -713,7 +713,7 @@ export default function ReportsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-100 bg-zinc-50/30 text-left text-zinc-600">
+                <tr className="border-b border-blue-50 bg-blue-50/20 text-left text-blue-600">
                   <th className="p-4 font-semibold">{t.item}</th>
                   <th className="p-4 font-semibold text-right">{t.quantitySold}</th>
                   <th className="p-4 font-semibold text-right">{t.sales}</th>

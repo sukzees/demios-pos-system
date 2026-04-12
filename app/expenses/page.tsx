@@ -616,465 +616,465 @@ export default function ExpensesPage() {
   }, [searchQuery, categoryFilter, dateFrom, dateTo, pageSize]);
 
   return (
-      <div className="flex-1 space-y-4 p-4 lg:p-8 pt-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{t.expenses}</h2>
-        </div>
+    <div className="flex-1 space-y-4 p-4 lg:p-8 pt-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{t.expenses}</h2>
+      </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card className="border-blue-200 bg-blue-50/50 shadow-sm overflow-hidden">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-semibold text-blue-900">{t.totalExpenses}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-700">{formatCurrency(totalExpenses, currencySettings)}</div>
-              <p className="text-xs text-blue-600/70 italic">{t.basedOnFilter || 'Based on current filter'}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-emerald-200 bg-emerald-50/50 shadow-sm overflow-hidden">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-semibold text-emerald-900">{t.cash} {t.expenses}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-emerald-700">{formatCurrency(totalCashExpenses, currencySettings)}</div>
-              <p className="text-xs text-emerald-600/70 italic">{t.totalCashPaid || 'Total paid via cash'}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-violet-200 bg-violet-50/50 shadow-sm overflow-hidden">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-semibold text-violet-900">{t.bankTransfer} {t.expenses}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-violet-700">{formatCurrency(totalTransferExpenses, currencySettings)}</div>
-              <p className="text-xs text-violet-600/70 italic">{t.totalTransferPaid || 'Total paid via transfer'}</p>
-            </CardContent>
-          </Card>
-        </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="border-blue-200 bg-blue-50/50 shadow-sm overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-semibold text-blue-900">{t.totalExpenses}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-700">{formatCurrency(totalExpenses, currencySettings)}</div>
+            <p className="text-xs text-blue-600/70 italic">{t.basedOnFilter || 'Based on current filter'}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-emerald-200 bg-emerald-50/50 shadow-sm overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-semibold text-emerald-900">{t.cash} {t.expenses}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-700">{formatCurrency(totalCashExpenses, currencySettings)}</div>
+            <p className="text-xs text-emerald-600/70 italic">{t.totalCashPaid || 'Total paid via cash'}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-violet-200 bg-violet-50/50 shadow-sm overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-semibold text-violet-900">{t.bankTransfer} {t.expenses}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-violet-700">{formatCurrency(totalTransferExpenses, currencySettings)}</div>
+            <p className="text-xs text-violet-600/70 italic">{t.totalTransferPaid || 'Total paid via transfer'}</p>
+          </CardContent>
+        </Card>
+      </div>
 
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mt-4">
-            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-              <div className="relative w-full sm:w-72">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                <Input
-                  placeholder={t.searchExpenses}
-                  className="pl-9 h-11 rounded-xl border-zinc-200 shadow-sm"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <div className="grid grid-cols-2 lg:flex gap-2">
-                <Button 
-                  variant="outline" 
-                  className="h-11 rounded-xl text-sm font-semibold border-zinc-200 gap-2 shadow-sm" 
-                  onClick={() => setIsFilterDialogOpen(true)}
-                >
-                  <Filter className="h-4 w-4" />
-                  {t.filter} {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
-                </Button>
-                <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mt-4">
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <Input
+                placeholder={t.searchExpenses}
+                className="pl-9 h-11 rounded-xl border-zinc-200 shadow-sm"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 lg:flex gap-2">
+              <Button
+                variant="outline"
+                className="h-11 rounded-xl text-sm font-semibold border-zinc-200 gap-2 shadow-sm"
+                onClick={() => setIsFilterDialogOpen(true)}
+              >
+                <Filter className="h-4 w-4" />
+                {t.filter} {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
+              </Button>
+              <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="h-11 rounded-xl text-sm font-semibold border-zinc-200 gap-2 shadow-sm">
+                    <Plus className="h-4 w-4" /> {t.category}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[400px]">
+                  <DialogHeader>
+                    <DialogTitle>{t.addCategory}</DialogTitle>
+                    <DialogDescription>{t.createNewCategory || 'Create a new category for expenses.'}</DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-2">
+                    <div className="grid gap-2">
+                      <Label htmlFor="expense-category-name">{t.categoryName}</Label>
+                      <Input
+                        id="expense-category-name"
+                        placeholder={t.vendorPlaceholder}
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsCategoryDialogOpen(false)}>{t.cancel}</Button>
+                    <Button onClick={handleAddExpenseCategory}>{t.saveCategory}</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+              <div className="col-span-2 sm:col-span-1 flex gap-2">
+                <Dialog open={isManageCategoryDialogOpen} onOpenChange={setIsManageCategoryDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="outline" className="h-11 rounded-xl text-sm font-semibold border-zinc-200 gap-2 shadow-sm">
-                      <Plus className="h-4 w-4" /> {t.category}
+                    <Button variant="outline" className="w-full h-11 rounded-xl text-sm font-semibold border-zinc-200 shadow-sm">
+                      {t.manage}
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-[400px]">
+                  <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
-                      <DialogTitle>{t.addCategory}</DialogTitle>
-                      <DialogDescription>{t.createNewCategory || 'Create a new category for expenses.'}</DialogDescription>
+                      <DialogTitle>{t.manageCategories}</DialogTitle>
+                      <DialogDescription>
+                        {t.editOrDeleteCategories}
+                      </DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-4 py-2">
-                      <div className="grid gap-2">
-                        <Label htmlFor="expense-category-name">{t.categoryName}</Label>
-                        <Input
-                          id="expense-category-name"
-                          placeholder={t.vendorPlaceholder}
-                          value={newCategoryName}
-                          onChange={(e) => setNewCategoryName(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setIsCategoryDialogOpen(false)}>{t.cancel}</Button>
-                      <Button onClick={handleAddExpenseCategory}>{t.saveCategory}</Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-                <div className="col-span-2 sm:col-span-1 flex gap-2">
-                  <Dialog open={isManageCategoryDialogOpen} onOpenChange={setIsManageCategoryDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" className="w-full h-11 rounded-xl text-sm font-semibold border-zinc-200 shadow-sm">
-                        {t.manage}
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[500px]">
-                      <DialogHeader>
-                        <DialogTitle>{t.manageCategories}</DialogTitle>
-                        <DialogDescription>
-                          {t.editOrDeleteCategories}
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="max-h-[320px] space-y-2 overflow-auto py-2">
-                        {expenseCategories.length === 0 ? (
-                          <div className="text-sm text-zinc-500">{t.noCategoriesFound}</div>
-                        ) : (
-                          expenseCategories.map((category) => (
-                            <div key={category} className="flex items-center justify-between rounded-md border border-zinc-200 p-2">
-                              <span className="text-sm font-medium">{category}</span>
-                              <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="icon" onClick={() => handleEditExpenseCategory(category)} title={t.editCategory}>
-                                  <Edit className="h-4 w-4 text-zinc-500" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteExpenseCategory(category)} title={t.deleteCategory}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </div>
-            </div>
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="w-full sm:w-auto h-11 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-100 gap-2">
-                  <Plus className="h-4 w-4" />
-                  {t.addExpense}
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>{t.addNewExpense}</DialogTitle>
-                  <DialogDescription>{t.recordNewExpense}</DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="description">{t.description}</Label>
-                    <Input
-                      id="description"
-                      placeholder={t.descriptionPlaceholder}
-                      value={newExpense.description}
-                      onChange={(e) => setNewExpense({ ...newExpense, description: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="amount">{t.amount}</Label>
-                      <Input
-                        id="amount"
-                        type="number"
-                        step="0.01"
-                        placeholder={t.amountPlaceholder}
-                        value={newExpense.amount}
-                        onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="date">{t.date}</Label>
-                      <Input
-                        id="date"
-                        type="date"
-                        value={newExpense.date}
-                        onChange={(e) => setNewExpense({ ...newExpense, date: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="category">{t.category}</Label>
-                    <Select
-                      value={newExpense.category}
-                      onValueChange={(value) => setNewExpense({ ...newExpense, category: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t.selectCategory} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {expenseCategories.map((category) => (
-                          <SelectItem key={category} value={category}>
-                            {category}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="payment_method">{t.paymentMethod}</Label>
-                      <Select
-                        value={newExpense.payment_method}
-                        onValueChange={(value) => setNewExpense({ ...newExpense, payment_method: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={t.selectMethod} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Cash">{t.cash}</SelectItem>
-                          <SelectItem value="Bank Transfer">{t.bankTransfer}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="vendor">{t.vendor}</Label>
-                      <Input
-                        id="vendor"
-                        placeholder={t.vendorPlaceholder}
-                        value={newExpense.vendor}
-                        onChange={(e) => setNewExpense({ ...newExpense, vendor: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>{t.cancel}</Button>
-                  <Button onClick={handleAddExpense}>{t.saveExpense}</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          <Card className="border-zinc-200 shadow-sm overflow-hidden">
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-200 bg-zinc-50/50 text-left text-zinc-500">
-                      <th className="p-4 font-medium whitespace-nowrap">{t.date}</th>
-                      <th className="p-4 font-medium whitespace-nowrap">{t.description}</th>
-                      <th className="p-4 font-medium whitespace-nowrap">{t.category}</th>
-                      <th className="p-4 font-medium whitespace-nowrap">{t.vendor}</th>
-                      <th className="p-4 font-medium whitespace-nowrap">{t.method}</th>
-                      <th className="p-4 font-medium text-right whitespace-nowrap">{t.amount}</th>
-                      <th className="p-4 font-medium text-right whitespace-nowrap">{t.actions}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredExpenses.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="p-8 text-center text-zinc-500">
-                          {t.noExpensesFound}
-                        </td>
-                      </tr>
-                    ) : (
-                      paginatedExpenses.map((expense) => (
-                        <tr key={expense.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
-                          <td className="p-4 text-zinc-500 whitespace-nowrap">
-                            {format(new Date(expense.date), 'MMM dd, yyyy')}
-                          </td>
-                          <td className="p-4 font-medium">{expense.description}</td>
-                          <td className="p-4">
-                            <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-800">
-                              {expense.category}
-                            </span>
-                          </td>
-                          <td className="p-4 text-zinc-600">{expense.vendor || '-'}</td>
-                          <td className="p-4 text-zinc-600">{expense.payment_method || '-'}</td>
-                          <td className="p-4 font-medium text-right whitespace-nowrap">{formatCurrency(expense.amount, currencySettings)}</td>
-                          <td className="p-4 text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button variant="ghost" size="icon" onClick={() => handleOpenEditExpense(expense)}>
+                    <div className="max-h-[320px] space-y-2 overflow-auto py-2">
+                      {expenseCategories.length === 0 ? (
+                        <div className="text-sm text-zinc-500">{t.noCategoriesFound}</div>
+                      ) : (
+                        expenseCategories.map((category) => (
+                          <div key={category} className="flex items-center justify-between rounded-md border border-zinc-200 p-2">
+                            <span className="text-sm font-medium">{category}</span>
+                            <div className="flex items-center gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => handleEditExpenseCategory(category)} title={t.editCategory}>
                                 <Edit className="h-4 w-4 text-zinc-500" />
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                                onClick={() => handleDeleteExpense(expense.id)}
-                              >
+                              <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteExpenseCategory(category)} title={t.deleteCategory}>
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
-              
-              <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-zinc-200">
-                <div className="flex items-center gap-2 text-sm text-zinc-600">
-                  <span>{t.view}</span>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
-                    className="rounded-lg border border-zinc-200 bg-white px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                  >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                  <span className="hidden sm:inline">{t.recordsPerPage}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9 px-4 rounded-lg"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={safeCurrentPage <= 1}
-                  >
-                    {t.prev}
-                  </Button>
-                  <span className="text-sm font-medium text-zinc-700">
-                     {t.page} {safeCurrentPage} / {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                     className="h-9 px-4 rounded-lg"
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={safeCurrentPage >= totalPages}
-                  >
-                    {t.next}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>{t.editExpense}</DialogTitle>
-              <DialogDescription>{t.updateExpenseDetails}</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-description">{t.description}</Label>
-                <Input
-                  id="edit-description"
-                  placeholder={t.descriptionPlaceholder}
-                  value={editExpense.description}
-                  onChange={(e) => setEditExpense({ ...editExpense, description: e.target.value })}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            </div>
+          </div>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="w-full sm:w-auto h-11 rounded-xl text-sm font-bold bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-100 gap-2">
+                <Plus className="h-4 w-4" />
+                {t.addExpense}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>{t.addNewExpense}</DialogTitle>
+                <DialogDescription>{t.recordNewExpense}</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="edit-amount">{t.amount}</Label>
+                  <Label htmlFor="description">{t.description}</Label>
                   <Input
-                    id="edit-amount"
-                    type="number"
-                    step="0.01"
-                    placeholder={t.amountPlaceholder}
-                    value={editExpense.amount}
-                    onChange={(e) => setEditExpense({ ...editExpense, amount: e.target.value })}
+                    id="description"
+                    placeholder={t.descriptionPlaceholder}
+                    value={newExpense.description}
+                    onChange={(e) => setNewExpense({ ...newExpense, description: e.target.value })}
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-date">{t.date}</Label>
-                  <Input
-                    id="edit-date"
-                    type="date"
-                    value={editExpense.date}
-                    onChange={(e) => setEditExpense({ ...editExpense, date: e.target.value })}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="amount">{t.amount}</Label>
+                    <Input
+                      id="amount"
+                      type="number"
+                      step="0.01"
+                      placeholder={t.amountPlaceholder}
+                      value={newExpense.amount}
+                      onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="date">{t.date}</Label>
+                    <Input
+                      id="date"
+                      type="date"
+                      value={newExpense.date}
+                      onChange={(e) => setNewExpense({ ...newExpense, date: e.target.value })}
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-category">{t.category}</Label>
-                <Select
-                  value={editExpense.category}
-                  onValueChange={(value) => setEditExpense({ ...editExpense, category: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t.selectCategory} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {expenseCategories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="edit-payment_method">{t.paymentMethod}</Label>
+                  <Label htmlFor="category">{t.category}</Label>
                   <Select
-                    value={editExpense.payment_method}
-                    onValueChange={(value) => setEditExpense({ ...editExpense, payment_method: value })}
+                    value={newExpense.category}
+                    onValueChange={(value) => setNewExpense({ ...newExpense, category: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={t.selectMethod} />
+                      <SelectValue placeholder={t.selectCategory} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Cash">{t.cash}</SelectItem>
-                      <SelectItem value="Bank Transfer">{t.bankTransfer}</SelectItem>
+                      {expenseCategories.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-vendor">{t.vendor}</Label>
-                  <Input
-                    id="edit-vendor"
-                    placeholder={t.vendorPlaceholder}
-                    value={editExpense.vendor}
-                    onChange={(e) => setEditExpense({ ...editExpense, vendor: e.target.value })}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="payment_method">{t.paymentMethod}</Label>
+                    <Select
+                      value={newExpense.payment_method}
+                      onValueChange={(value) => setNewExpense({ ...newExpense, payment_method: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t.selectMethod} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Cash">{t.cash}</SelectItem>
+                        <SelectItem value="Bank Transfer">{t.bankTransfer}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="vendor">{t.vendor}</Label>
+                    <Input
+                      id="vendor"
+                      placeholder={t.vendorPlaceholder}
+                      value={newExpense.vendor}
+                      onChange={(e) => setNewExpense({ ...newExpense, vendor: e.target.value })}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>{t.cancel}</Button>
-              <Button onClick={handleEditExpense}>{t.saveChanges}</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>{t.cancel}</Button>
+                <Button onClick={handleAddExpense}>{t.saveExpense}</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
 
-        <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>{t.filterExpenses}</DialogTitle>
-              <DialogDescription>
-                {t.filterByCategoryAndDate}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-2">
-              <div className="grid gap-2">
-                <Label>{t.category}</Label>
+        <Card className="border-zinc-200 shadow-sm overflow-hidden">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-blue-50 bg-blue-50/20 text-left text-blue-600">
+                    <th className="p-4 font-medium whitespace-nowrap">{t.date}</th>
+                    <th className="p-4 font-medium whitespace-nowrap">{t.description}</th>
+                    <th className="p-4 font-medium whitespace-nowrap">{t.category}</th>
+                    <th className="p-4 font-medium whitespace-nowrap">{t.vendor}</th>
+                    <th className="p-4 font-medium whitespace-nowrap">{t.method}</th>
+                    <th className="p-4 font-medium text-right whitespace-nowrap">{t.amount}</th>
+                    <th className="p-4 font-medium text-right whitespace-nowrap">{t.actions}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredExpenses.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-zinc-500">
+                        {t.noExpensesFound}
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedExpenses.map((expense) => (
+                      <tr key={expense.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
+                        <td className="p-4 text-zinc-500 whitespace-nowrap">
+                          {format(new Date(expense.date), 'MMM dd, yyyy')}
+                        </td>
+                        <td className="p-4 font-medium">{expense.description}</td>
+                        <td className="p-4">
+                          <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-800">
+                            {expense.category}
+                          </span>
+                        </td>
+                        <td className="p-4 text-zinc-600">{expense.vendor || '-'}</td>
+                        <td className="p-4 text-zinc-600">{expense.payment_method || '-'}</td>
+                        <td className="p-4 font-medium text-right whitespace-nowrap">{formatCurrency(expense.amount, currencySettings)}</td>
+                        <td className="p-4 text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => handleOpenEditExpense(expense)}>
+                              <Edit className="h-4 w-4 text-zinc-500" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                              onClick={() => handleDeleteExpense(expense.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-zinc-200">
+              <div className="flex items-center gap-2 text-sm text-zinc-600">
+                <span>{t.view}</span>
                 <select
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm"
+                  value={pageSize}
+                  onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
+                  className="rounded-lg border border-zinc-200 bg-white px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                 >
-                  <option value="all">{t.all}</option>
-                  {expenseCategories.map((category) => (
-                    <option key={category} value={category}>{category}</option>
-                  ))}
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
                 </select>
+                <span className="hidden sm:inline">{t.recordsPerPage}</span>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>{t.fromDate}</Label>
-                  <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-                </div>
-                <div className="grid gap-2">
-                  <Label>{t.toDate}</Label>
-                  <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 pt-1">
+              <div className="flex items-center gap-3">
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    setCategoryFilter('all');
-                    setDateFrom('');
-                    setDateTo('');
-                  }}
+                  size="sm"
+                  className="h-9 px-4 rounded-lg"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={safeCurrentPage <= 1}
                 >
-                  {t.clear}
+                  {t.prev}
                 </Button>
-                <Button onClick={() => setIsFilterDialogOpen(false)}>{t.apply}</Button>
+                <span className="text-sm font-medium text-zinc-700">
+                  {t.page} {safeCurrentPage} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-4 rounded-lg"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safeCurrentPage >= totalPages}
+                >
+                  {t.next}
+                </Button>
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{t.editExpense}</DialogTitle>
+            <DialogDescription>{t.updateExpenseDetails}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-description">{t.description}</Label>
+              <Input
+                id="edit-description"
+                placeholder={t.descriptionPlaceholder}
+                value={editExpense.description}
+                onChange={(e) => setEditExpense({ ...editExpense, description: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-amount">{t.amount}</Label>
+                <Input
+                  id="edit-amount"
+                  type="number"
+                  step="0.01"
+                  placeholder={t.amountPlaceholder}
+                  value={editExpense.amount}
+                  onChange={(e) => setEditExpense({ ...editExpense, amount: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-date">{t.date}</Label>
+                <Input
+                  id="edit-date"
+                  type="date"
+                  value={editExpense.date}
+                  onChange={(e) => setEditExpense({ ...editExpense, date: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-category">{t.category}</Label>
+              <Select
+                value={editExpense.category}
+                onValueChange={(value) => setEditExpense({ ...editExpense, category: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t.selectCategory} />
+                </SelectTrigger>
+                <SelectContent>
+                  {expenseCategories.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-payment_method">{t.paymentMethod}</Label>
+                <Select
+                  value={editExpense.payment_method}
+                  onValueChange={(value) => setEditExpense({ ...editExpense, payment_method: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t.selectMethod} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Cash">{t.cash}</SelectItem>
+                    <SelectItem value="Bank Transfer">{t.bankTransfer}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-vendor">{t.vendor}</Label>
+                <Input
+                  id="edit-vendor"
+                  placeholder={t.vendorPlaceholder}
+                  value={editExpense.vendor}
+                  onChange={(e) => setEditExpense({ ...editExpense, vendor: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>{t.cancel}</Button>
+            <Button onClick={handleEditExpense}>{t.saveChanges}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{t.filterExpenses}</DialogTitle>
+            <DialogDescription>
+              {t.filterByCategoryAndDate}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label>{t.category}</Label>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm"
+              >
+                <option value="all">{t.all}</option>
+                {expenseCategories.map((category) => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>{t.fromDate}</Label>
+                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label>{t.toDate}</Label>
+                <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCategoryFilter('all');
+                  setDateFrom('');
+                  setDateTo('');
+                }}
+              >
+                {t.clear}
+              </Button>
+              <Button onClick={() => setIsFilterDialogOpen(false)}>{t.apply}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

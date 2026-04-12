@@ -138,7 +138,8 @@ export default function OrderHistoryPage() {
         <head>
           <title>Receipt - ${order.id}</title>
           <style>
-            body { font-family: 'Courier New', monospace; padding: 20px; max-width: 360px; margin: 0 auto; color: #000; }
+            @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;500;700&display=swap');
+            body { font-family: 'Noto Sans Lao', sans-serif; padding: 20px; max-width: 360px; margin: 0 auto; color: #000; }
             .text-center { text-align: center; }
             .mb-4 { margin-bottom: 1rem; }
             .text-xs { font-size: 12px; }
@@ -353,19 +354,19 @@ export default function OrderHistoryPage() {
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Order History</h2>
       </div>
 
-      <Card className="border-indigo-100 shadow-sm overflow-hidden">
-        <CardHeader className="pb-3 bg-indigo-50/30 border-b border-indigo-50">
+      <Card className="border-blue-100 shadow-sm overflow-hidden">
+        <CardHeader className="pb-3 bg-blue-50/30 border-b border-blue-50">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative w-full sm:w-72">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
               <Input
                 placeholder="Search order ID..."
-                className="pl-9 border-indigo-100 focus:border-indigo-300 focus:ring-indigo-100"
+                className="pl-9 border-blue-100 focus:border-blue-300 focus:ring-blue-100"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Button variant="outline" className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 w-full sm:w-auto" onClick={() => setIsFilterOpen(true)}>
+            <Button variant="outline" className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50 w-full sm:w-auto" onClick={() => setIsFilterOpen(true)}>
               <Filter className="h-4 w-4" />
               Filter {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
             </Button>
@@ -382,10 +383,9 @@ export default function OrderHistoryPage() {
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-bold text-sm font-mono">{order.id.substring(0, 8).toUpperCase()}</span>
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                        order.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
-                        order.status === 'pending' ? 'bg-amber-100 text-amber-800' :
-                        'bg-red-100 text-red-800'}`}>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${order.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                          order.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                            'bg-red-100 text-red-800'}`}>
                         {order.status}
                       </span>
                     </div>
@@ -411,7 +411,7 @@ export default function OrderHistoryPage() {
           <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-indigo-50 bg-indigo-50/20 text-left text-indigo-600">
+                <tr className="border-b border-blue-50 bg-blue-50/20 text-left text-blue-600">
                   <th className="p-4 font-semibold">Order ID</th>
                   <th className="p-4 font-semibold">Date & Time</th>
                   <th className="p-4 font-semibold">Total</th>

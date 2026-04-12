@@ -1341,7 +1341,7 @@ export default function SettingsPage() {
               <div className="border border-zinc-100 rounded-2xl overflow-hidden shadow-sm">
                 <table className="w-full text-left">
                   <thead className="bg-zinc-50/80 border-b border-zinc-100">
-                    <tr>
+                    <tr className="border-b border-indigo-50 bg-indigo-50/20 text-left text-indigo-600">
                       <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-zinc-500">{t.bankName}</th>
                       <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-zinc-500">{t.accountName}</th>
                       <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-zinc-500">{t.accountNumber}</th>
@@ -1356,7 +1356,7 @@ export default function SettingsPage() {
                       </tr>
                     ) : (
                       localBanks.map((bank) => (
-                        <tr key={bank.id} className="hover:bg-zinc-50/50 transition-colors">
+                        <tr key={bank.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
                           <td className="px-6 py-4 font-bold text-zinc-800">{bank.bankName}</td>
                           <td className="px-6 py-4 text-zinc-600 font-medium">{bank.accountName}</td>
                           <td className="px-6 py-4 text-zinc-500 font-mono text-xs">{bank.accountNumber}</td>
@@ -1508,7 +1508,7 @@ export default function SettingsPage() {
               <div className="rounded-md border border-zinc-200">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-200 bg-zinc-50/50 text-left text-zinc-500">
+                    <tr className="border-b border-indigo-50 bg-indigo-50/20 text-left text-indigo-600">
                       <th className="p-3 font-medium">{t.default}</th>
                       <th className="p-3 font-medium">{t.enabled}</th>
                       <th className="p-3 font-medium">{t.printer}</th>
@@ -1526,7 +1526,7 @@ export default function SettingsPage() {
                       </tr>
                     ) : (
                       localPrinters.map((printer) => (
-                        <tr key={printer.id} className="border-b border-zinc-200 last:border-0">
+                        <tr key={printer.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
                           <td className="p-3">
                             <input
                               type="radio"
@@ -1631,7 +1631,7 @@ export default function SettingsPage() {
                     <div className="border-t border-b border-dashed border-zinc-300 py-2 my-2 overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
-                          <tr className="text-zinc-600">
+                          <tr className="border-b border-indigo-50 bg-indigo-50/20 text-left text-indigo-600">
                             <th className="py-1 text-left font-semibold">{t.itemName}</th>
                             <th className="py-1 text-right font-semibold">{t.stock}</th>
                             <th className="py-1 text-right font-semibold">{t.price}</th>
@@ -1675,7 +1675,7 @@ export default function SettingsPage() {
               <div className="rounded-md border border-zinc-200">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-200 bg-zinc-50/50 text-left text-zinc-500">
+                    <tr className="border-b border-indigo-50 bg-indigo-50/20 text-left text-indigo-600">
                       <th className="p-3 font-medium">{t.category}</th>
                       <th className="p-3 font-medium">{t.items}</th>
                       <th className="p-3 font-medium">{t.printer}</th>
@@ -1693,7 +1693,7 @@ export default function SettingsPage() {
                       localStationMappings.map((mapping) => {
                         const categoryItems = items.filter((item) => item.category_id === mapping.categoryId);
                         return (
-                          <tr key={mapping.id} className="border-b border-zinc-200 last:border-0">
+                          <tr key={mapping.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
                             <td className="p-3">
                               <select
                                 className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm"
@@ -1989,7 +1989,7 @@ export default function SettingsPage() {
                           {(() => {
                             const row = getLicenseRow();
                             return (
-                              <tr className="border-t border-zinc-100">
+                              <tr className="border-b border-indigo-50 bg-indigo-50/20 text-left text-indigo-600">
                                 <td className="px-4 py-2">{row.key || '-'}</td>
                                 <td className="px-4 py-2">{row.product || '-'}</td>
                                 <td className="px-4 py-2">

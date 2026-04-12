@@ -466,6 +466,7 @@ function InventoryContent() {
   const [hasPortions, setHasPortions] = useState(false);
   const [portionRows, setPortionRows] = useState<{ name: string; price: string; stock: string; sellingPrice: string }[]>([{ name: '', price: '', stock: '0', sellingPrice: '0' }]);
   const [portionStockByItemId, setPortionStockByItemId] = useState<Record<string, number>>({});
+  const [portionsByItemId, setPortionsByItemId] = useState<Record<string, {name: string, stock: number}[]>>({});
   const [portionCostByItemId, setPortionCostByItemId] = useState<Record<string, number>>({});
   const [portionValueByItemId, setPortionValueByItemId] = useState<Record<string, number>>({});
   const [inventoryCurrentPage, setInventoryCurrentPage] = useState(1);
@@ -487,7 +488,7 @@ function InventoryContent() {
         const [itemsRes, categoriesRes, portionsRes] = await Promise.all([
           supabase.from('items').select('*').order('created_at', { ascending: false }),
           supabase.from('inventory_categories').select('*').order('name'),
-          supabase.from('item_portions').select('item_id, portion_stock, portion_cost_price, portion_price')
+          supabase.from('item_portions').select('item_id, portion_name, portion_stock, portion_cost_price, portion_price')
         ]);
 
         if (itemsRes.data) setItems(itemsRes.data);
@@ -496,6 +497,7 @@ function InventoryContent() {
           const totals: Record<string, number> = {};
           const costTotals: Record<string, number> = {};
           const valueTotals: Record<string, number> = {};
+          const portionsMap: Record<string, {name: string, stock: number}[]> = {};
           for (const row of portionsRes.data as any[]) {
             if (!row.item_id) continue;
             const stock = Number(row.portion_stock || 0);
@@ -504,12 +506,17 @@ function InventoryContent() {
             totals[row.item_id] = (totals[row.item_id] || 0) + stock;
             costTotals[row.item_id] = (costTotals[row.item_id] || 0) + cost;
             valueTotals[row.item_id] = (valueTotals[row.item_id] || 0) + (stock * cost);
+            
+            if (!portionsMap[row.item_id]) portionsMap[row.item_id] = [];
+            portionsMap[row.item_id].push({ name: row.portion_name, stock });
           }
           setPortionStockByItemId(totals);
+          setPortionsByItemId(portionsMap);
           setPortionCostByItemId(costTotals);
           setPortionValueByItemId(valueTotals);
         } else {
           setPortionStockByItemId({});
+          setPortionsByItemId({});
           setPortionCostByItemId({});
           setPortionValueByItemId({});
         }
@@ -520,6 +527,7 @@ function InventoryContent() {
       setItems(MOCK_ITEMS);
       setInventoryCategories(MOCK_INVENTORY_CATEGORIES);
       setPortionStockByItemId({});
+      setPortionsByItemId({});
       setPortionCostByItemId({});
       setPortionValueByItemId({});
     }
@@ -613,7 +621,7 @@ function InventoryContent() {
 
     try {
       await updateItemStock(item.id, newStock, notes);
-      
+
       // Refresh items list
       setTimeout(fetchItemsAndCategoriesLocal, 500);
     } catch (error) {
@@ -990,18 +998,18 @@ function InventoryContent() {
                       <div key={cat.id} className="flex items-center justify-between p-3 rounded-lg border border-zinc-100 bg-zinc-50/50">
                         <span className="font-medium text-sm">{cat.name}</span>
                         <div className="flex items-center gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-zinc-500" 
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-zinc-500"
                             onClick={() => handleOpenEditCategory(cat)}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50" 
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"
                             onClick={() => handleDeleteInventoryCategory(cat.id)}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1014,10 +1022,10 @@ function InventoryContent() {
               </DialogContent>
             </Dialog>
 
-            <Button 
-              variant="outline" 
-              className="h-12 rounded-xl text-sm font-semibold border-zinc-200" 
-              onClick={fetchTransactions} 
+            <Button
+              variant="outline"
+              className="h-12 rounded-xl text-sm font-semibold border-zinc-200"
+              onClick={fetchTransactions}
               title={t.refreshTransactions}
             >
               <RefreshCw className={`mr-2 h-4 w-4 ${isLoadingTransactions ? 'animate-spin' : ''}`} />
@@ -1060,7 +1068,7 @@ function InventoryContent() {
             if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
-              <Button className="w-full sm:w-auto h-12 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200 transition-all">
+              <Button className="w-full sm:w-auto h-12 rounded-xl text-sm font-bold bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-200 transition-all">
                 <Plus className="mr-2 h-4 w-4" /> {t.newItem}
               </Button>
             </DialogTrigger>
@@ -1080,7 +1088,7 @@ function InventoryContent() {
                     id="name"
                     value={newItem.name}
                     onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                    className="h-11 rounded-xl border-zinc-200 shadow-sm focus:ring-indigo-500"
+                    className="h-11 rounded-xl border-zinc-200 shadow-sm focus:ring-blue-500"
                     placeholder={t.itemNamePlaceholder}
                   />
                 </div>
@@ -1181,14 +1189,14 @@ function InventoryContent() {
                       <input
                         type="checkbox"
                         id="has-portions-toggle"
-                        className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                        className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
                         checked={hasPortions}
                         onChange={(e) => setHasPortions(e.target.checked)}
                       />
                       <Label htmlFor="has-portions-toggle" className="text-xs font-medium text-zinc-500 cursor-pointer">{t.enablePortions}</Label>
                     </div>
                   </div>
-                  
+
                   {hasPortions && (
                     <div className="space-y-4 rounded-2xl border border-zinc-100 bg-zinc-50/50 p-4 transition-all">
                       <div className="space-y-3">
@@ -1256,33 +1264,29 @@ function InventoryContent() {
                     <button
                       type="button"
                       onClick={() => setNewItem({ ...newItem, itemType: 'ingredient' })}
-                      className={`group relative rounded-2xl border p-4 text-left transition-all ${
-                        newItem.itemType === 'ingredient'
-                        ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/10'
-                        : 'border-zinc-200 hover:border-indigo-300 hover:bg-zinc-50'
-                      }`}
+                      className={`group relative rounded-2xl border p-4 text-left transition-all ${newItem.itemType === 'ingredient'
+                          ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-600/10'
+                          : 'border-zinc-200 hover:border-blue-300 hover:bg-zinc-50'
+                        }`}
                     >
-                      <div className={`h-8 w-8 rounded-full mb-2 flex items-center justify-center transition-colors ${
-                        newItem.itemType === 'ingredient' ? 'bg-indigo-600 text-white' : 'bg-zinc-100 text-zinc-500 group-hover:bg-indigo-100 group-hover:text-indigo-600'
-                      }`}>
+                      <div className={`h-8 w-8 rounded-full mb-2 flex items-center justify-center transition-colors ${newItem.itemType === 'ingredient' ? 'bg-blue-600 text-white' : 'bg-zinc-100 text-zinc-500 group-hover:bg-blue-100 group-hover:text-blue-600'
+                        }`}>
                         <Package className="h-4 w-4" />
                       </div>
-                      <div className={`text-sm font-bold ${newItem.itemType === 'ingredient' ? 'text-indigo-900' : 'text-zinc-700'}`}>{t.ingredient}</div>
+                      <div className={`text-sm font-bold ${newItem.itemType === 'ingredient' ? 'text-blue-900' : 'text-zinc-700'}`}>{t.ingredient}</div>
                       <div className="text-[10px] text-zinc-500 mt-1 font-medium leading-tight">{t.ingredientDesc}</div>
                     </button>
-                    
+
                     <button
                       type="button"
                       onClick={() => setNewItem({ ...newItem, itemType: 'standalone' })}
-                      className={`group relative rounded-2xl border p-4 text-left transition-all ${
-                        newItem.itemType === 'standalone'
-                        ? 'border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-600/10'
-                        : 'border-zinc-200 hover:border-emerald-300 hover:bg-zinc-50'
-                      }`}
+                      className={`group relative rounded-2xl border p-4 text-left transition-all ${newItem.itemType === 'standalone'
+                          ? 'border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-600/10'
+                          : 'border-zinc-200 hover:border-emerald-300 hover:bg-zinc-50'
+                        }`}
                     >
-                      <div className={`h-8 w-8 rounded-full mb-2 flex items-center justify-center transition-colors ${
-                        newItem.itemType === 'standalone' ? 'bg-emerald-600 text-white' : 'bg-zinc-100 text-zinc-500 group-hover:bg-emerald-100 group-hover:text-emerald-600'
-                      }`}>
+                      <div className={`h-8 w-8 rounded-full mb-2 flex items-center justify-center transition-colors ${newItem.itemType === 'standalone' ? 'bg-emerald-600 text-white' : 'bg-zinc-100 text-zinc-500 group-hover:bg-emerald-100 group-hover:text-emerald-600'
+                        }`}>
                         <ShoppingBag className="h-4 w-4" />
                       </div>
                       <div className={`text-sm font-bold ${newItem.itemType === 'standalone' ? 'text-emerald-900' : 'text-zinc-700'}`}>{t.standalone}</div>
@@ -1292,23 +1296,23 @@ function InventoryContent() {
                 </div>
 
                 {newItem.itemType === 'ingredient' && (
-                  <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="flex items-center gap-2 text-sm text-indigo-900">
-                      <AlertTriangle className="h-4 w-4 text-indigo-500" />
+                  <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-center gap-2 text-sm text-blue-900">
+                      <AlertTriangle className="h-4 w-4 text-blue-500" />
                       <span className="font-bold">{t.note}:</span>
                     </div>
-                    <p className="text-xs text-indigo-700 mt-2 leading-relaxed">
+                    <p className="text-xs text-blue-700 mt-2 leading-relaxed">
                       {t.ingredientNoteDesc}
                     </p>
                   </div>
                 )}
               </div>
               <DialogFooter className="pt-2 border-t border-zinc-100">
-                <Button 
-                  type="submit" 
-                  onClick={handleSaveItem} 
+                <Button
+                  type="submit"
+                  onClick={handleSaveItem}
                   disabled={isLoading}
-                  className="w-full sm:w-auto h-12 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-100"
+                  className="w-full sm:w-auto h-12 rounded-xl text-sm font-bold bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-100"
                 >
                   {isLoading ? t.saving : (editingId ? t.updateItem : t.createItem)}
                 </Button>
@@ -1347,7 +1351,7 @@ function InventoryContent() {
               <p className="text-xs italic opacity-70">{t.variablePortions}</p>
             </CardContent>
           </Card>
-          <Card className="border-indigo-200 bg-indigo-50/50 shadow-sm overflow-hidden text-indigo-900">
+          <Card className="border-blue-200 bg-blue-50/50 shadow-sm overflow-hidden text-blue-900">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">{t.combinedValue}</CardTitle>
             </CardHeader>
@@ -1366,7 +1370,7 @@ function InventoryContent() {
             </CardContent>
           </Card>
         </div>
-        
+
 
         <TabsList>
           <TabsTrigger value="inventory">{t.items}</TabsTrigger>
@@ -1392,7 +1396,7 @@ function InventoryContent() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-100 bg-zinc-50/30 text-left text-zinc-600">
+                    <tr className="border-b border-blue-50 bg-blue-50/20 text-left text-blue-600">
                       <th className="p-4 font-semibold">{t.itemName}</th>
                       <th className="p-4 font-semibold">{t.category}</th>
                       <th className="p-4 font-semibold">{t.currentStock}</th>
@@ -1431,7 +1435,18 @@ function InventoryContent() {
                           <tr key={item.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
                             <td className="p-4 font-medium">{item.name}</td>
                             <td className="p-4 text-zinc-500">{category?.name || 'Unknown'}</td>
-                            <td className="p-4 font-medium">{stock}</td>
+                            <td className="p-4 font-medium">
+                              <div>{stock}</div>
+                              {hasPortionStock && portionsByItemId[item.id] && portionsByItemId[item.id].length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1 w-full max-w-[120px]">
+                                  {portionsByItemId[item.id].map((p, idx) => (
+                                    <span key={idx} className="inline-flex items-center rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] whitespace-nowrap font-medium text-zinc-600">
+                                      {p.name}: <span className={`ml-1 ${p.stock <= minStockAlert ? 'text-red-600 font-bold' : ''}`}>{p.stock}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
                             <td className="p-4">
                               <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
                                 ${item.is_recipe ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
@@ -1598,7 +1613,7 @@ function InventoryContent() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-emerald-50 bg-emerald-50/20 text-left text-emerald-600">
+                    <tr className="border-b border-blue-50 bg-blue-50/20 text-left text-blue-600">
                       <th className="p-4 font-semibold">{t.date}</th>
                       <th className="p-4 font-semibold">{t.item}</th>
                       <th className="p-4 font-semibold">{t.type}</th>
@@ -1630,10 +1645,10 @@ function InventoryContent() {
                                   transaction.transaction_type === 'restock' ? 'bg-emerald-100 text-emerald-700' :
                                     transaction.transaction_type === 'waste' ? 'bg-rose-100 text-rose-700' :
                                       'bg-amber-100 text-amber-700'}`}>
-                                {transaction.transaction_type === 'adjustment' ? 'Manual Adj' : 
-                                 transaction.transaction_type === 'restock' ? 'Stock In' :
-                                  transaction.transaction_type === 'sale' ? t.sale :
-                                  transaction.transaction_type}
+                                {transaction.transaction_type === 'adjustment' ? 'Manual Adj' :
+                                  transaction.transaction_type === 'restock' ? 'Stock In' :
+                                    transaction.transaction_type === 'sale' ? t.sale :
+                                      transaction.transaction_type}
                               </span>
                             </td>
                             <td className={`p-4 font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>

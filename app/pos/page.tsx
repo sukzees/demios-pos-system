@@ -542,7 +542,7 @@ export default function PosPage() {
     holdOrder(note);
     setNote('');
     setTip('');
-    alert('Order held successfully');
+    // alert('Order held successfully');
   };
 
   const handleResumeOrder = (orderId: string) => {
@@ -575,13 +575,13 @@ export default function PosPage() {
       '<span class="font-bold">Notes:</span><br>' +
       '<span>' + note + '</span>' +
       '</div>' : '';
-    
-    const tipHtml = 
+
+    const tipHtml =
       '<div class="flex justify-between">' +
       '<span>Tip</span>' +
       '<span>' + formatCurrency(tipAmount) + '</span>' +
       '</div>';
-    
+
     const paymentMethodHtml =
       '<div class="flex justify-between">' +
       '<span>Payment Method</span>' +
@@ -612,7 +612,8 @@ export default function PosPage() {
       '<title>Bill Preview</title>' +
       '<meta charset="UTF-8">' +
       '<style>' +
-      'body { font-family: \'Courier New\', monospace; padding: 20px; max-width: 300px; margin: 0 auto; color: #000; }' +
+      "@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;500;700&display=swap');" +
+      "body { font-family: 'Noto Sans Lao', sans-serif; padding: 20px; max-width: 300px; margin: 0 auto; color: #000; }" +
       '.text-center { text-align: center; }' +
       '.mb-4 { margin-bottom: 1rem; }' +
       '.mt-6 { margin-top: 1.5rem; }' +
@@ -1255,19 +1256,21 @@ export default function PosPage() {
                 <AlertTriangle className="h-6 w-6" />
                 {t.deleteHeldOrder}
               </AlertDialogTitle>
-              <AlertDialogDescription className="text-base text-zinc-700">
-                {(() => {
+              <AlertDialogDescription className="sr-only">
+                {t.cannotBeUndoneWarning}
+              </AlertDialogDescription>
+              {(() => {
                   const order = heldOrders.find(o => o.id === orderToDelete);
-                  if (!order) return 'This action cannot be undone.';
+                  if (!order) return null;
                   const itemCount = order.cart.length;
                   const orderTotal = order.cart.reduce((sum, item) => sum + (item.item.price * item.quantity), 0);
                   return (
-                    <div className="space-y-3 mt-4">
-                      <p className="font-medium text-zinc-900">You are about to delete this held order:</p>
+                    <div className="space-y-3 mt-4 text-base text-zinc-700">
+                      <p className="font-medium text-zinc-900">{t.confirmDeleteHeldOrder}</p>
                       <div className="bg-white border-2 border-red-200 rounded-lg p-4 space-y-2">
                         <div className="flex justify-between items-center">
-                          <span className="text-sm font-semibold text-red-900">Items:</span>
-                          <span className="text-sm font-bold text-red-700 bg-red-50 px-3 py-1 rounded">{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+                          <span className="text-sm font-semibold text-red-900">{t.items}</span>
+                          <span className="text-sm font-bold text-red-700 bg-red-50 px-3 py-1 rounded">{itemCount}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm font-semibold text-red-900">Total:</span>
@@ -1275,22 +1278,21 @@ export default function PosPage() {
                         </div>
                         {order.note && (
                           <div className="pt-2 border-t border-red-200">
-                            <span className="text-sm font-semibold text-red-900">Note:</span>
+                            <span className="text-sm font-semibold text-red-900">{t.note}:</span>
                             <p className="text-sm text-red-800 mt-1 italic">{order.note}</p>
                           </div>
                         )}
                         <div className="flex justify-between items-center pt-2 border-t border-red-200">
-                          <span className="text-sm font-semibold text-red-900">Time:</span>
+                          <span className="text-sm font-semibold text-red-900">{t.time}</span>
                           <span className="text-sm text-red-700">{new Date(order.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                       </div>
                       <div className="bg-red-50 border border-red-300 rounded-md p-3">
-                        <p className="text-sm font-bold text-red-700">⚠️ This action cannot be undone.</p>
+                        <p className="text-sm font-bold text-red-700">{t.cannotBeUndoneWarning}</p>
                       </div>
                     </div>
                   );
                 })()}
-              </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter className="gap-3 pt-4">
               <AlertDialogCancel className="border-zinc-300 hover:bg-zinc-100">
@@ -1420,7 +1422,7 @@ export default function PosPage() {
                           name: `${portionSelectionItem.name} (${portion.name})`,
                           price: portion.price,
                           stock: totalCapacity,
-                         },
+                        },
                         {
                           sourceItemId: portionSelectionItem.id,
                           portionName: portion.name,

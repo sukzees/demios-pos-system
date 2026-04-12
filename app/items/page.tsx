@@ -99,7 +99,7 @@ const TRANSLATIONS = {
     updateDetails: 'ອັບເດດລາຍລະອຽດ ແລະ ສ່ວນຍ່ອຍ.',
     itemName: 'ຊື່ລາຍການ *',
     sellingPrice: 'ລາຄາຂາຍ *',
-    category: 'ໝວດໝູ່ *',
+    category: 'ໝວດໝູ່',
     hasPortions: 'ມີສ່ວນຍ່ອຍ',
     recipeIngredients: 'ສ່ວນປະກອບຂອງສູດ',
     portionName: 'ຊື່ສ່ວນຍ່ອຍ',
@@ -244,9 +244,9 @@ export default function ItemsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [recipeStocks, setRecipeStocks] = useState<{[key: string]: number}>({});
+  const [recipeStocks, setRecipeStocks] = useState<{ [key: string]: number }>({});
   const [portionStockByProduct, setPortionStockByProduct] = useState<Record<string, number>>({});
-  
+
   // Add Item Form State
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [newItemName, setNewItemName] = useState('');
@@ -257,7 +257,7 @@ export default function ItemsPage() {
   const [newItemDescription, setNewItemDescription] = useState('');
   const [newItemUnit, setNewItemUnit] = useState('pcs');
   const [newItemMinStock, setNewItemMinStock] = useState('0');
-  const [recipeIngredients, setRecipeIngredients] = useState<{ingredient_id: string; quantity_needed: number; unit: string}[]>([]);
+  const [recipeIngredients, setRecipeIngredients] = useState<{ ingredient_id: string; quantity_needed: number; unit: string }[]>([]);
   const [hasPortions, setHasPortions] = useState(false);
   const [portionRows, setPortionRows] = useState<{ name: string; price: string; stock: string; costPrice: string }[]>([{ name: '', price: '', stock: '0', costPrice: '0' }]);
 
@@ -268,7 +268,7 @@ export default function ItemsPage() {
   const [editItemPrice, setEditItemPrice] = useState('');
   const [editItemCategory, setEditItemCategory] = useState('');
   const [editItemStock, setEditItemStock] = useState('0');
-  const [editRecipeIngredients, setEditRecipeIngredients] = useState<{ingredient_id: string; quantity_needed: number; unit: string}[]>([]);
+  const [editRecipeIngredients, setEditRecipeIngredients] = useState<{ ingredient_id: string; quantity_needed: number; unit: string }[]>([]);
   const [isEditingRecipe, setIsEditingRecipe] = useState(false);
   const [editHasPortions, setEditHasPortions] = useState(false);
   const [editPortionRows, setEditPortionRows] = useState<{ name: string; price: string; stock: string; costPrice: string }[]>([{ name: '', price: '', stock: '0', costPrice: '0' }]);
@@ -276,7 +276,7 @@ export default function ItemsPage() {
   // Add Category Form State
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
-  
+
   // Edit Category State
   const [isEditCategoryOpen, setIsEditCategoryOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -302,7 +302,7 @@ export default function ItemsPage() {
         .from('recipes')
         .select('*')
         .order('created_at', { ascending: false });
-      
+
       if (data) setRecipes(data);
       if (error) console.error('Error fetching recipes:', error);
     } catch (error) {
@@ -384,7 +384,7 @@ export default function ItemsPage() {
       setHasPortions(false);
       setPortionRows([{ name: '', price: '', stock: '0', costPrice: '0' }]);
       setIsAddItemOpen(false);
-      
+
       fetchItemsAndCategories();
       fetchRecipes();
       fetchPortionStocks();
@@ -557,7 +557,7 @@ export default function ItemsPage() {
   };
 
   const calculateAllRecipeStocks = async () => {
-    const newRecipeStocks: {[key: string]: number} = {};
+    const newRecipeStocks: { [key: string]: number } = {};
     for (const recipe of recipes) {
       newRecipeStocks[recipe.id] = await calculateRecipeStock(recipe.id);
     }
@@ -673,16 +673,16 @@ export default function ItemsPage() {
         <div className="flex flex-col sm:flex-row grow justify-end items-center gap-3 w-full sm:w-auto">
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-            <Input 
-              placeholder={t.searchItems} 
-              className="h-11 pl-9 rounded-xl border-zinc-200 bg-white shadow-sm focus:ring-indigo-500 font-medium"
+            <Input
+              placeholder={t.searchItems}
+              className="h-11 pl-9 rounded-xl border-zinc-200 bg-white shadow-sm focus:ring-blue-500 font-medium"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
           <Dialog open={isAddItemOpen} onOpenChange={setIsAddItemOpen}>
             <DialogTrigger asChild>
-              <Button className="w-full sm:w-auto h-12 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-100 transition-all active:scale-95">
+              <Button className="w-full sm:w-auto h-12 rounded-xl text-sm font-bold bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-100 transition-all active:scale-95">
                 <Plus className="mr-2 h-4 w-4" /> {t.addItem}
               </Button>
             </DialogTrigger>
@@ -711,7 +711,7 @@ export default function ItemsPage() {
                 </div>
                 <div className="grid gap-2">
                   <label className="flex items-center gap-2 text-sm font-medium">
-                    <input type="checkbox" checked={hasPortions} onChange={(e) => setHasPortions(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500" />
+                    <input type="checkbox" checked={hasPortions} onChange={(e) => setHasPortions(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" />
                     {t.hasPortions}
                   </label>
                   {hasPortions && (
@@ -747,7 +747,7 @@ export default function ItemsPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddItemOpen(false)} className="rounded-xl h-11 px-6">{t.cancel}</Button>
-                <Button onClick={handleAddItem} className="bg-indigo-600 hover:bg-indigo-700 rounded-xl h-11 px-6">{t.saveItem}</Button>
+                <Button onClick={handleAddItem} className="bg-blue-600 hover:bg-blue-700 rounded-xl h-11 px-6">{t.saveItem}</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -756,8 +756,8 @@ export default function ItemsPage() {
 
       <Tabs defaultValue="items" className="space-y-6">
         <TabsList className="bg-white p-1 rounded-xl border border-zinc-200 shadow-sm w-full sm:w-auto h-auto min-h-[52px] flex flex-wrap gap-1">
-          <TabsTrigger value="items" className="rounded-lg data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md px-8 py-2.5 transition-all font-bold text-sm tracking-wide grow sm:grow-0">{t.items}</TabsTrigger>
-          <TabsTrigger value="categories" className="rounded-lg data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md px-8 py-2.5 transition-all font-bold text-sm tracking-wide grow sm:grow-0">{t.categories}</TabsTrigger>
+          <TabsTrigger value="items" className="rounded-lg data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md px-8 py-2.5 transition-all font-bold text-sm tracking-wide grow sm:grow-0">{t.items}</TabsTrigger>
+          <TabsTrigger value="categories" className="rounded-lg data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md px-8 py-2.5 transition-all font-bold text-sm tracking-wide grow sm:grow-0">{t.categories}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="items" className="space-y-4">
@@ -801,7 +801,7 @@ export default function ItemsPage() {
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setIsEditItemOpen(false)} className="rounded-xl h-11 px-6">{t.cancel}</Button>
-                      <Button onClick={handleEditItem} className="bg-indigo-600 hover:bg-indigo-700 rounded-xl h-11 px-6">{t.save}</Button>
+                      <Button onClick={handleEditItem} className="bg-blue-600 hover:bg-blue-700 rounded-xl h-11 px-6">{t.save}</Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
@@ -811,13 +811,13 @@ export default function ItemsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-100 bg-zinc-50/50 text-left text-zinc-600 uppercase tracking-wider">
-                      <th className="p-4 font-bold text-[10px]">{t.name}</th>
-                      <th className="p-4 font-bold text-[10px]">{t.category}</th>
-                      <th className="p-4 font-bold text-[10px]">{t.price}</th>
-                      <th className="p-4 font-bold text-[10px]">{t.type}</th>
-                      <th className="p-4 font-bold text-[10px]">{t.stock}</th>
-                      <th className="p-4 font-bold text-[10px] text-right">{t.actions}</th>
+                    <tr className="border-b border-blue-50 bg-blue-50/20 text-left text-blue-600">
+                      <th className="p-4 font-bold">{t.name}</th>
+                      <th className="p-4 font-bold">{t.category}</th>
+                      <th className="p-4 font-bold">{t.price}</th>
+                      <th className="p-4 font-bold">{t.type}</th>
+                      {/* <th className="p-4 font-bold">{t.stock}</th> */}
+                      <th className="p-4 font-bold text-right">{t.actions}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-50">
@@ -826,23 +826,24 @@ export default function ItemsPage() {
                     ) : (
                       paginatedItems.map((item) => {
                         const category = displayCategories.find(c => c.id === item.category_id);
-                        const isRecipe = item.is_recipe === false ? t.recipe : t.menuItem;
-                        let stock = isRecipe === t.recipe ? (recipeStocks[item.id] || 0) : (item.stock ?? 0);
+                        const isRecipe = item.is_recipe ? t.recipe : t.menuItem;
+                        const hasPortionStock = Object.prototype.hasOwnProperty.call(portionStockByProduct, item.id);
+                        let stock = isRecipe === t.recipe ? (recipeStocks[item.id] || 0) : (hasPortionStock ? portionStockByProduct[item.id] : (item.stock ?? 0));
                         return (
-                          <tr key={item.id} className="hover:bg-zinc-50/50 transition-colors">
+                          <tr key={item.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
                             <td className="p-4 font-bold text-zinc-800">{item.name}</td>
                             <td className="p-4 text-zinc-500 font-medium">{category?.name || 'Unknown'}</td>
                             <td className="p-4 font-bold text-zinc-900">{formatCurrency(item.price, currencySettings)}</td>
                             <td className="p-4">
-                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${isRecipe === t.recipe ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${isRecipe === t.recipe ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>
                                 {isRecipe}
                               </span>
                             </td>
-                            <td className="p-4">
+                            {/* <td className="p-4">
                               <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${stock < 10 ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
                                 {stock} {t.inStock}
                               </span>
-                            </td>
+                            </td> */}
                             <td className="p-4 text-right">
                               <div className="flex justify-end gap-1">
                                 <Button variant="ghost" size="icon" asChild className="h-8 w-8 rounded-lg hover:bg-blue-50 text-blue-600"><Link href={`/inventory?search=${encodeURIComponent(item.name)}`}><History className="h-4 w-4" /></Link></Button>
@@ -851,11 +852,11 @@ export default function ItemsPage() {
                                   setEditItemName(item.name);
                                   setEditItemPrice(item.price.toString());
                                   setEditItemCategory(item.category_id);
-                                  setIsEditingRecipe(item.is_recipe === false);
-                                  if (item.is_recipe === false) { loadRecipeIngredients(item.id); }
+                                  setIsEditingRecipe(!!item.is_recipe);
+                                  if (item.is_recipe) { loadRecipeIngredients(item.id); }
                                   setIsEditItemOpen(true);
                                 }} className="h-8 w-8 rounded-lg hover:bg-zinc-100"><Edit className="h-4 w-4" /></Button>
-                                <Button variant="ghost" size="icon" onClick={() => handleDeleteItem(item.id, isRecipe)} className="h-8 w-8 rounded-lg hover:bg-red-50 text-red-600"><Trash2 className="h-4 w-4" /></Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteItem(item.id, item.is_recipe ? 'Recipe' : 'Item')} className="h-8 w-8 rounded-lg hover:bg-red-50 text-red-600"><Trash2 className="h-4 w-4" /></Button>
                               </div>
                             </td>
                           </tr>
@@ -867,7 +868,7 @@ export default function ItemsPage() {
               <div className="p-4 border-t border-zinc-100 bg-zinc-50/20 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 uppercase tracking-wider">
                   <span>{t.show}</span>
-                  <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="rounded-lg border-zinc-200 text-zinc-800 focus:ring-indigo-500 h-8 px-2">
+                  <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="rounded-lg border-zinc-200 text-zinc-800 focus:ring-blue-500 h-8 px-2">
                     <option value={10}>10</option><option value={20}>20</option><option value={50}>50</option>
                   </select>
                 </div>
@@ -890,7 +891,7 @@ export default function ItemsPage() {
               </div>
               <Dialog open={isAddCategoryOpen} onOpenChange={setIsAddCategoryOpen}>
                 <DialogTrigger asChild>
-                  <Button className="h-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-100 px-4 font-bold text-xs"><Plus className="mr-2 h-4 w-4" /> {t.addCategory}</Button>
+                  <Button className="h-10 rounded-xl bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-100 px-4 font-bold text-xs"><Plus className="mr-2 h-4 w-4" /> {t.addCategory}</Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[425px] rounded-2xl">
                   <DialogHeader><DialogTitle className="text-xl font-bold">{t.addCategory}</DialogTitle></DialogHeader>
@@ -902,7 +903,7 @@ export default function ItemsPage() {
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setIsAddCategoryOpen(false)} className="rounded-xl h-11">{t.cancel}</Button>
-                    <Button onClick={handleAddCategory} className="bg-indigo-600 hover:bg-indigo-700 rounded-xl h-11">{t.save}</Button>
+                    <Button onClick={handleAddCategory} className="bg-blue-600 hover:bg-blue-700 rounded-xl h-11">{t.save}</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -910,15 +911,15 @@ export default function ItemsPage() {
             <CardContent className="p-0">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-100 bg-zinc-50/50 text-left text-zinc-600 uppercase tracking-wider">
-                    <th className="p-4 font-bold text-[10px]">{t.name}</th>
-                    <th className="p-4 font-bold text-[10px]">{t.itemsCount}</th>
-                    <th className="p-4 font-bold text-[10px] text-right">{t.actions}</th>
+                  <tr className="border-b border-blue-50 bg-blue-50/20 text-left text-blue-600">
+                    <th className="p-4 font-bold">{t.name}</th>
+                    <th className="p-4 font-bold">{t.itemsCount}</th>
+                    <th className="p-4 font-bold text-right">{t.actions}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-50">
                   {displayCategories.map((cat) => (
-                    <tr key={cat.id} className="hover:bg-zinc-50/50 transition-colors">
+                    <tr key={cat.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
                       <td className="p-4 font-bold text-zinc-800">{cat.name}</td>
                       <td className="p-4 text-zinc-500 font-medium">{displayItems.filter(i => i.category_id === cat.id).length} {t.itemsCount}</td>
                       <td className="p-4 text-right">
@@ -938,7 +939,7 @@ export default function ItemsPage() {
                   <div className="py-4"><Label className="mb-2 block">{t.name}</Label><Input value={editCategoryName} onChange={(e) => setEditCategoryName(e.target.value)} className="h-11 rounded-xl" /></div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setIsEditCategoryOpen(false)} className="rounded-xl h-11">{t.cancel}</Button>
-                    <Button onClick={handleEditCategory} className="bg-indigo-600 hover:bg-indigo-700 rounded-xl h-11">{t.saveChanges}</Button>
+                    <Button onClick={handleEditCategory} className="bg-blue-600 hover:bg-blue-700 rounded-xl h-11">{t.saveChanges}</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>

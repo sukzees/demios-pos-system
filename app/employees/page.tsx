@@ -308,7 +308,7 @@ export default function EmployeesPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
             <Input
               placeholder={t.searchEmployees}
-              className="h-11 pl-9 rounded-xl border-zinc-200 bg-white shadow-sm focus:ring-indigo-500 font-medium"
+              className="h-11 pl-9 rounded-xl border-zinc-200 bg-white shadow-sm focus:ring-blue-500 font-medium"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -318,7 +318,7 @@ export default function EmployeesPage() {
             if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
-              <Button className="w-full sm:w-auto h-12 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-100 transition-all active:scale-95">
+              <Button className="w-full sm:w-auto h-12 rounded-xl text-sm font-bold bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-100 transition-all active:scale-95">
                 <Plus className="mr-2 h-4 w-4" /> {t.addEmployee}
               </Button>
             </DialogTrigger>
@@ -352,7 +352,7 @@ export default function EmployeesPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="rounded-xl h-11">{t.cancel}</Button>
-                <Button onClick={handleSaveEmployee} className="bg-indigo-600 hover:bg-indigo-700 rounded-xl h-11" disabled={isLoading}>{isLoading ? t.saving : t.saveEmployee}</Button>
+                <Button onClick={handleSaveEmployee} className="bg-blue-600 hover:bg-blue-700 rounded-xl h-11" disabled={isLoading}>{isLoading ? t.saving : t.saveEmployee}</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -368,12 +368,12 @@ export default function EmployeesPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-100 bg-zinc-50/50 text-left text-zinc-600 uppercase tracking-wider">
-                  <th className="p-4 font-bold text-[10px]">{t.staffName}</th>
-                  <th className="p-4 font-bold text-[10px]">{t.role}</th>
-                  <th className="p-4 font-bold text-[10px]">{t.status}</th>
-                  <th className="p-4 font-bold text-[10px]">{t.joinedDate}</th>
-                  <th className="p-4 font-bold text-[10px] text-right">{t.actions}</th>
+                <tr className="border-b border-blue-50 bg-blue-50/20 text-left text-blue-600">
+                  <th className="p-4 font-bold">{t.staffName}</th>
+                  <th className="p-4 font-bold">{t.role}</th>
+                  <th className="p-4 font-bold">{t.status}</th>
+                  <th className="p-4 font-bold">{t.joinedDate}</th>
+                  <th className="p-4 font-bold text-right">{t.actions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-50">
@@ -381,7 +381,7 @@ export default function EmployeesPage() {
                   <tr><td colSpan={5} className="p-8 text-center text-zinc-500">{t.noEmployeesFound}</td></tr>
                 ) : (
                   filteredEmployees.map((employee) => (
-                    <tr key={employee.id} className="hover:bg-zinc-50/50 transition-colors">
+                    <tr key={employee.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
                       <td className="p-4 font-bold text-zinc-800">
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 rounded-full bg-zinc-100 flex items-center justify-center"><UserCog className="h-4 w-4 text-zinc-500" /></div>

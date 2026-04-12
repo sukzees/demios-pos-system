@@ -38,7 +38,7 @@ export default function RecipesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  
+
   const [newRecipe, setNewRecipe] = useState({
     name: '',
     description: '',
@@ -53,7 +53,7 @@ export default function RecipesPage() {
         .from('recipes')
         .select('*')
         .order('created_at', { ascending: false });
-      
+
       if (data) setRecipes(data);
       if (error) console.error('Error fetching recipes:', error);
     } catch (error) {
@@ -68,7 +68,7 @@ export default function RecipesPage() {
         .select('*')
         .eq('is_recipe', false)
         .order('name');
-      
+
       if (data) setIngredients(data);
       if (error) console.error('Error fetching ingredients:', error);
     } catch (error) {
@@ -82,7 +82,7 @@ export default function RecipesPage() {
         .from('categories')
         .select('*')
         .order('name');
-      
+
       if (data) setCategories(data);
       if (error) console.error('Error fetching categories:', error);
     } catch (error) {
@@ -116,7 +116,7 @@ export default function RecipesPage() {
             price: parseFloat(newRecipe.price)
           })
           .eq('id', editingId);
-        
+
         if (error) throw error;
 
         // Update ingredients
@@ -165,7 +165,7 @@ export default function RecipesPage() {
             .insert(ingredientsToInsert);
         }
       }
-      
+
       setIsDialogOpen(false);
       resetForm();
       fetchRecipes();
@@ -184,7 +184,7 @@ export default function RecipesPage() {
         .from('recipe_ingredients')
         .select('*')
         .eq('recipe_id', recipe.id);
-      
+
       setNewRecipe({
         name: recipe.name,
         description: recipe.description || '',
@@ -224,7 +224,7 @@ export default function RecipesPage() {
     setEditingId(null);
   };
 
-  const filteredRecipes = recipes.filter(recipe => 
+  const filteredRecipes = recipes.filter(recipe =>
     recipe.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -239,8 +239,8 @@ export default function RecipesPage() {
           <div className="flex items-center justify-between">
             <div className="relative w-72">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-              <Input 
-                placeholder="Search recipes..." 
+              <Input
+                placeholder="Search recipes..."
                 className="pl-9"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -263,13 +263,13 @@ export default function RecipesPage() {
                     {editingId ? 'Update recipe details and ingredients.' : 'Create a new recipe with ingredients from your inventory.'}
                   </DialogDescription>
                 </DialogHeader>
-                
+
                 <Tabs defaultValue="details" className="w-full">
                   <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="details">Recipe Details</TabsTrigger>
                     <TabsTrigger value="ingredients">Ingredients</TabsTrigger>
                   </TabsList>
-                  
+
                   <TabsContent value="details" className="space-y-4">
                     <div className="grid gap-4 py-4">
                       <div className="grid grid-cols-4 items-center gap-4">
@@ -282,7 +282,7 @@ export default function RecipesPage() {
                           placeholder="Burger Combo"
                         />
                       </div>
-                      
+
                       <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="description" className="text-right">Description</Label>
                         <Input
@@ -293,7 +293,7 @@ export default function RecipesPage() {
                           placeholder="Classic Burger with Fries and Drink"
                         />
                       </div>
-                      
+
                       <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="category" className="text-right">Category</Label>
                         <Select
@@ -312,7 +312,7 @@ export default function RecipesPage() {
                           </SelectContent>
                         </Select>
                       </div>
-                      
+
                       <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="price" className="text-right">Price</Label>
                         <Input
@@ -327,7 +327,7 @@ export default function RecipesPage() {
                       </div>
                     </div>
                   </TabsContent>
-                  
+
                   <TabsContent value="ingredients" className="space-y-4">
                     <div className="flex justify-between items-center">
                       <h3 className="text-lg font-medium">Recipe Ingredients</h3>
@@ -336,7 +336,7 @@ export default function RecipesPage() {
                         Add Ingredient
                       </Button>
                     </div>
-                    
+
                     <div className="space-y-2 max-h-60 overflow-y-auto">
                       {newRecipe.ingredients.map((ingredient, index) => (
                         <div key={index} className="flex gap-2 items-center">
@@ -355,7 +355,7 @@ export default function RecipesPage() {
                               ))}
                             </SelectContent>
                           </Select>
-                          
+
                           <Input
                             type="number"
                             step="0.1"
@@ -364,7 +364,7 @@ export default function RecipesPage() {
                             placeholder="Qty"
                             className="w-20"
                           />
-                          
+
                           <Select
                             value={ingredient.unit}
                             onValueChange={(value) => updateIngredient(index, 'unit', value)}
@@ -380,7 +380,7 @@ export default function RecipesPage() {
                               <SelectItem value="ml">ml</SelectItem>
                             </SelectContent>
                           </Select>
-                          
+
                           <Button
                             variant="outline"
                             size="icon"
@@ -390,7 +390,7 @@ export default function RecipesPage() {
                           </Button>
                         </div>
                       ))}
-                      
+
                       {newRecipe.ingredients.length === 0 && (
                         <p className="text-center text-zinc-500 py-4">
                           No ingredients added yet. Click "Add Ingredient" to start.
@@ -399,7 +399,7 @@ export default function RecipesPage() {
                     </div>
                   </TabsContent>
                 </Tabs>
-                
+
                 <DialogFooter>
                   <Button type="submit" onClick={handleSaveRecipe} disabled={isLoading}>
                     {isLoading ? 'Saving...' : (editingId ? 'Update Recipe' : 'Create Recipe')}
@@ -413,7 +413,7 @@ export default function RecipesPage() {
           <div className="rounded-md border border-zinc-200">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-200 bg-zinc-50/50 text-left text-zinc-500">
+                <tr className="border-b border-blue-50 bg-blue-50/20 text-left text-blue-600">
                   <th className="p-4 font-medium">Recipe Name</th>
                   <th className="p-4 font-medium">Category</th>
                   <th className="p-4 font-medium">Price</th>
@@ -454,8 +454,8 @@ export default function RecipesPage() {
                       </td>
                       <td className="p-4 text-right">
                         <div className="flex justify-end gap-2">
-                          <Button 
-                            variant="ghost" 
+                          <Button
+                            variant="ghost"
                             size="icon"
                             onClick={() => handleEditClick(recipe)}
                           >

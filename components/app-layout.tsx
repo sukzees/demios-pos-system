@@ -60,18 +60,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     };
   }, [isMounted, licenseInfo?.key, syncLicenseNow]);
 
+  useEffect(() => {
+    if (currentLanguage === 'lo') {
+      document.body.style.setProperty('--font-sans', 'var(--font-lao)');
+    } else if (currentLanguage === 'th') {
+      document.body.style.setProperty('--font-sans', 'var(--font-thai)');
+    } else {
+      document.body.style.removeProperty('--font-sans');
+    }
+  }, [currentLanguage]);
+
   // Don't render anything until mounted to prevent hydration mismatch
   if (!isMounted) return null;
 
-  const getStyle = () => {
-    if (currentLanguage === 'lo') return { '--font-sans': 'var(--font-lao)' } as React.CSSProperties;
-    if (currentLanguage === 'th') return { '--font-sans': 'var(--font-thai)' } as React.CSSProperties;
-    return {};
-  };
-
   if (pathname === '/login') {
     return (
-      <div style={getStyle()} className="min-h-screen bg-zinc-100 font-sans">
+      <div className="min-h-screen bg-zinc-100 font-sans">
         {children}
       </div>
     );
@@ -81,7 +85,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   return (
-    <div style={getStyle()} className="flex h-screen w-full overflow-hidden bg-white font-sans">
+    <div className="flex h-screen w-full overflow-hidden bg-white font-sans">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar />
