@@ -1,0 +1,43 @@
+appId: com.yourcompany.pos
+productName: POS System
+copyright: Copyright © 2024
+directories:
+  output: dist
+  buildResources: public
+files:
+  - electron/**/*
+  - package.json
+  - "!node_modules/**/*"
+  - "!.next/**/*"
+  - "!dist/**/*"
+  - "!.git/**/*"
+  - "!out/**/*"
+extraResources:
+  - from: .next/standalone
+    to: app
+    filter:
+      - "**/*"
+  - from: .next/static
+    to: app/.next/static
+    filter:
+      - "**/*"
+  - from: public
+    to: app/public
+    filter:
+      - "**/*"
+asarUnpack:
+  - "**/*.node"
+npmRebuild: false
+nodeGypRebuild: false
+buildDependenciesFromSource: false
+asar: true
+compression: normal
+win:
+  target:
+    - target: dir
+      arch:
+        - x64
+  icon: public/icons/icon.ico
+  artifactName: ${productName}-${version}.${ext}
+  sign: null
+  signingHashAlgorithms: []

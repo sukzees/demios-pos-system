@@ -1,0 +1,2764 @@
+'use client';
+
+import { ChangeEvent, useState, useEffect } from 'react';
+import Image from 'next/image';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+const TRANSLATIONS = {
+  en: {
+    settings: 'Settings',
+    generalSetting: 'General Setting',
+    unitConfig: 'Config Unit',
+    bankConfig: 'Bank Config',
+    configPrinting: 'Config Printing',
+    receiptCustomization: 'Receipt Customization',
+    stationMapping: 'Station Mapping',
+    licenseKey: 'License Key',
+    generalSettings: 'General Settings',
+    storeName: 'Store Name',
+    taxRate: 'Default Tax Rate (%)',
+    timezone: 'Timezone',
+    language: 'Language',
+    currencySettings: 'Currency Settings',
+    defaultCurrency: 'Default Currency',
+    numberFormat: 'Number Format Pattern',
+    currencyRate: 'Currency Rate (relative to USD)',
+    symbolPosition: 'Symbol Position',
+    left: 'Left',
+    right: 'Right',
+    currentRate: 'Current Exchange Rate',
+    updateRate: 'Update Rate',
+    setRate: 'Set Rate',
+    thbRateLabel: 'Thai Baht (THB) Rate per 1 THB (relative to USD or Base)',
+    thbRatePlaceholder: 'e.g. 0.027 or 1/36.5',
+    saveGeneralSettings: 'Save General Settings',
+    unitSettings: 'Unit Settings',
+    unitName: 'Unit Name',
+    unitValue: 'Unit Value',
+    addUnit: 'Add Unit',
+    updateUnit: 'Update Unit',
+    saveUnitSettings: 'Save Unit Settings',
+    unitFields: 'Please fill in unit name and value',
+    bankSettings: 'Bank Settings',
+    bankName: 'Bank Name',
+    accountName: 'Account Name',
+    accountNumber: 'Account Number',
+    enabled: 'Enabled',
+    qrCode: 'QR Code',
+    uploadQrCode: 'Upload QR Code',
+    removeQrCode: 'Remove QR Code',
+    addBank: 'Add Bank',
+    updateBank: 'Update Bank',
+    actions: 'Actions',
+    saveBankSettings: 'Save Bank Settings',
+    printingSettings: 'Printing Settings',
+    autoPrint: 'Auto print receipt on checkout',
+    silentPrint: 'Silent print (bypass print dialog)',
+    printerConfiguration: 'Printer Configuration',
+    detectedLocalPrinters: 'Detected Local Printers',
+    selectPrinterToAdd: 'Select a printer to add:',
+    manualPrinterSetup: 'Manual Printer Setup',
+    printerName: 'Printer Name (e.g., Kitchen Printer)',
+    ipAddress: 'IP Address / System Name',
+    location: 'Location (e.g., Back Kitchen)',
+    cancel: 'Cancel',
+    updatePrinter: 'Update Printer',
+    addManualPrinter: 'Add Manual Printer',
+    configuredPrinters: 'Configured Printers',
+    default: 'Default',
+    setDefault: 'Set Default',
+    savePrinterSettings: 'Save Printer Settings',
+    receiptSettings: 'Receipt Settings',
+    headerText: 'Header Text',
+    footerText: 'Footer Text',
+    storeAddress: 'Store Address',
+    phoneNumber: 'Phone Number',
+    showBankOnReceipt: 'Show bank details on receipt',
+    receiptSize: 'Receipt Size',
+    kitchenBillAndVoidBill: 'Kitchen Bill & Void Bill',
+    kitchenBillSettings: 'Kitchen Bill Settings',
+    voidBillSettings: 'Void Bill Settings',
+    kitchenBillSize: 'Kitchen Bill Paper Size',
+    voidBillSize: 'Void Bill Paper Size',
+    voidBill: 'Void Bill',
+    voidBillDescription: 'Create a void bill when items are canceled/deleted',
+    autoPrintVoid: 'Auto-print void bill on deletion',
+    stationMappingSettings: 'Station Mapping Settings',
+    mappingText: 'Map categories to specific printers for order tickets.',
+    category: 'Category',
+    stationName: 'Station Name',
+    printer: 'Printer',
+    specificItem: 'Specific Item (Opt)',
+    allItems: 'All Items (*)',
+    addMapping: 'Add Mapping',
+    saveStationMapping: 'Save Station Mapping',
+    licenseTitle: 'License Key Activation',
+    licenseStatus: 'License Status',
+    activeTitle: 'ACTIVE',
+    daysLeft: 'Days Remaining',
+    expires: 'Expires',
+    activeKey: 'Active Key',
+    lastVerified: 'Last Verified',
+    enterLicense: 'Enter License Key',
+    activating: 'Activating...',
+    activate: 'Activate License',
+    returnLicense: 'Return License',
+    refreshActivation: 'Refresh Activation Status',
+    checkActivation: 'Check Activation Status',
+    activeMachineId: 'Machine ID',
+    syncSuccess: 'Settings saved!',
+    fillAllFields: 'Please fill in all fields',
+    bankFields: 'Please fill in all bank fields',
+    printerFields: 'Please fill in printer name and IP address',
+    oneDefaultPrinter: 'Please set one default printer',
+    selectSystemPrinter: 'Please select a system printer first',
+    confirmDeactivate: 'Are you sure you want to deactivate this machine? This will "return" the activation slot to the server.',
+    rateMin: 'Exchange rate must be greater than 0',
+    rateUpdated: 'Exchange rate updated',
+    licenseActivated: 'License Activated Successfully!',
+    licenseError: 'Failed to activate license',
+    noKey: 'Please provide a license key.',
+    receiptSettingsSaved: 'Receipt settings saved!',
+    generalSettingsSaved: 'General settings saved!',
+    stationMappingSaved: 'Station mapping saved!',
+    deactivateSuccess: 'Deactivated this machine successfully.',
+    returnSuccess: 'License Returned Successfully.',
+    returnError: 'Failed to return license.',
+    currencyInfoTitle: 'Currency Information',
+    quickRatePresets: 'Quick Rate Presets',
+    examples: 'Examples',
+    currencySymbol: 'Currency Symbol',
+    noItemsFound: 'No items found',
+    add: 'Add',
+    edit: 'Edit',
+    save: 'Save',
+    itemName: 'Item Name',
+    stock: 'Stock',
+    price: 'Price',
+    total: 'Total',
+    totalSales: 'Total Sales',
+    items: 'Items',
+    systemUpdate: 'System Update',
+    currentVersion: 'Current Version',
+    latestVersion: 'Latest Version',
+    checkForUpdates: 'Check for Updates',
+    checking: 'Checking...',
+    updateNow: 'Update Now',
+    updating: 'Updating...',
+    updateAvailable: 'New update available! Click "Update Now" to install.',
+    upToDate: 'You are running the latest version.',
+    updateFailed: 'Failed to check for updates',
+    updateSuccess: 'Update completed! The application will restart now.',
+    updateConfirm: 'This will update the application and restart it. Continue?',
+    updateDescription: 'Check for and install system updates. Updates include bug fixes, new features, and performance improvements.',
+  },
+  lo: {
+    settings: 'ການຕັ້ງຄ່າ',
+    generalSetting: 'ຕັ້ງຄ່າທົ່ວໄປ',
+    bankConfig: 'ຕັ້ງຄ່າທະນາຄານ',
+    configPrinting: 'ຕັ້ງຄ່າການພິມ',
+    receiptCustomization: 'ປັບແຕ່ງໃບບິນ',
+    stationMapping: 'ຈັບຄູ່ສະຖານີ',
+    licenseKey: 'ລະຫັດລິຂະສິດ',
+    generalSettings: 'ການຕັ້ງຄ່າທົ່ວໄປ',
+    storeName: 'ຊື່ຮ້ານ',
+    taxRate: 'ອັດຕາພາສີ (%)',
+    timezone: 'ເຂດເວລາ',
+    language: 'ພາສາ',
+    currencySettings: 'ການຕັ້ງຄ່າສະກຸນເງິນ',
+    defaultCurrency: 'ສະກຸນເງິນຫຼັກ',
+    numberFormat: 'ຮູບແບບຕົວເລກ',
+    currencyRate: 'ອັດຕາແລກປ່ຽນ (ທຽບກັບ USD)',
+    symbolPosition: 'ຕຳແໜ່ງສັນຍະລັກ',
+    left: 'ຊ້າຍ',
+    right: 'ຂວາ',
+    currentRate: 'ອັດຕາແລກປ່ຽນປັດຈຸບັນ',
+    updateRate: 'ອັບເດດອັດຕາ',
+    setRate: 'ຕັ້ງອັດຕາ',
+    thbRateLabel: 'ອັດຕາເງິນບາດ (THB) ຕໍ່ 1 THB',
+    thbRatePlaceholder: 'ຕົວຢ່າງ: 0.027 ຫຼື 1/36.5',
+    saveGeneralSettings: 'ບັນທຶກການຕັ້ງຄ່າທົ່ວໄປ',
+    bankSettings: 'ການຕັ້ງຄ່າທະນາຄານ',
+    bankName: 'ຊື່ທະນາຄານ',
+    accountName: 'ຊື່ບັນຊີ',
+    accountNumber: 'ເລກບັນຊີ',
+    enabled: 'ເປີດໃຊ້',
+    addBank: 'ເພີ່ມທະນາຄານ',
+    actions: 'ຈັດການ',
+    saveBankSettings: 'ບັນທຶກການຕັ້ງຄ່າທະນາຄານ',
+    printingSettings: 'ການຕັ້ງຄ່າການພິມ',
+    autoPrint: 'ພິມໃບບິນອັດຕະໂນມັດເມື່ອຊຳລະເງິນ',
+    silentPrint: 'ພິມແບບງຽບ (ຂ້າມໜ້າຕ່າງການພິມ)',
+    printerConfiguration: 'ການຕັ້ງຄ່າເຄື່ອງພິມ',
+    detectedLocalPrinters: 'ເຄື່ອງພິມທີ່ກວດພົບ',
+    selectPrinterToAdd: 'ເລືອກເຄື່ອງພິມເພື່ອເພີ່ມ:',
+    manualPrinterSetup: 'ຕັ້ງຄ່າເຄື່ອງພິມດ້ວຍຕົນເອງ',
+    printerName: 'ຊື່ເຄື່ອງພິມ (ຕົວຢ່າງ: ເຄື່ອງພິມເຮືອນຄົວ)',
+    ipAddress: 'ທີ່ຢູ່ IP / ຊື່ລະບົບ',
+    location: 'ສະຖານທີ່ (ຕົວຢ່າງ: ໃນເຮືອນຄົວ)',
+    cancel: 'ຍົກເລີກ',
+    updatePrinter: 'ອັບເດດເຄື່ອງພິມ',
+    addManualPrinter: 'ເພີ່ມເຄື່ອງພິມດ້ວຍຕົນເອງ',
+    configuredPrinters: 'ເຄື່ອງພິມທີ່ຕັ້ງຄ່າແລ້ວ',
+    default: 'ເລີ່ມຕົ້ນ',
+    setDefault: 'ຕັ້ງເປັນຄ່າເລີ່ມຕົ້ນ',
+    savePrinterSettings: 'ບັນທຶກການຕັ້ງຄ່າເຄື່ອງພິມ',
+    receiptSettings: 'ການຕັ້ງຄ່າໃບບິນ',
+    headerText: 'ຂໍ້ຄວາມສ່ວນຫົວ',
+    footerText: 'ຂໍ້ຄວາມສ່ວນທ້າຍ',
+    storeAddress: 'ທີ່ຢູ່ຮ້ານ',
+    phoneNumber: 'ເບີໂທລະສັບ',
+    showBankOnReceipt: 'ສະແດງລາຍລະອຽດທະນາຄານໃນໃບບິນ',
+    receiptSize: 'ຂະໜາດໃບບິນ',
+    stationMappingSettings: 'ການຕັ້ງຄ່າການຈັບຄູ່ສະຖານີ',
+    mappingText: 'ຈັບຄູ່ໝວດໝູ່ກັບເຄື່ອງພິມສະເພາະສຳລັບໃບສັ່ງອາຫານ.',
+    category: 'ໝວດໝູ່',
+    stationName: 'ຊື່ສະຖານີ',
+    printer: 'ເຄື່ອງພິມ',
+    specificItem: 'ລາຍການສະເພາະ (ເລືອກໄດ້)',
+    allItems: 'ທຸກລາຍການ (*)',
+    addMapping: 'ເພີ່ມການຈັບຄູ່',
+    saveStationMapping: 'ບັນທຶກການຈັບຄູ່ສະຖານີ',
+    licenseTitle: 'ການເປີດໃຊ້ລະຫັດລິຂະສິດ',
+    licenseStatus: 'ສະຖານະລິຂະສິດ',
+    activeTitle: 'ເປີດໃຊ້ແລ້ວ',
+    daysLeft: 'ຈຳນວນມື້ທີ່ເຫຼືອ',
+    expires: 'ໝົດອາຍຸ',
+    activeKey: 'ລະຫັດທີ່ໃຊ້ຢູ່',
+    lastVerified: 'ກວດສອບຄັ້ງລ່າສຸດ',
+    enterLicense: 'ປ້ອນລະຫັດລິຂະສິດ',
+    activating: 'ກຳລັງເປີດໃຊ້...',
+    activate: 'ເປີດໃຊ້ລິຂະສິດ',
+    returnLicense: 'ຄືນລິຂະສິດ',
+    refreshActivation: 'ໂຫຼດສະຖານະໃໝ່',
+    checkActivation: 'ກວດສອບສະຖານະ',
+    activeMachineId: 'ລະຫັດເຄື່ອງ (Machine ID)',
+    syncSuccess: 'ບັນທຶກການຕັ້ງຄ່າແລ້ວ!',
+    fillAllFields: 'ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບຖ້ວນ',
+    bankFields: 'ກະລຸນາປ້ອນຂໍ້ມູນທະນາຄານໃຫ້ຄົບຖ້ວນ',
+    printerFields: 'ກະລຸນາປ້ອນຊື່ເຄື່ອງພິມ ແລະ ທີ່ຢູ່ IP',
+    oneDefaultPrinter: 'ກະລຸນາຕັ້ງເຄື່ອງພິມເລີ່ມຕົ້ນຢ່າງໜ້ອຍໜຶ່ງເຄື່ອງ',
+    selectSystemPrinter: 'ກະລຸນາເລືອກເຄື່ອງພິມໃນລະບົບກ່ອນ',
+    confirmDeactivate: 'ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການປິດການໃຊ້ງານເຄື່ອງນີ້? ນີ້ຈະເປັນການ "ຄືນ" ສິດການໃຊ້ງານໃຫ້ກັບເຊີເວີ.',
+    rateMin: 'ອັດຕາແລກປ່ຽນຕ້ອງຫຼາຍກວ່າ 0',
+    rateUpdated: 'ອັບເດດອັດຕາແລກປ່ຽນແລ້ວ',
+    licenseActivated: 'ເປີດໃຊ້ລິຂະສິດສຳເລັດແລ້ວ!',
+    licenseError: 'ບໍ່ສາມາດເປີດໃຊ້ລິຂະສິດໄດ້',
+    noKey: 'ກະລຸນາປ້ອນລະຫັດລິຂະສິດ.',
+    receiptSettingsSaved: 'ບັນທຶກການຕັ້ງຄ່າໃບບິນແລ້ວ!',
+    generalSettingsSaved: 'ບັນທຶກການຕັ້ງຄ່າທົ່ວໄປແລ້ວ!',
+    stationMappingSaved: 'ບັນທຶກການຈັບຄູ່ສະຖານີແລ້ວ!',
+    deactivateSuccess: 'ປິດການໃຊ້ງານເຄື່ອງນີ້ສຳເລັດແລ້ວ.',
+    returnSuccess: 'ຄືນລິຂະສິດສຳເລັດແລ້ວ.',
+    returnError: 'ບໍ່ສາມາດຄືນລິຂະສິດໄດ້.',
+    currencyInfoTitle: 'ຂໍ້ມູນສະກຸນເງິນ',
+    quickRatePresets: 'ຕັ້ງຄ່າດ່ວນ',
+    examples: 'ຕົວຢ່າງ',
+    currencySymbol: 'ສັນຍະລັກສະກຸນເງິນ',
+    noItemsFound: 'ບໍ່ພົບລາຍການ',
+    add: 'ເພີ່ມ',
+    edit: 'ແກ້ໄຂ',
+    save: 'ບັນທຶກ',
+    itemName: 'ຊື່ສິນຄ້າ',
+    stock: 'ຄັງສິນຄ້າ',
+    price: 'ລາຄາ',
+    total: 'ລວມທັງໝົດ',
+    totalSales: 'ຍອດຂາຍລວມ',
+    items: 'ລາຍການສິນຄ້າ',
+    systemUpdate: 'ອັບເດດລະບົບ',
+    currentVersion: 'ເວີຊັນປັດຈຸບັນ',
+    latestVersion: 'ເວີຊັນລ່າສຸດ',
+    checkForUpdates: 'ກວດສອບອັບເດດ',
+    checking: 'ກຳລັງກວດສອບ...',
+    updateNow: 'ອັບເດດດຽວນີ້',
+    updating: 'ກຳລັງອັບເດດ...',
+    updateAvailable: 'ມີອັບເດດໃໝ່! ກົດ "ອັບເດດດຽວນີ້" ເພື່ອຕິດຕັ້ງ.',
+    upToDate: 'ທ່ານກຳລັງໃຊ້ເວີຊັນລ່າສຸດແລ້ວ.',
+    updateFailed: 'ບໍ່ສາມາດກວດສອບອັບເດດໄດ້',
+    updateSuccess: 'ອັບເດດສຳເລັດ! ແອັບພລິເຄຊັນຈະເລີ່ມໃໝ່ດຽວນີ້.',
+    updateConfirm: 'ນີ້ຈະອັບເດດແອັບພລິເຄຊັນ ແລະ ເລີ່ມໃໝ່. ສືບຕໍ່ບໍ?',
+    updateDescription: 'ກວດສອບ ແລະ ຕິດຕັ້ງອັບເດດລະບົບ. ອັບເດດປະກອບມີການແກ້ໄຂບັນຫາ, ຄຸນສົມບັດໃໝ່, ແລະ ການປັບປຸງປະສິດທິພາບ.',
+    kitchenBillAndVoidBill: 'ບິນຄົວ ແລະ ບິນຍະການ',
+    kitchenBillSettings: 'ການຕັ້ງຄ່າບິນຄົວ',
+    voidBillSettings: 'ການຕັ້ງຄ່າບິນຍະການ',
+    kitchenBillSize: 'ຂະໜາດກະດາດບິນຄົວ',
+    voidBillSize: 'ຂະໜາດກະດາດບິນຍະການ',
+    voidBill: 'ບິນຍະການ',
+    voidBillDescription: 'ສ້າງບິນຍະການເມື່ອລາຍການຖືກຍົກເລີກ/ລຶບ',
+    autoPrintVoid: 'ພິມບິນຍະການອັດຕະໂນມັດເມື່ອລຶບ',
+  },
+  th: {
+    settings: 'การตั้งค่า',
+    generalSetting: 'ตั้งค่าทั่วไป',
+    unitConfig: 'ตั้งค่าหน่วย',
+    bankConfig: 'ตั้งค่าธนาคาร',
+    configPrinting: 'ตั้งค่าการพิมพ์',
+    receiptCustomization: 'ปรับแต่งใบเสร็จ',
+    stationMapping: 'จับคู่สถานี',
+    licenseKey: 'รหัสลิขสิทธิ์',
+    generalSettings: 'การตั้งค่าทั่วไป',
+    storeName: 'ชื่อร้าน',
+    taxRate: 'อัตราภาษี (%)',
+    timezone: 'เขตเวลา',
+    language: 'ภาษา',
+    currencySettings: 'การตั้งค่าสกุลเงิน',
+    defaultCurrency: 'สกุลเงินหลัก',
+    numberFormat: 'รูปแบบตัวเลข',
+    currencyRate: 'อัตราแลกเปลี่ยน (เทียบกับ USD)',
+    symbolPosition: 'ตำแหน่งสัญลักษณ์',
+    left: 'ซ้าย',
+    right: 'ขวา',
+    currentRate: 'อัตราแลกเปลี่ยนปัจจุบัน',
+    updateRate: 'อัปเดตอัตรา',
+    setRate: 'ตั้งอัตรา',
+    thbRateLabel: 'อัตราเงินบาท (THB) ต่อ 1 THB',
+    thbRatePlaceholder: 'ตัวอย่าง: 0.027 หรือ 1/36.5',
+    saveGeneralSettings: 'บันทึกการตั้งค่าทั่วไป',
+    unitSettings: 'ตั้งค่าหน่วย',
+    unitName: 'ชื่อหน่วย',
+    unitValue: 'ค่า Unit',
+    addUnit: 'เพิ่มหน่วย',
+    updateUnit: 'อัพเดทหน่วย',
+    saveUnitSettings: 'บันทึกการตั้งค่าหน่วย',
+    unitFields: 'กรุณากรอกชื่อหน่วยและค่า Unit',
+    bankSettings: 'การตั้งค่าธนาคาร',
+    bankName: 'ชื่อธนาคาร',
+    accountName: 'ชื่อบัญชี',
+    accountNumber: 'เลขบัญชี',
+    enabled: 'เปิดใช้งาน',
+    qrCode: 'QR Code',
+    uploadQrCode: 'อัพโหลด QR Code',
+    removeQrCode: 'ลบ QR Code',
+    addBank: 'เพิ่มธนาคาร',
+    updateBank: 'อัพเดทธนาคาร',
+    actions: 'จัดการ',
+    saveBankSettings: 'บันทึกการตั้งค่าธนาคาร',
+    printingSettings: 'การตั้งค่าการพิมพ์',
+    autoPrint: 'พิมพ์ใบเสร็จอัตโนมัติเมื่อชำระเงิน',
+    silentPrint: 'พิมพ์แบบเงียบ (ข้ามหน้าต่างการพิมพ์)',
+    printerConfiguration: 'การตั้งค่าเครื่องพิมพ์',
+    detectedLocalPrinters: 'เครื่องพิมพ์ที่ตรวจพบ',
+    selectPrinterToAdd: 'เลือกเครื่องพิมพ์เพื่อเพิ่ม:',
+    manualPrinterSetup: 'ตั้งค่าเครื่องพิมพ์ด้วยตนเอง',
+    printerName: 'ชื่อเครื่องพิมพ์ (เช่น เครื่องพิมพ์ครัว)',
+    ipAddress: 'ที่อยู่ IP / ชื่อระบบ',
+    location: 'สถานที่ (เช่น ในครัว)',
+    cancel: 'ยกเลิก',
+    updatePrinter: 'อัปเดตเครื่องพิมพ์',
+    addManualPrinter: 'เพิ่มเครื่องพิมพ์ด้วยตนเอง',
+    configuredPrinters: 'เครื่องพิมพ์ที่ตั้งค่าแล้ว',
+    default: 'เริ่มต้น',
+    setDefault: 'ตั้งเป็นค่าเริ่มต้น',
+    savePrinterSettings: 'บันทึกการตั้งค่าเครื่องพิมพ์',
+    receiptSettings: 'การตั้งค่าใบเสร็จ',
+    headerText: 'ข้อความส่วนหัว',
+    footerText: 'ข้อความส่วนท้าย',
+    storeAddress: 'ที่อยู่ร้าน',
+    phoneNumber: 'เบอร์โทรศัพท์',
+    showBankOnReceipt: 'แสดงรายละเอียดธนาคารในใบเสร็จ',
+    receiptSize: 'ขนาดใบเสร็จ',
+    kitchenBillAndVoidBill: 'บิลครัว และ บิลยกเลิก',
+    kitchenBillSettings: 'การตั้งค่าบิลครัว',
+    voidBillSettings: 'การตั้งค่าบิลยกเลิก',
+    kitchenBillSize: 'ขนาดกระดาษบิลครัว',
+    voidBillSize: 'ขนาดกระดาษบิลยกเลิก',
+    voidBill: 'ใบเสร็จยกเลิก',
+    voidBillDescription: 'สร้างใบเสร็จยกเลิกเมื่อรายการถูกยกเลิก/ลบ',
+    autoPrintVoid: 'พิมพ์ใบเสร็จยกเลิกอัตโนมัติเมื่อลบ',
+    stationMappingSettings: 'การตั้งค่าการจับคู่สถานี',
+    mappingText: 'จับคู่หมวดหมู่กับเครื่องพิมพ์เฉพาะสำหรับใบสั่งอาหาร',
+    category: 'หมวดหมู่',
+    stationName: 'ชื่อสถานี',
+    printer: 'เครื่องพิมพ์',
+    specificItem: 'รายการเฉพาะ (เลือกได้)',
+    allItems: 'ทุกรายการ (*)',
+    addMapping: 'เพิ่มการจับคู่',
+    saveStationMapping: 'บันทึกการจับคู่สถานี',
+    licenseTitle: 'การเปิดใช้งานรหัสลิขสิทธิ์',
+    licenseStatus: 'สถานะลิขสิทธิ์',
+    activeTitle: 'เปิดใช้งานแล้ว',
+    daysLeft: 'จำนวนวันที่เหลือ',
+    expires: 'หมดอายุ',
+    activeKey: 'รหัสที่ใช้อยู่',
+    lastVerified: 'ตรวจสอบล่าสุด',
+    enterLicense: 'กรอกรหัสลิขสิทธิ์',
+    activating: 'กำลังเปิดใช้งาน...',
+    activate: 'เปิดใช้งานลิขสิทธิ์',
+    returnLicense: 'คืนลิขสิทธิ์',
+    refreshActivation: 'รีเฟรชสถานะ',
+    checkActivation: 'ตรวจสอบสถานะ',
+    activeMachineId: 'รหัสเครื่อง (Machine ID)',
+    syncSuccess: 'บันทึกการตั้งค่าแล้ว!',
+    fillAllFields: 'กรุณากรอกข้อมูลให้ครบถ้วน',
+    bankFields: 'กรุณากรอกข้อมูลธนาคารให้ครบถ้วน',
+    printerFields: 'กรุณากรอกชื่อเครื่องพิมพ์และที่อยู่ IP',
+    oneDefaultPrinter: 'กรุณาตั้งเครื่องพิมพ์เริ่มต้นอย่างน้อยหนึ่งเครื่อง',
+    selectSystemPrinter: 'กรุณาเลือกเครื่องพิมพ์ในระบบก่อน',
+    confirmDeactivate: 'คุณแน่ใจหรือไม่ว่าต้องการปิดการใช้งานเครื่องนี้? นี่จะเป็นการ "คืน" สิทธิ์การใช้งานให้กับเซิร์ฟเวอร์',
+    rateMin: 'อัตราแลกเปลี่ยนต้องมากกว่า 0',
+    rateUpdated: 'อัปเดตอัตราแลกเปลี่ยนแล้ว',
+    licenseActivated: 'เปิดใช้งานลิขสิทธิ์สำเร็จแล้ว!',
+    licenseError: 'ไม่สามารถเปิดใช้งานลิขสิทธิ์ได้',
+    noKey: 'กรุณากรอกรหัสลิขสิทธิ์',
+    receiptSettingsSaved: 'บันทึกการตั้งค่าใบเสร็จแล้ว!',
+    generalSettingsSaved: 'บันทึกการตั้งค่าทั่วไปแล้ว!',
+    stationMappingSaved: 'บันทึกการจับคู่สถานีแล้ว!',
+    deactivateSuccess: 'ปิดการใช้งานเครื่องนี้สำเร็จแล้ว',
+    returnSuccess: 'คืนลิขสิทธิ์สำเร็จแล้ว',
+    returnError: 'ไม่สามารถคืนลิขสิทธิ์ได้',
+    currencyInfoTitle: 'ข้อมูลสกุลเงิน',
+    quickRatePresets: 'ตั้งค่าด่วน',
+    examples: 'ตัวอย่าง',
+    currencySymbol: 'สัญลักษณ์สกุลเงิน',
+    noItemsFound: 'ไม่พบรายการ',
+    add: 'เพิ่ม',
+    edit: 'แก้ไข',
+    save: 'บันทึก',
+    itemName: 'ชื่อสินค้า',
+    stock: 'สต็อก',
+    price: 'ราคา',
+    total: 'ยอดรวม',
+    totalSales: 'ยอดขายรวม',
+    items: 'รายการสินค้า',
+    systemUpdate: 'อัปเดตระบบ',
+    currentVersion: 'เวอร์ชันปัจจุบัน',
+    latestVersion: 'เวอร์ชันล่าสุด',
+    checkForUpdates: 'ตรวจสอบอัปเดต',
+    checking: 'กำลังตรวจสอบ...',
+    updateNow: 'อัปเดตเดี๋ยวนี้',
+    updating: 'กำลังอัปเดต...',
+    updateAvailable: 'มีอัปเดตใหม่! คลิก "อัปเดตเดี๋ยวนี้" เพื่อติดตั้ง',
+    upToDate: 'คุณกำลังใช้เวอร์ชันล่าสุดแล้ว',
+    updateFailed: 'ไม่สามารถตรวจสอบอัปเดตได้',
+    updateSuccess: 'อัปเดตสำเร็จ! แอปพลิเคชันจะรีสตาร์ทเดี๋ยวนี้',
+    updateConfirm: 'นี่จะอัปเดตแอปพลิเคชันและรีสตาร์ท ดำเนินการต่อหรือไม่?',
+    updateDescription: 'ตรวจสอบและติดตั้งอัปเดตระบบ อัปเดตประกอบด้วยการแก้ไขบั๊ก ฟีเจอร์ใหม่ และการปรับปรุงประสิทธิภาพ',
+  }
+};
+
+import { Save, Trash2, Plus, Printer, RefreshCw, Eye, Edit, Upload, X } from 'lucide-react';
+import { usePosStore } from '@/lib/store';
+import { supabase } from '@/lib/supabase';
+import { UpdateTab } from '@/components/settings/update-tab';
+
+
+export default function SettingsPage() {
+  const [serverLicenseKey, setServerLicenseKey] = useState('');
+  const {
+    receiptSettings,
+    updateReceiptSettings,
+    currencySettings,
+    updateCurrencySettings,
+    generalSettings,
+    updateGeneralSettings,
+    bankConfigs,
+    updateBankConfigs,
+    unitConfigs,
+    updateUnitConfigs,
+    printerConfigs,
+    updatePrinterConfigs,
+    categories,
+    items,
+    fetchItemsAndCategories,
+    stationMappings,
+    updateStationMappings,
+    isSupabaseConfigured,
+    licenseInfo,
+    updateLicenseInfo,
+    autoPrint,
+    updateAutoPrint,
+    silentPrint,
+    updateSilentPrint,
+    licenseSyncAt,
+    licenseApiData,
+    syncLicenseDaily,
+    syncLicenseNow
+  } = usePosStore();
+
+  const currentLanguage = (generalSettings?.language || 'en') as 'en' | 'lo' | 'th';
+  const t = TRANSLATIONS[currentLanguage] as Record<string, string>;
+  
+  // Fetch recipes for station mapping
+  const [recipes, setRecipes] = useState<any[]>([]);
+  
+  useEffect(() => {
+    const fetchRecipes = async () => {
+      if (!isSupabaseConfigured) return;
+      try {
+        const { data, error } = await supabase
+          .from('recipes')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (data) setRecipes(data);
+        if (error) console.error('Error fetching recipes:', error);
+      } catch (error) {
+        console.error('Error fetching recipes:', error);
+      }
+    };
+    fetchRecipes();
+  }, [isSupabaseConfigured]);
+  
+  // Combine items and recipes like in Items & Categories page
+  const menuItems = items.filter(item => item.is_recipe !== false);
+  const recipeItems = recipes.map(recipe => ({ ...recipe, is_recipe: true }));
+  const displayItems = [...menuItems, ...recipeItems];
+  
+  const [headerText, setHeaderText] = useState(receiptSettings.headerText);
+  const [footerText, setFooterText] = useState(receiptSettings.footerText);
+  const [storeAddress, setStoreAddress] = useState(receiptSettings.storeAddress);
+  const [phoneNumber, setPhoneNumber] = useState(receiptSettings.phoneNumber);
+  const [showBankDetail, setShowBankDetail] = useState(receiptSettings.showBankDetail ?? true);
+  const [showTableNumber, setShowTableNumber] = useState(receiptSettings.showTableNumber ?? true);
+  const [receiptSize, setReceiptSize] = useState(receiptSettings.receiptSize || '80mm');
+  const [enableVoidBill, setEnableVoidBill] = useState(receiptSettings.enableVoidBill ?? false);
+  const [autoPrintVoidBill, setAutoPrintVoidBill] = useState(receiptSettings.autoPrintVoidBill ?? false);
+  const [localReceiptPrinter, setLocalReceiptPrinter] = useState(receiptSettings.receiptPrinter || '');
+  const [localVoidBillPrinter, setLocalVoidBillPrinter] = useState(receiptSettings.voidBillPrinter || '');
+  const [kitchenBillSize, setKitchenBillSize] = useState(receiptSettings.kitchenBillSize || '80mm');
+  const [voidBillSize, setVoidBillSize] = useState(receiptSettings.voidBillSize || '80mm');
+
+  // General settings
+  const [storeName, setStoreName] = useState(generalSettings.storeName);
+  const [taxRate, setTaxRate] = useState(generalSettings.taxRate);
+  const [timezone, setTimezone] = useState(generalSettings.timezone);
+  const [language, setLanguage] = useState<'en' | 'lo' | 'th'>(generalSettings.language || 'en');
+
+  // Currency settings
+  const [defaultCurrency, setDefaultCurrency] = useState(currencySettings.defaultCurrency);
+  const [currencySymbol, setCurrencySymbol] = useState(currencySettings.currencySymbol);
+  const [currencyFormat, setCurrencyFormat] = useState(currencySettings.currencyFormat);
+  const [currencyRate, setCurrencyRate] = useState(currencySettings.currencyRate);
+  const [currencySymbolPosition, setCurrencySymbolPosition] = useState<'left' | 'right'>(currencySettings.currencySymbolPosition || 'left');
+  const [thbRate, setThbRate] = useState(currencySettings.thbRate || 36.5);
+  const [availableCurrencies] = useState([
+    { code: 'USD', symbol: '$', format: '###,###.00', rate: 1.0, name: 'US Dollar' },
+    { code: 'LAK', symbol: '\u20ad', format: '###,###', rate: 21000.0, name: 'Lao Kip' },
+    { code: 'THB', symbol: '\u0e3f', format: '###,###.00', rate: 36.5, name: 'Thai Baht' },
+  ]);
+  const [localBanks, setLocalBanks] = useState(bankConfigs);
+  const [localUnits, setLocalUnits] = useState(unitConfigs || []);
+  const [localPrinters, setLocalPrinters] = useState(printerConfigs);
+  const [newBank, setNewBank] = useState({
+    bankName: '',
+    accountName: '',
+    accountNumber: '',
+    enabledForTransfer: true,
+    qrCodeImage: ''
+  });
+  const [editingBankId, setEditingBankId] = useState<string | null>(null);
+  const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
+  const [newUnit, setNewUnit] = useState({
+    name: '',
+    value: ''
+  });
+  const [newPrinter, setNewPrinter] = useState({
+    name: '',
+    ipAddress: '',
+    location: '',
+    enabled: true,
+    autoPrint: true
+  });
+  const [editingPrinterId, setEditingPrinterId] = useState<string | null>(null);
+  const [localStationMappings, setLocalStationMappings] = useState(stationMappings);
+  const [systemPrinters, setSystemPrinters] = useState<string[]>([]);
+  const [selectedSystemPrinter, setSelectedSystemPrinter] = useState<string>('');
+  const [localAutoPrint, setLocalAutoPrint] = useState(autoPrint ?? false);
+  const [localSilentPrint, setLocalSilentPrint] = useState(silentPrint ?? false);
+
+  // License
+  const [licenseKey, setLicenseKey] = useState(serverLicenseKey || licenseInfo?.key || '');
+  const [isActivating, setIsActivating] = useState(false);
+  const [activationMessage, setActivationMessage] = useState('');
+  const [daysRemaining, setDaysRemaining] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadServerLicenseKey = async () => {
+      try {
+        const response = await fetch('/api/license/current', { cache: 'no-store' });
+        const data = await response.json().catch(() => ({}));
+        const keyFromServer = String(data?.license_key || '').trim();
+        if (!active || !keyFromServer) return;
+
+        setServerLicenseKey(keyFromServer);
+        setLicenseKey(keyFromServer);
+
+        if (licenseInfo?.key !== keyFromServer) {
+          updateLicenseInfo({
+            key: keyFromServer,
+            machineId: licenseInfo?.machineId || `mach-${Math.random().toString(36).substring(2, 10)}`,
+            active: licenseInfo?.active || false,
+            expiresAt: licenseInfo?.expiresAt || '',
+            renewDate: licenseInfo?.renewDate || '',
+            activationData: licenseInfo?.activationData || null
+          });
+        }
+      } catch {
+        // Ignore bootstrap errors and keep current local state.
+      }
+    };
+
+    loadServerLicenseKey();
+
+    return () => {
+      active = false;
+    };
+  }, [licenseInfo?.active, licenseInfo?.activationData, licenseInfo?.expiresAt, licenseInfo?.key, licenseInfo?.machineId, licenseInfo?.renewDate, updateLicenseInfo]);
+
+  useEffect(() => {
+    setHeaderText(receiptSettings.headerText);
+    setFooterText(receiptSettings.footerText);
+    setStoreAddress(receiptSettings.storeAddress);
+    setPhoneNumber(receiptSettings.phoneNumber);
+    setShowBankDetail(receiptSettings.showBankDetail ?? true);
+    setShowTableNumber(receiptSettings.showTableNumber ?? true);
+    setReceiptSize(receiptSettings.receiptSize || '80mm');
+    setEnableVoidBill(receiptSettings.enableVoidBill ?? false);
+    setAutoPrintVoidBill(receiptSettings.autoPrintVoidBill ?? false);
+    setLocalReceiptPrinter(receiptSettings.receiptPrinter || '');
+    setLocalVoidBillPrinter(receiptSettings.voidBillPrinter || '');
+    setKitchenBillSize(receiptSettings.kitchenBillSize || '80mm');
+    setVoidBillSize(receiptSettings.voidBillSize || '80mm');
+    setStoreName(generalSettings.storeName);
+    setTaxRate(generalSettings.taxRate);
+    setTimezone(generalSettings.timezone);
+    setLanguage(generalSettings.language || 'en');
+    setDefaultCurrency(currencySettings.defaultCurrency);
+    setCurrencySymbol(currencySettings.currencySymbol);
+    setCurrencyFormat(currencySettings.currencyFormat);
+    setCurrencyRate(currencySettings.currencyRate);
+    setCurrencySymbolPosition(currencySettings.currencySymbolPosition || 'left');
+    setThbRate(currencySettings.thbRate || 36.5);
+    setLocalBanks(bankConfigs);
+    setLocalUnits(unitConfigs || []);
+    setLocalPrinters(printerConfigs);
+    setLocalStationMappings(stationMappings);
+
+    if (licenseInfo) {
+      setLicenseKey(serverLicenseKey || licenseInfo.key);
+      // Calculate days remaining from expires_at
+      if (licenseInfo.expiresAt) {
+        const expiryDate = parseLicenseDate(licenseInfo.expiresAt);
+        if (!expiryDate) {
+          setDaysRemaining(0);
+          return;
+        }
+        expiryDate.setHours(23, 59, 59, 999);
+        const now = new Date();
+        const diffTime = expiryDate.getTime() - now.getTime();
+        const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        setDaysRemaining(Math.max(0, days));
+      }
+    }
+    setLocalAutoPrint(autoPrint ?? false);
+    setLocalSilentPrint(silentPrint ?? false);
+  }, [receiptSettings, currencySettings, generalSettings, bankConfigs, unitConfigs, printerConfigs, stationMappings, licenseInfo, autoPrint, silentPrint, serverLicenseKey]);
+
+  useEffect(() => {
+    if (isSupabaseConfigured) {
+      fetchItemsAndCategories();
+    }
+  }, [isSupabaseConfigured, fetchItemsAndCategories]);
+
+  useEffect(() => {
+    const fetchPrinters = async () => {
+      try {
+        const response = await fetch('/api/printers/list');
+        const data = await response.json();
+        if (data.printers) {
+          setSystemPrinters(data.printers);
+        }
+      } catch (err) {
+        console.error('Failed to load system printers');
+      }
+    };
+    fetchPrinters();
+  }, []);
+
+  const handleRefreshPrinters = async () => {
+    try {
+      const response = await fetch('/api/printers/list');
+      const data = await response.json();
+      if (data.printers) {
+        setSystemPrinters(data.printers);
+        alert('Printers refreshed successfully!');
+      }
+    } catch (err) {
+      console.error('Failed to refresh printers');
+      alert('Failed to refresh printers');
+    }
+  };
+
+  // Remove auto-sync logic to allow manual mapping control as requested.
+  // We'll keep stationMappings synced with the store on mount via the main useEffect.
+
+  const normalizeExpiresAt = (payload: Record<string, any>) =>
+    payload?.expires_at ??
+    payload?.expiresAt ??
+    payload?.expiry_date ??
+    payload?.expiryDate ??
+    payload?.expiration_date ??
+    payload?.expirationDate ??
+    '';
+
+  const parseLicenseDate = (value: string) => {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    const iso = raw.includes('T') ? raw : raw.replace(' ', 'T');
+    const isoDate = new Date(iso);
+    if (!Number.isNaN(isoDate.getTime())) return isoDate;
+    const match = raw.match(/^(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (!match) return null;
+    const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = match;
+    const parsed = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const getLicenseEndpoints = () => {
+    return {
+      verifyUrl: '/api/verify',
+      activateUrl: '/api/activate',
+      returnUrl: '/api/activate/return'
+    };
+  };
+
+  const getLicenseStatus = (data: any) => {
+    const payload = (data as any)?.data ?? (data as any)?.result ?? data;
+    const activationData = payload?.activation_data ?? payload?.activationData ?? payload;
+    return String(
+      payload?.status ??
+      payload?.license_status ??
+      activationData?.status ??
+      activationData?.license_status ??
+      ''
+    ).trim().toLowerCase();
+  };
+
+  const updateLicenseState = (key: string, machineId: string, data: any) => {
+    const payload = (data as any)?.data ?? (data as any)?.result ?? data;
+    const expiresAt = normalizeExpiresAt(payload as Record<string, any>);
+    const status = getLicenseStatus(data);
+    const isStatusInactive = ['inactive', 'expired', 'revoked', 'suspended', 'blocked', 'disabled'].includes(status);
+
+    if (expiresAt) {
+      updateLicenseInfo({
+        key,
+        machineId,
+        active: (data.success === true || data.valid === true) && !isStatusInactive,
+        expiresAt,
+        renewDate: (payload as any)?.renew_date || (payload as any)?.renewDate || new Date().toISOString().replace('T', ' ').split('.')[0],
+        activationData: (payload as any)?.activation_data || (payload as any)?.activationData || payload
+      });
+
+      const expiryDate = parseLicenseDate(expiresAt);
+      if (expiryDate) {
+        expiryDate.setHours(23, 59, 59, 999);
+        const diffTime = expiryDate.getTime() - Date.now();
+        setDaysRemaining(Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24))));
+      } else {
+        setDaysRemaining(0);
+      }
+      return true;
+    }
+    return false;
+  };
+
+  const handleActivateLicense = async () => {
+    if (!(serverLicenseKey || licenseKey.trim())) {
+      setActivationMessage(t.noKey);
+      return;
+    }
+
+    setIsActivating(true);
+    setActivationMessage('');
+
+    try {
+      const normalizedKey = serverLicenseKey || licenseKey.trim();
+      const machineId = licenseInfo?.machineId || `mach-${Math.random().toString(36).substring(2, 10)}`;
+      const { activateUrl } = getLicenseEndpoints();
+
+      const response = await fetch(activateUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: normalizedKey,
+          machine_id: machineId,
+          force_refresh: true
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (data.success && updateLicenseState(normalizedKey, machineId, data)) {
+        setActivationMessage(t.licenseActivated);
+        return;
+      }
+
+      const activationError = data?.error || data?.message || t.licenseError;
+      if (String(activationError).toLowerCase().includes('not found')) {
+        setActivationMessage('License key not found');
+      } else {
+        setActivationMessage(activationError);
+      }
+    } catch (error) {
+      console.error('License activation error:', error);
+      setActivationMessage('An error occurred during activation.');
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
+  const handleSyncLicense = async () => {
+    setActivationMessage('');
+    setIsActivating(true);
+
+    try {
+      const keyToSync = serverLicenseKey || licenseKey.trim() || licenseInfo?.key || '';
+      const machineId = licenseInfo?.machineId || '';
+
+      if (!keyToSync) {
+        setActivationMessage(t.noKey);
+        return;
+      }
+
+      const syncResponse = await fetch('/api/license/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: keyToSync
+        })
+      });
+      const syncData = await syncResponse.json();
+
+      if (!syncData.success) {
+        setActivationMessage(syncData.error || 'Failed to sync license from verify-license API');
+        return;
+      }
+
+      const verifyResponse = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: keyToSync,
+          machine_id: machineId
+        })
+      });
+      const verifyData = await verifyResponse.json();
+
+      if (verifyData.valid && updateLicenseState(keyToSync, machineId, verifyData)) {
+        setActivationMessage('Sync complete. License active (from local database)');
+        return;
+      }
+
+      setActivationMessage(verifyData.error || 'License is still not available in local database after refresh.');
+    } catch (error) {
+      const errorMsg = error instanceof Error
+        ? error.message
+        : 'Failed to sync license. Please check your network connection.';
+      setActivationMessage(errorMsg);
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
+  const handleCheckActivationStatus = async () => {
+    setActivationMessage('');
+    setIsActivating(true);
+
+    try {
+      const keyToCheck = serverLicenseKey || licenseKey.trim() || licenseInfo?.key || '';
+      const machineId = licenseInfo?.machineId || '';
+
+      if (!keyToCheck) {
+        setActivationMessage(t.noKey);
+        return;
+      }
+
+      const response = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: keyToCheck,
+          machine_id: machineId
+        })
+      });
+      const data = await response.json();
+
+      if (data.valid && updateLicenseState(keyToCheck, machineId, data)) {
+        setActivationMessage('License is active (from local database)');
+        return;
+      }
+
+      setActivationMessage(data.error || 'License is not available in local database yet. Try "Refresh Activation Status".');
+    } catch (error) {
+      setActivationMessage('Failed to check activation status.');
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
+  const handleViewLicenseData = () => {
+    const data = licenseApiData ? JSON.stringify(licenseApiData, null, 2) : 'No license data saved yet.';
+    alert(data);
+  };
+
+  const getLicenseRow = () => {
+    const payload = (licenseApiData as any)?.data ?? (licenseApiData as any)?.result ?? licenseApiData;
+    const license = payload?.license ?? payload?.license_info ?? payload?.licenseInfo ?? payload ?? {};
+    return {
+      key: license.license_key ?? license.key ?? licenseInfo.key ?? '',
+      product: license.product ?? license.plan ?? license.tier ?? payload?.tier ?? '-',
+      status: license.status ?? (licenseApiData as any)?.valid ?? (licenseApiData as any)?.success ?? licenseInfo.active ?? '',
+      expires: license.expires_at ?? license.expiresAt ?? licenseInfo.expiresAt ?? '',
+      renew: license.renew_date ?? license.renewDate ?? licenseInfo.renewDate ?? ''
+    };
+  };
+
+  const handleReturnLicense = async () => {
+    if (!(serverLicenseKey || licenseKey.trim())) return;
+
+    if (!window.confirm(t.confirmDeactivate)) {
+      return;
+    }
+
+    setIsActivating(true);
+    setActivationMessage('');
+
+    try {
+      const { returnUrl } = getLicenseEndpoints();
+      const response = await fetch(returnUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: serverLicenseKey || licenseKey,
+          machine_id: licenseInfo?.machineId
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setActivationMessage(t.returnSuccess);
+        updateLicenseInfo({
+          key: '',
+          machineId: licenseInfo?.machineId || '',
+          active: false,
+          expiresAt: '',
+          activationData: null
+        });
+        setLicenseKey(serverLicenseKey || '');
+      } else {
+        setActivationMessage(data.error || t.returnError);
+      }
+    } catch (error) {
+      setActivationMessage('An error occurred while returning the license.');
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
+  const verifyLicense = async () => {
+    if (!licenseInfo?.active || !licenseInfo?.key) return;
+
+    try {
+      const { verifyUrl } = getLicenseEndpoints();
+      const response = await fetch(verifyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: licenseInfo.key,
+          machine_id: licenseInfo.machineId
+        })
+      });
+
+      const data = await response.json();
+      const payload = (data as any)?.data ?? (data as any)?.result ?? data;
+      const expiresAt = normalizeExpiresAt(payload as Record<string, any>);
+
+      if (!data.valid && !expiresAt) {
+        updateLicenseInfo({ ...licenseInfo, active: false });
+        alert('License is no longer valid or has expired.');
+      } else if (expiresAt) {
+        updateLicenseInfo({
+          ...licenseInfo,
+          active: data.valid === true,
+          expiresAt: expiresAt,
+          renewDate: (payload as any)?.renew_date || licenseInfo.renewDate,
+          activationData: (payload as any)?.activation_data || (payload as any)?.activationData || licenseInfo.activationData
+        });
+      }
+    } catch (error) {
+      // verification failed due to network etc, let it slide temporarily
+    }
+  };
+
+  useEffect(() => {
+    // Optionally verify when settings page is loaded
+    verifyLicense();
+  }, []);
+
+  useEffect(() => {
+    syncLicenseDaily();
+  }, [syncLicenseDaily, licenseInfo?.key]);
+
+  const handleSaveReceiptSettings = () => {
+    updateReceiptSettings({
+      headerText,
+      footerText,
+      storeAddress,
+      phoneNumber,
+      showBankDetail,
+      showTableNumber,
+      receiptSize: receiptSize as '58mm' | '80mm',
+      enableVoidBill,
+      autoPrintVoidBill,
+      receiptPrinter: localReceiptPrinter,
+      voidBillPrinter: localVoidBillPrinter,
+      kitchenBillSize: kitchenBillSize as '58mm' | '80mm',
+      voidBillSize: voidBillSize as '58mm' | '80mm'
+    });
+    alert(t.receiptSettingsSaved);
+  };
+
+  const handleSaveGeneralSettings = () => {
+    updateGeneralSettings({
+      storeName,
+      taxRate,
+      timezone,
+      language
+    });
+    updateCurrencySettings({
+      defaultCurrency,
+      currencySymbol,
+      currencyFormat,
+      currencyRate,
+      currencySymbolPosition,
+      thbRate
+    });
+
+    alert(t.generalSettingsSaved);
+  };
+
+  const handleCurrencyChange = (currencyCode: string) => {
+    const currency = availableCurrencies.find(c => c.code === currencyCode);
+    if (currency) {
+      setDefaultCurrency(currencyCode);
+      setCurrencySymbol(currency.symbol);
+      setCurrencyFormat(currency.format);
+      setCurrencyRate(currency.rate);
+    }
+  };
+
+  const handleCustomRateChange = (rate: string) => {
+    const parsedRate = parseFloat(rate) || 1.0;
+    setCurrencyRate(parsedRate);
+  };
+
+  const handleManualRateSet = (rate: string) => {
+    const parsedRate = parseFloat(rate) || 1.0;
+    if (parsedRate <= 0) {
+      alert(t.rateMin);
+      return;
+    }
+    setCurrencyRate(parsedRate);
+    alert(`${t.rateUpdated}: ${parsedRate.toLocaleString()} = 1 USD`);
+  };
+
+  const handleManualThbRateSet = (rate: string) => {
+    const parsedRate = parseFloat(rate) || 36.5;
+    if (parsedRate <= 0) {
+      alert(t.rateMin);
+      return;
+    }
+    setThbRate(parsedRate);
+    alert(`${t.rateUpdated}: ${parsedRate.toLocaleString()} = 1 THB`);
+  };
+
+  const resetBankForm = () => {
+    setEditingBankId(null);
+    setNewBank({
+      bankName: '',
+      accountName: '',
+      accountNumber: '',
+      enabledForTransfer: true,
+      qrCodeImage: ''
+    });
+  };
+
+  const handleBankQrUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const source = typeof reader.result === 'string' ? reader.result : '';
+      if (!source) return;
+
+      const img = document.createElement('img');
+      img.onload = () => {
+        const maxSize = 320;
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d');
+
+        if (!context) {
+          setNewBank((prev) => ({ ...prev, qrCodeImage: source }));
+          return;
+        }
+
+        context.drawImage(img, 0, 0, width, height);
+        setNewBank((prev) => ({
+          ...prev,
+          qrCodeImage: canvas.toDataURL('image/png')
+        }));
+      };
+      img.onerror = () => {
+        setNewBank((prev) => ({ ...prev, qrCodeImage: source }));
+      };
+      img.src = source;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleEditBank = (bank: any) => {
+    setEditingBankId(bank.id);
+    setNewBank({
+      bankName: bank.bankName || '',
+      accountName: bank.accountName || '',
+      accountNumber: bank.accountNumber || '',
+      enabledForTransfer: bank.enabledForTransfer ?? true,
+      qrCodeImage: bank.qrCodeImage || ''
+    });
+  };
+
+  const handleAddBank = () => {
+    if (!newBank.bankName.trim() || !newBank.accountName.trim() || !newBank.accountNumber.trim()) {
+      alert(t.bankFields);
+      return;
+    }
+
+    if (editingBankId) {
+      setLocalBanks((prev) => prev.map((bank) => (
+        bank.id === editingBankId
+          ? {
+              ...bank,
+              bankName: newBank.bankName.trim(),
+              accountName: newBank.accountName.trim(),
+              accountNumber: newBank.accountNumber.trim(),
+              enabledForTransfer: newBank.enabledForTransfer,
+              qrCodeImage: newBank.qrCodeImage
+            }
+          : bank
+      )));
+      resetBankForm();
+      return;
+    }
+
+    setLocalBanks((prev) => [
+      ...prev,
+      {
+        id: `bank-${Date.now()}`,
+        bankName: newBank.bankName.trim(),
+        accountName: newBank.accountName.trim(),
+        accountNumber: newBank.accountNumber.trim(),
+        enabledForTransfer: newBank.enabledForTransfer,
+        qrCodeImage: newBank.qrCodeImage
+      }
+    ]);
+    resetBankForm();
+  };
+
+  const handleDeleteBank = (bankId: string) => {
+    setLocalBanks((prev) => prev.filter((b) => b.id !== bankId));
+    if (editingBankId === bankId) {
+      resetBankForm();
+    }
+  };
+
+  const handleToggleBankEnabled = (bankId: string, checked: boolean) => {
+    setLocalBanks((prev) => prev.map((b) => b.id === bankId ? { ...b, enabledForTransfer: checked } : b));
+  };
+
+  const handleSaveBankSettings = () => {
+    updateBankConfigs(localBanks);
+    updateReceiptSettings({
+      headerText,
+      footerText,
+      storeAddress,
+      phoneNumber,
+      showBankDetail,
+      showTableNumber,
+      receiptSize: receiptSize as '58mm' | '80mm'
+    });
+    alert(t.syncSuccess);
+  };
+
+  const resetUnitForm = () => {
+    setEditingUnitId(null);
+    setNewUnit({ name: '', value: '' });
+  };
+
+  const handleEditUnit = (unit: any) => {
+    setEditingUnitId(unit.id);
+    setNewUnit({
+      name: unit.name || '',
+      value: unit.value || ''
+    });
+  };
+
+  const handleAddOrUpdateUnit = () => {
+    const name = newUnit.name.trim();
+    const value = newUnit.value.trim();
+
+    if (!name || !value) {
+      alert(t.unitFields || 'Please fill in unit name and value');
+      return;
+    }
+
+    if (editingUnitId) {
+      setLocalUnits((prev) => prev.map((unit) => (
+        unit.id === editingUnitId ? { ...unit, name, value } : unit
+      )));
+      resetUnitForm();
+      return;
+    }
+
+    setLocalUnits((prev) => [
+      ...prev,
+      {
+        id: `unit-${Date.now()}`,
+        name,
+        value
+      }
+    ]);
+    resetUnitForm();
+  };
+
+  const handleDeleteUnit = (unitId: string) => {
+    setLocalUnits((prev) => prev.filter((unit) => unit.id !== unitId));
+    if (editingUnitId === unitId) {
+      resetUnitForm();
+    }
+  };
+
+  const handleSaveUnitSettings = () => {
+    updateUnitConfigs(localUnits);
+    alert(t.syncSuccess);
+  };
+
+  const resetPrinterForm = () => {
+    setEditingPrinterId(null);
+    setNewPrinter({
+      name: '',
+      ipAddress: '',
+      location: '',
+      enabled: true,
+      autoPrint: true
+    });
+  };
+
+  const handleAddOrUpdatePrinter = () => {
+    if (!newPrinter.name.trim() || !newPrinter.ipAddress.trim()) {
+      alert(t.printerFields);
+      return;
+    }
+
+    let updatedPrinters;
+
+    if (editingPrinterId) {
+      updatedPrinters = localPrinters.map((printer) => (
+        printer.id === editingPrinterId
+          ? {
+            ...printer,
+            name: newPrinter.name.trim(),
+            ipAddress: newPrinter.ipAddress.trim(),
+            location: newPrinter.location.trim() || printer.location,
+            enabled: newPrinter.enabled,
+            autoPrint: newPrinter.autoPrint
+          }
+          : printer
+      ));
+    } else {
+      updatedPrinters = [
+        ...localPrinters,
+        {
+          id: `printer-${Date.now()}`,
+          name: newPrinter.name.trim(),
+          ipAddress: newPrinter.ipAddress.trim(),
+          location: newPrinter.location.trim() || 'General',
+          isDefault: localPrinters.length === 0,
+          enabled: newPrinter.enabled,
+          autoPrint: newPrinter.autoPrint
+        }
+      ];
+    }
+
+    // Update local state
+    setLocalPrinters(updatedPrinters);
+    
+    // Save to store immediately
+    updatePrinterConfigs(updatedPrinters);
+
+    resetPrinterForm();
+    alert(editingPrinterId ? 'Printer updated!' : 'Printer added!');
+  };
+
+  const handleEditPrinter = (printerId: string) => {
+    const printer = localPrinters.find((p) => p.id === printerId);
+    if (!printer) return;
+    setEditingPrinterId(printerId);
+    setNewPrinter({
+      name: printer.name,
+      ipAddress: printer.ipAddress,
+      location: printer.location,
+      enabled: printer.enabled,
+      autoPrint: printer.autoPrint ?? true
+    });
+  };
+
+  const handleDeletePrinter = (printerId: string) => {
+    const printerToDelete = localPrinters.find((p) => p.id === printerId);
+    const next = localPrinters.filter((p) => p.id !== printerId);
+    if (printerToDelete?.isDefault && next.length > 0) {
+      next[0] = { ...next[0], isDefault: true };
+    }
+    
+    // Update local state
+    setLocalPrinters(next);
+    
+    // Save to store immediately
+    updatePrinterConfigs(next);
+    
+    if (editingPrinterId === printerId) resetPrinterForm();
+    alert('Printer deleted!');
+  };
+
+  const handleSetDefaultPrinter = (printerId: string) => {
+    const updatedPrinters = localPrinters.map((printer) => ({
+      ...printer,
+      isDefault: printer.id === printerId
+    }));
+    
+    // Update local state
+    setLocalPrinters(updatedPrinters);
+    
+    // Save to store immediately
+    updatePrinterConfigs(updatedPrinters);
+  };
+
+  const handleTogglePrinterEnabled = (printerId: string, checked: boolean) => {
+    const updatedPrinters = localPrinters.map((printer) => (
+      printer.id === printerId ? { ...printer, enabled: checked } : printer
+    ));
+    
+    // Update local state
+    setLocalPrinters(updatedPrinters);
+    
+    // Save to store immediately
+    updatePrinterConfigs(updatedPrinters);
+  };
+
+  const handleTogglePrinterAutoPrint = (printerId: string, checked: boolean) => {
+    const updatedPrinters = localPrinters.map((printer) => (
+      printer.id === printerId ? { ...printer, autoPrint: checked } : printer
+    ));
+    
+    // Update local state
+    setLocalPrinters(updatedPrinters);
+    
+    // Save to store immediately
+    updatePrinterConfigs(updatedPrinters);
+  };
+
+  const handleSavePrinterSettings = () => {
+    if (localPrinters.length > 0 && !localPrinters.some((p) => p.isDefault)) {
+      alert(t.oneDefaultPrinter);
+      return;
+    }
+    updatePrinterConfigs(localPrinters);
+    updateAutoPrint(localAutoPrint);
+    updateSilentPrint(localSilentPrint);
+    alert(t.syncSuccess);
+  };
+
+  const handleAddSystemPrinter = () => {
+    if (!selectedSystemPrinter.trim()) {
+      alert(t.selectSystemPrinter);
+      return;
+    }
+
+    const newPrinter = {
+      id: `printer-sys-${Date.now()}`,
+      name: selectedSystemPrinter.trim(),
+      ipAddress: 'System-Driver',
+      location: 'General',
+      isDefault: localPrinters.length === 0,
+      enabled: true,
+      autoPrint: true
+    };
+
+    const updatedPrinters = [...localPrinters, newPrinter];
+    
+    // Update local state
+    setLocalPrinters(updatedPrinters);
+    
+    // Save to store immediately
+    updatePrinterConfigs(updatedPrinters);
+
+    setSelectedSystemPrinter('');
+    alert(`Added ${newPrinter.name} to your configuration.`);
+  };
+
+  const handleAddStationMapping = () => {
+    const defaultPrinterId = localPrinters.find(p => p.isDefault)?.id || localPrinters[0]?.id || '';
+    const defaultCategoryId = categories[0]?.id || '';
+
+    setLocalStationMappings((prev) => [
+      ...prev,
+      {
+        id: `station-${Date.now()}`,
+        categoryId: defaultCategoryId,
+        stationName: 'Kitchen Station',
+        printerId: defaultPrinterId,
+        selectedItemId: '*'
+      }
+    ]);
+  };
+
+  const handleDeleteStationMapping = (mappingId: string) => {
+    setLocalStationMappings((prev) => prev.filter((m) => m.id !== mappingId));
+  };
+
+  const updateStationRow = (mappingId: string, field: 'categoryId' | 'printerId' | 'selectedItemId', value: string) => {
+    setLocalStationMappings((prev) => prev.map((row) => (
+      row.id === mappingId
+        ? {
+          ...row,
+          [field]: value,
+          // Reset item selection ONLY if category changes
+          ...(field === 'categoryId' ? { selectedItemId: '*' } : {})
+        }
+        : row
+    )));
+  };
+
+  const handleSaveStationMappings = () => {
+    updateStationMappings(localStationMappings);
+    alert(t.syncSuccess);
+  };
+
+  const previewBank = localBanks.find((bank) => bank.enabledForTransfer) || localBanks[0] || null;
+
+  return (
+    <div className="flex-1 space-y-4 p-8 pt-6">
+      <div className="flex items-center justify-between space-y-2">
+        <h2 className="text-3xl font-bold tracking-tight">{t.settings}</h2>
+      </div>
+
+      <Tabs defaultValue="general" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="general">{t.generalSetting}</TabsTrigger>
+          <TabsTrigger value="unit">{t.unitConfig}</TabsTrigger>
+          <TabsTrigger value="bank">{t.bankConfig}</TabsTrigger>
+          <TabsTrigger value="printing">{t.configPrinting}</TabsTrigger>
+          <TabsTrigger value="receipt">{t.receiptCustomization}</TabsTrigger>
+          <TabsTrigger value="void-bill">{t.kitchenBillAndVoidBill}</TabsTrigger>
+          <TabsTrigger value="station">{t.stationMapping}</TabsTrigger>
+          <TabsTrigger value="license">{t.licenseKey}</TabsTrigger>
+          <TabsTrigger value="update">{t.systemUpdate}</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="general" className="space-y-4">
+          <Card className="border-zinc-200 shadow-sm overflow-hidden">
+            <CardHeader className="bg-zinc-50/50 border-b border-zinc-100">
+              <CardTitle className="text-zinc-800">{t.generalSettings}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="store-name">{t.storeName}</Label>
+                  <Input id="store-name" value={storeName} onChange={(e) => setStoreName(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="tax-rate">{t.taxRate}</Label>
+                  <Input id="tax-rate" type="number" value={taxRate} onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="timezone">{t.timezone}</Label>
+                  <Input id="timezone" value={timezone} onChange={(e) => setTimezone(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="language">{t.language}</Label>
+                  <select
+                    id="language"
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value as 'en' | 'lo')}
+                    className="w-full p-2 border rounded-md"
+                  >
+                    <option value="en">English</option>
+                    <option value="lo">ລາວ (Lao)</option>
+                    <option value="th">ไทย (Thai)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h3 className="text-lg font-medium mb-4">{t.currencySettings}</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="default-currency">{t.defaultCurrency}</Label>
+                    <select
+                      id="default-currency"
+                      value={defaultCurrency}
+                      onChange={(e) => handleCurrencyChange(e.target.value)}
+                      className="w-full p-2 border rounded-md"
+                    >
+                      {availableCurrencies.map((currency) => (
+                        <option key={currency.code} value={currency.code}>
+                          {currency.name} ({currency.symbol})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="currency-pattern">{t.numberFormat}</Label>
+                    <Input
+                      id="currency-pattern"
+                      value={currencyFormat}
+                      onChange={(e) => setCurrencyFormat(e.target.value)}
+                      placeholder="###,###.00 or ###,###"
+                    />
+                    <p className="text-xs text-zinc-500">{t.examples || 'Examples'}: `###,###` or `###,###.00`</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="currency-symbol">{t.currencySettings}</Label>
+                    <Input
+                      id="currency-symbol"
+                      value={currencySymbol}
+                      onChange={(e) => setCurrencySymbol(e.target.value)}
+                      placeholder={currencySymbol}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="symbol-position">{t.symbolPosition}</Label>
+                    <select
+                      id="symbol-position"
+                      value={currencySymbolPosition}
+                      onChange={(e) => setCurrencySymbolPosition((e.target.value as 'left' | 'right') || 'left')}
+                      className="w-full p-2 border rounded-md"
+                    >
+                      <option value="left">{t.left} ({currencySymbol}1,000)</option>
+                      <option value="right">{t.right} (1,000{currencySymbol})</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="currency-rate">{t.currencyRate}</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="currency-rate"
+                        type="number"
+                        step="0.01"
+                        value={currencyRate}
+                        onChange={(e) => handleCustomRateChange(e.target.value)}
+                        placeholder="1.00"
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={() => handleManualRateSet(currencyRate.toString())}
+                        variant="outline"
+                        size="sm"
+                      >
+                        {t.setRate}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-zinc-500">
+                      {currencyRate.toLocaleString()} = 1 USD
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="thb-rate">{t.thbRateLabel}</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="thb-rate"
+                        type="number"
+                        step="0.01"
+                        value={thbRate}
+                        onChange={(e) => setThbRate(parseFloat(e.target.value) || 36.5)}
+                        placeholder="36.5"
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={() => handleManualThbRateSet(thbRate.toString())}
+                        variant="outline"
+                        size="sm"
+                      >
+                        {t.setRate}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-zinc-500">
+                      {thbRate.toLocaleString()} = 1 THB
+                    </p>
+                  </div>
+                </div>
+
+                  <h4 className="font-medium mb-3">{t.quickRatePresets}</h4>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleManualRateSet('1.0')}
+                      className="text-xs"
+                    >
+                      USD: 1.0
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleManualRateSet('21000.0')}
+                      className="text-xs"
+                    >
+                      LAK: 21,000
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleManualRateSet('36.5')}
+                      className="text-xs"
+                    >
+                      THB: 36.5
+                    </Button>
+                  </div>
+                </div>
+
+              <div className="border-t pt-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-medium text-blue-900 mb-2">{t.currencyInfoTitle || 'Currency Information'}</h4>
+                  <div className="text-sm text-blue-800 space-y-1">
+                    <p><strong>{t.defaultCurrency}:</strong> {defaultCurrency} - {availableCurrencies.find(c => c.code === defaultCurrency)?.name}</p>
+                    <p><strong>{t.currentRate}:</strong> 1 {defaultCurrency} = {currencyRate} USD</p>
+                    <p><strong>{t.numberFormat}:</strong> {currencyFormat}</p>
+                    <p><strong>{t.currencySymbol}:</strong> {currencySymbol}</p>
+                    <p><strong>{t.symbolPosition}:</strong> {currencySymbolPosition}</p>
+                  </div>
+                </div>
+              </div>
+
+              <Button className="mt-4 gap-2" onClick={handleSaveGeneralSettings}>
+                <Save className="h-4 w-4" />
+                {t.saveGeneralSettings}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="unit" className="space-y-4">
+          <Card className="border-sky-100 shadow-sm overflow-hidden">
+            <CardHeader className="bg-sky-50/50 border-b border-sky-100">
+              <CardTitle className="text-sky-900">{t.unitSettings}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6 p-6">
+              <div className="grid gap-4 rounded-2xl border border-sky-100 bg-sky-50/40 p-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="unit-name">{t.unitName}</Label>
+                  <Input
+                    id="unit-name"
+                    placeholder="e.g. Bottle"
+                    value={newUnit.name}
+                    onChange={(e) => setNewUnit((prev) => ({ ...prev, name: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="unit-value">{t.unitValue}</Label>
+                  <Input
+                    id="unit-value"
+                    placeholder="e.g. bottle"
+                    value={newUnit.value}
+                    onChange={(e) => setNewUnit((prev) => ({ ...prev, value: e.target.value }))}
+                  />
+                </div>
+                <div className="flex items-end gap-2">
+                  <Button onClick={handleAddOrUpdateUnit} className="h-10 flex-1 gap-2 bg-sky-600 hover:bg-sky-700">
+                    {editingUnitId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    {editingUnitId ? t.updateUnit : t.addUnit}
+                  </Button>
+                  {editingUnitId && (
+                    <Button variant="outline" onClick={resetUnitForm} className="h-10">
+                      {t.cancel}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-100 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-zinc-50">
+                    <tr className="text-left text-zinc-500">
+                      <th className="p-4 font-semibold">{t.unitName}</th>
+                      <th className="p-4 font-semibold">{t.unitValue}</th>
+                      <th className="p-4 font-semibold text-right">{t.actions}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    {localUnits.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="p-8 text-center text-zinc-500">{t.noItemsFound}</td>
+                      </tr>
+                    ) : (
+                      localUnits.map((unit) => (
+                        <tr key={unit.id} className="hover:bg-zinc-50/60">
+                          <td className="p-4 font-medium text-zinc-800">{unit.name}</td>
+                          <td className="p-4 font-mono text-xs text-zinc-500">{unit.value}</td>
+                          <td className="p-4 text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => handleEditUnit(unit)} className="h-9 w-9 rounded-xl text-sky-600 hover:bg-sky-50">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteUnit(unit.id)} className="h-9 w-9 rounded-xl text-red-500 hover:bg-red-50">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <Button onClick={handleSaveUnitSettings} className="gap-2">
+                <Save className="h-4 w-4" />
+                {t.saveUnitSettings}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="bank" className="space-y-4">
+          <Card className="border-0 shadow-xl shadow-zinc-200/50 rounded-2xl overflow-hidden bg-white">
+            <CardHeader className="bg-zinc-50/50 border-b border-zinc-100 flex-row items-center justify-between space-y-0 p-6">
+              <CardTitle className="text-xl font-bold text-zinc-800">{t.bankSettings}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5 items-end bg-zinc-50/50 p-6 rounded-2xl border border-zinc-100 mb-8">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">{t.bankName}</Label>
+                  <Input value={newBank.bankName} onChange={(e) => setNewBank({ ...newBank, bankName: e.target.value })} placeholder="e.g. BCEL" className="h-11 rounded-xl shadow-sm border-zinc-200" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">{t.accountName}</Label>
+                  <Input value={newBank.accountName} onChange={(e) => setNewBank({ ...newBank, accountName: e.target.value })} placeholder="Account Name" className="h-11 rounded-xl shadow-sm border-zinc-200" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">{t.accountNumber}</Label>
+                  <Input value={newBank.accountNumber} onChange={(e) => setNewBank({ ...newBank, accountNumber: e.target.value })} placeholder="Account Number" className="h-11 rounded-xl shadow-sm border-zinc-200" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">{t.qrCode}</Label>
+                  <div className="flex items-center gap-3">
+                    {newBank.qrCodeImage ? (
+                      <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+                        <Image src={newBank.qrCodeImage} alt="Bank QR Code preview" fill sizes="56px" className="object-cover" unoptimized />
+                      </div>
+                    ) : (
+                      <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-white text-zinc-300">
+                        <Upload className="h-5 w-5" />
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-2">
+                      <Label className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-indigo-200 bg-white px-3 text-xs font-bold text-indigo-700 hover:bg-indigo-50">
+                        <Upload className="mr-1.5 h-3.5 w-3.5" />
+                        {t.uploadQrCode}
+                        <Input type="file" accept="image/*" onChange={handleBankQrUpload} className="hidden" />
+                      </Label>
+                      {newBank.qrCodeImage && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 justify-start px-2 text-xs text-red-500 hover:bg-red-50 hover:text-red-600"
+                          onClick={() => setNewBank((prev) => ({ ...prev, qrCodeImage: '' }))}
+                        >
+                          <X className="mr-1 h-3.5 w-3.5" />
+                          {t.removeQrCode}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handleAddBank} className="h-11 flex-1 bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-100 font-bold">
+                    {editingBankId ? <Save className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
+                    {editingBankId ? t.updateBank : t.addBank}
+                  </Button>
+                  {editingBankId && (
+                    <Button type="button" variant="outline" onClick={resetBankForm} className="h-11 rounded-xl">
+                      {t.cancel}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="border border-zinc-100 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-left">
+                  <thead className="bg-zinc-50/80 border-b border-zinc-100">
+                    <tr className="border-b border-indigo-50 bg-indigo-50/20 text-left text-indigo-600">
+                      <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-zinc-500">{t.bankName}</th>
+                      <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-zinc-500">{t.accountName}</th>
+                      <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-zinc-500">{t.accountNumber}</th>
+                      <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-zinc-500">{t.qrCode}</th>
+                      <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-zinc-500">{t.enabled}</th>
+                      <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-zinc-500 text-right">{t.actions}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-50 bg-white">
+                    {localBanks.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-8 text-center text-zinc-500">{t.noItemsFound}</td>
+                      </tr>
+                    ) : (
+                      localBanks.map((bank) => (
+                        <tr key={bank.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
+                          <td className="px-6 py-4 font-bold text-zinc-800">{bank.bankName}</td>
+                          <td className="px-6 py-4 text-zinc-600 font-medium">{bank.accountName}</td>
+                          <td className="px-6 py-4 text-zinc-500 font-mono text-xs">{bank.accountNumber}</td>
+                          <td className="px-6 py-4">
+                            {bank.qrCodeImage ? (
+                              <div className="relative h-12 w-12 overflow-hidden rounded-xl border border-zinc-200 shadow-sm">
+                                <Image src={bank.qrCodeImage} alt={`${bank.bankName} QR Code`} fill sizes="48px" className="object-cover" unoptimized />
+                              </div>
+                            ) : (
+                              <span className="text-xs text-zinc-400">-</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <input type="checkbox" checked={bank.enabledForTransfer} onChange={(e) => handleToggleBankEnabled(bank.id, e.target.checked)} className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500" />
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => handleEditBank(bank)} className="h-9 w-9 rounded-xl hover:bg-indigo-50 text-indigo-500 transition-colors">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteBank(bank.id)} className="h-9 w-9 rounded-xl hover:bg-red-50 text-red-500 transition-colors">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex items-center gap-4 mt-6">
+                <label className="inline-flex items-center gap-2 text-sm font-medium text-zinc-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!showBankDetail}
+                    onChange={(e) => setShowBankDetail(e.target.checked)}
+                    className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  {t.showBankOnReceipt}
+                </label>
+              </div>
+
+              <div className="flex justify-end mt-8">
+                <Button onClick={handleSaveBankSettings} className="h-12 px-8 bg-zinc-900 hover:bg-zinc-800 rounded-xl shadow-lg shadow-zinc-200 font-bold transition-all hover:translate-y-[-2px]">
+                  <Save className="mr-2 h-4 w-4" /> {t.saveBankSettings}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="printing" className="space-y-4">
+          <Card className="border-emerald-100 shadow-sm overflow-hidden">
+            <CardHeader className="bg-emerald-50/50 border-b border-emerald-100">
+              <CardTitle className="text-emerald-900">{t.printingSettings}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Auto Print Global Toggle */}
+              <div className="flex items-center justify-between p-4 border rounded-lg bg-emerald-50/50 border-emerald-100">
+                <div className="space-y-0.5">
+                  <h3 className="text-sm font-semibold text-emerald-900">{t.autoPrint}</h3>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={!!localAutoPrint}
+                    onChange={(e) => setLocalAutoPrint(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+              </div>
+
+              {/* Silent Print Toggle */}
+              <div className="flex items-center justify-between p-4 border rounded-lg bg-blue-50/50 border-blue-100">
+                <div className="space-y-0.5">
+                  <h3 className="text-sm font-semibold text-blue-900">{t.silentPrint}</h3>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={!!localSilentPrint}
+                    onChange={(e) => setLocalSilentPrint(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                </label>
+              </div>
+
+              {/* System Printers Section - Simplified */}
+              <div className="p-4 border rounded-lg bg-zinc-50 border-zinc-200">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Printer className="h-4 w-4" />
+                    {t.detectedLocalPrinters}
+                  </h3>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRefreshPrinters}
+                    className="gap-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Refresh
+                  </Button>
+                </div>
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1 space-y-2">
+                    <Label className="text-xs">{t.selectPrinterToAdd}</Label>
+                    <Input
+                      list="system-printers-list"
+                      className="w-full h-10"
+                      placeholder="Type or select printer name (e.g., XP-80C)"
+                      value={selectedSystemPrinter}
+                      onChange={(e) => setSelectedSystemPrinter(e.target.value)}
+                    />
+                    <datalist id="system-printers-list">
+                      {systemPrinters.map(p => (
+                        <option key={p} value={p} />
+                      ))}
+                    </datalist>
+                    <p className="text-xs text-zinc-500">
+                      Type printer name directly or select from detected printers
+                    </p>
+                  </div>
+                  <Button onClick={handleAddSystemPrinter} disabled={!selectedSystemPrinter.trim()} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    {t.add}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Manual Configuration Section */}
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs">{t.printerName}</Label>
+                    <Input
+                      placeholder="e.g. Kitchen Printer"
+                      value={newPrinter.name}
+                      onChange={(e) => setNewPrinter((prev) => ({ ...prev, name: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">{t.ipAddress}</Label>
+                    <Input
+                      placeholder="e.g. 192.168.1.100"
+                      value={newPrinter.ipAddress}
+                      onChange={(e) => setNewPrinter((prev) => ({ ...prev, ipAddress: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">{t.location}</Label>
+                    <Input
+                      placeholder="e.g. Back Bar"
+                      value={newPrinter.location}
+                      onChange={(e) => setNewPrinter((prev) => ({ ...prev, location: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs opacity-0">Action</Label>
+                    <div className="flex gap-2">
+                      <Button onClick={handleAddOrUpdatePrinter} className="flex-1 gap-2">
+                        <Plus className="h-4 w-4" />
+                        {editingPrinterId ? t.updatePrinter : t.addManualPrinter}
+                      </Button>
+                      {editingPrinterId && (
+                        <Button variant="outline" onClick={resetPrinterForm}>
+                          {t.cancel}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    type="checkbox"
+                    id="new-printer-autoprint"
+                    checked={newPrinter.autoPrint}
+                    onChange={(e) => setNewPrinter((prev) => ({ ...prev, autoPrint: e.target.checked }))}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <Label htmlFor="new-printer-autoprint" className="text-sm font-medium">{t.autoPrint}</Label>
+                </div>
+              </div>
+
+              <div className="rounded-md border border-zinc-200">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-indigo-50 bg-indigo-50/20 text-left text-indigo-600">
+                      <th className="p-3 font-medium">{t.default}</th>
+                      <th className="p-3 font-medium">{t.enabled}</th>
+                      <th className="p-3 font-medium">{t.autoPrint}</th>
+                      <th className="p-3 font-medium">{t.printer}</th>
+                      <th className="p-3 font-medium">{t.ipAddress}</th>
+                      <th className="p-3 font-medium">{t.location}</th>
+                      <th className="p-3 font-medium text-right">{t.actions}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {localPrinters.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-6 text-center text-zinc-500">
+                          {t.noItemsFound}
+                        </td>
+                      </tr>
+                    ) : (
+                      localPrinters.map((printer) => (
+                        <tr key={printer.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
+                          <td className="p-3">
+                            <input
+                              type="radio"
+                              name="default-printer"
+                              checked={printer.isDefault}
+                              onChange={() => handleSetDefaultPrinter(printer.id)}
+                            />
+                          </td>
+                          <td className="p-3">
+                            <input
+                              type="checkbox"
+                              checked={printer.enabled}
+                              onChange={(e) => handleTogglePrinterEnabled(printer.id, e.target.checked)}
+                            />
+                          </td>
+                          <td className="p-3">
+                            <input
+                              type="checkbox"
+                              checked={printer.autoPrint ?? true}
+                              onChange={(e) => handleTogglePrinterAutoPrint(printer.id, e.target.checked)}
+                            />
+                          </td>
+                          <td className="p-3 font-medium">{printer.name}</td>
+                          <td className="p-3 font-mono">{printer.ipAddress}</td>
+                          <td className="p-3">{printer.location}</td>
+                          <td className="p-3 text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button variant="outline" size="sm" onClick={() => handleEditPrinter(printer.id)}>
+                                {t.edit}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                                onClick={() => handleDeletePrinter(printer.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <Button onClick={handleSavePrinterSettings} className="gap-2">
+                <Save className="h-4 w-4" />
+                {t.savePrinterSettings}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="receipt" className="space-y-4">
+          <Card className="border-amber-100 shadow-sm overflow-hidden">
+            <CardHeader className="bg-amber-50/50 border-b border-amber-100">
+              <CardTitle className="text-amber-900">{t.receiptSettings}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-8 md:grid-cols-2">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="header-text">{t.headerText}</Label>
+                    <Input id="header-text" value={headerText} onChange={(e) => setHeaderText(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="footer-text">{t.footerText}</Label>
+                    <Input id="footer-text" value={footerText} onChange={(e) => setFooterText(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="address">{t.storeAddress}</Label>
+                    <Input id="address" value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">{t.phoneNumber}</Label>
+                    <Input id="phone" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="receipt-size">{t.receiptSize}</Label>
+                    <select
+                      id="receipt-size"
+                      value={receiptSize}
+                      onChange={(e) => setReceiptSize(e.target.value as '58mm' | '80mm')}
+                      className="w-full p-2 border rounded-md"
+                    >
+                      <option value="58mm">58mm (Thermal Printer)</option>
+                      <option value="80mm">80mm (Standard Printer)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="receipt-printer">{t.printer}</Label>
+                    <select
+                      id="receipt-printer"
+                      value={localReceiptPrinter || ''}
+                      onChange={(e) => setLocalReceiptPrinter(e.target.value)}
+                      className="w-full p-2 border rounded-md"
+                    >
+                      <option value="">Default Printer</option>
+                      {localPrinters.map((printer) => (
+                        <option key={printer.id} value={printer.id}>
+                          {printer.name} {printer.isDefault ? '(Default)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-zinc-500">
+                      Select a printer for receipt printing. Leave empty to use default printer.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer bg-white p-4 rounded-lg border border-zinc-200 shadow-sm hover:border-indigo-300 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={!!showTableNumber}
+                        onChange={(e) => setShowTableNumber(e.target.checked)}
+                        className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-sm font-medium text-zinc-700">Show Table Number on Receipt</span>
+                    </label>
+                  </div>
+                  <Button className="mt-4 gap-2" onClick={handleSaveReceiptSettings}>
+                    <Save className="h-4 w-4" />
+                    {t.save}
+                  </Button>
+                </div>
+
+                {/* Receipt Preview */}
+                <div className="flex justify-center">
+                  <div className="w-[360px] bg-zinc-50 p-6 border border-zinc-200 shadow-sm font-mono text-sm">
+                    <div className="text-center mb-4">
+                      <h3 className="font-bold text-lg mb-0.5">{storeName}</h3>
+                      <div className="text-xs text-zinc-500 mb-0.5">{storeAddress}</div>
+                      <div className="text-xs text-zinc-500 mb-0.5">{phoneNumber}</div>
+                      <div className="text-xs mt-2">{headerText}</div>
+                    </div>
+                    <div className="border-t border-b border-dashed border-zinc-300 py-2 my-2 overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-indigo-50 bg-indigo-50/20 text-left text-indigo-600">
+                            <th className="py-1 text-left font-semibold">{t.itemName}</th>
+                            <th className="py-1 text-right font-semibold">{t.stock}</th>
+                            <th className="py-1 text-right font-semibold">{t.price}</th>
+                            <th className="py-1 text-right font-semibold">{t.total || 'Total'}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td className="py-1">Item A</td>
+                            <td className="py-1 text-right">1</td>
+                            <td className="py-1 text-right">{currencySymbol}10.00</td>
+                            <td className="py-1 text-right">{currencySymbol}10.00</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="flex justify-between font-bold mt-2">
+                      <span>{t.totalSales || t.total || 'TOTAL'}</span>
+                      <span>{currencySymbol}10.00</span>
+                    </div>
+                    {showBankDetail && previewBank && (
+                      <div className="mt-3 border-t border-dotted border-zinc-300 pt-3 text-xs">
+                        <div className="mb-1 font-bold">Bank</div>
+                        <div>Bank: {previewBank.bankName || '-'}</div>
+                        <div>Account Name: {previewBank.accountName || '-'}</div>
+                        <div>Account No: {previewBank.accountNumber || '-'}</div>
+                        {previewBank.qrCodeImage && (
+                          <div className="mt-3 border-t border-dotted border-zinc-300 pt-3 text-center">
+                            <div className="mb-2 font-bold">Bank QR Code</div>
+                            <div className="relative mx-auto h-[130px] w-[130px] overflow-hidden rounded-lg border border-zinc-200 bg-white">
+                              <Image src={previewBank.qrCodeImage} alt="Bank QR Code preview" fill sizes="130px" className="object-contain" unoptimized />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="text-center mt-6 text-xs">
+                      {footerText}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="void-bill" className="space-y-4">
+          <Card className="border-blue-100 shadow-sm overflow-hidden">
+            <CardHeader className="bg-blue-50/50 border-b border-blue-100">
+              <CardTitle className="text-blue-900">{t.kitchenBillAndVoidBill}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-6">
+              {/* Kitchen Bill Settings Section */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-blue-900 border-b pb-2">{t.kitchenBillSettings}</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="kitchen-bill-size">{t.kitchenBillSize}</Label>
+                    <select
+                      id="kitchen-bill-size"
+                      value={kitchenBillSize}
+                      onChange={(e) => setKitchenBillSize(e.target.value as '58mm' | '80mm')}
+                      className="w-full p-2 border rounded-md"
+                    >
+                      <option value="58mm">58mm</option>
+                      <option value="80mm">80mm</option>
+                    </select>
+                    <p className="text-xs text-zinc-500">
+                      {kitchenBillSize === '80mm' ? '48 characters per line' : '32 characters per line'}
+                    </p>
+                  </div>
+                  
+                  {/* Kitchen Bill Preview */}
+                  <div className="flex justify-center">
+                    <div className={`${kitchenBillSize === '80mm' ? 'w-[400px]' : 'w-[280px]'} bg-blue-50/30 p-4 border border-blue-200 shadow-sm font-mono`}>
+                      <div className="text-center font-bold text-blue-900 text-base">*** KITCHEN ***</div>
+                      <div className="border-t border-dashed border-blue-300 my-1"></div>
+                      <div className="text-blue-800 font-semibold text-sm">
+                        <div>Table T1</div>
+                        <div>{new Date().toLocaleString()}</div>
+                      </div>
+                      <div className="border-t border-dashed border-blue-300 my-1"></div>
+                      <div className="text-blue-800 text-sm">
+                        <div>2x  Pad Thai</div>
+                        <div className="pl-4 text-xs">Large</div>
+                      </div>
+                      <div className="border-t border-dashed border-blue-300 my-1"></div>
+                      <div className="text-center text-[10px] text-blue-600 mt-2">
+                        {kitchenBillSize === '80mm' ? '48 chars width' : '32 chars width'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Void Bill Settings Section */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-red-900 border-b pb-2">{t.voidBillSettings}</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 border rounded-lg bg-red-50/50 border-red-100">
+                      <div className="space-y-0.5">
+                        <h3 className="text-sm font-semibold text-red-900">{t.voidBillDescription}</h3>
+                        <p className="text-xs text-red-700/70">{t.autoPrintVoid}</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="sr-only peer"
+                          checked={!!enableVoidBill}
+                          onChange={(e) => setEnableVoidBill(e.target.checked)}
+                        />
+                        <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+                      </label>
+                    </div>
+                    
+                    {enableVoidBill && (
+                      <>
+                        <div className="flex items-center justify-between p-4 border rounded-lg bg-blue-50/50 border-blue-100">
+                          <div className="space-y-0.5">
+                            <h3 className="text-sm font-semibold text-blue-900">{t.autoPrintVoid}</h3>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="sr-only peer"
+                              checked={!!autoPrintVoidBill}
+                              onChange={(e) => setAutoPrintVoidBill(e.target.checked)}
+                            />
+                            <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                          </label>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="void-bill-size">{t.voidBillSize}</Label>
+                          <select
+                            id="void-bill-size"
+                            value={voidBillSize}
+                            onChange={(e) => setVoidBillSize(e.target.value as '58mm' | '80mm')}
+                            className="w-full p-2 border rounded-md"
+                          >
+                            <option value="58mm">58mm</option>
+                            <option value="80mm">80mm</option>
+                          </select>
+                          <p className="text-xs text-zinc-500">
+                            {voidBillSize === '80mm' ? '48 characters per line' : '32 characters per line'}
+                          </p>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="void-bill-printer">{t.printer}</Label>
+                          <select
+                            id="void-bill-printer"
+                            value={localVoidBillPrinter || ''}
+                            onChange={(e) => setLocalVoidBillPrinter(e.target.value)}
+                            className="w-full p-2 border rounded-md"
+                          >
+                            <option value="">Default Printer</option>
+                            {localPrinters.map((printer) => (
+                              <option key={printer.id} value={printer.id}>
+                                {printer.name} {printer.isDefault ? '(Default)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-xs text-zinc-500">
+                            Select a printer for void bill printing. Leave empty to use default printer.
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Void Bill Preview */}
+                  {enableVoidBill && (
+                    <div className="flex justify-center">
+                      <div className={`${voidBillSize === '80mm' ? 'w-[400px]' : 'w-[280px]'} bg-red-50/30 p-4 border border-red-200 shadow-sm font-mono`}>
+                        <div className="text-center font-bold text-red-700 text-base">*** CANCEL ORDER ***</div>
+                        <div className="border-t border-dashed border-red-300 my-1"></div>
+                        <div className="text-red-800 font-semibold text-sm">
+                          <div>Table T1</div>
+                          <div>{new Date().toLocaleString()}</div>
+                        </div>
+                        <div className="border-t border-dashed border-red-300 my-1"></div>
+                        <div className="text-red-800">
+                          <div className="font-semibold text-sm">CANCELLED ITEM:</div>
+                          <div className="h-2"></div>
+                          <div className="text-sm">1x  Pad Thai</div>
+                          <div className="pl-4 text-xs">Large</div>
+                        </div>
+                        <div className="border-t border-dashed border-red-300 my-1"></div>
+                        <div className="text-red-800 text-sm">Please discard this item</div>
+                        <div className="border-t border-dashed border-red-300 my-1"></div>
+                        <div className="text-center text-[10px] text-red-600 mt-2">
+                          {voidBillSize === '80mm' ? '48 chars width' : '32 chars width'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <Button className="gap-2" onClick={handleSaveReceiptSettings}>
+                <Save className="h-4 w-4" />
+                {t.save}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="station" className="space-y-4">
+          <Card className="border-violet-100 shadow-sm overflow-hidden">
+            <CardHeader className="bg-violet-50/50 border-b border-violet-100">
+              <CardTitle className="text-violet-900">{t.stationMapping}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-zinc-500 mb-4">
+                {t.mappingText}
+              </p>
+
+              <div className="rounded-md border border-zinc-200">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-indigo-50 bg-indigo-50/20 text-left text-indigo-600">
+                      <th className="p-3 font-medium">{t.category}</th>
+                      <th className="p-3 font-medium">{t.items}</th>
+                      <th className="p-3 font-medium">{t.printer}</th>
+                      <th className="p-3 font-medium text-right">{t.actions}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {localStationMappings.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="p-6 text-center text-zinc-500">
+                          {t.noItemsFound}
+                        </td>
+                      </tr>
+                    ) : (
+                      localStationMappings.map((mapping) => {
+                        const categoryItems = displayItems.filter((item) => item.category_id === mapping.categoryId);
+                        return (
+                          <tr key={mapping.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
+                            <td className="p-3">
+                              <select
+                                className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                value={mapping.categoryId}
+                                onChange={(e) => updateStationRow(mapping.id, 'categoryId', e.target.value)}
+                              >
+                                {categories.length === 0 ? (
+                                  <option value="">{t.noItemsFound}</option>
+                                ) : (
+                                  categories.map((category) => (
+                                    <option key={category.id} value={category.id}>
+                                      {category.name}
+                                    </option>
+                                  ))
+                                )}
+                              </select>
+                            </td>
+                            <td className="p-3">
+                              <select
+                                className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                value={mapping.selectedItemId || '*'}
+                                onChange={(e) => updateStationRow(mapping.id, 'selectedItemId', e.target.value)}
+                                disabled={!mapping.categoryId}
+                              >
+                                <option value="*">{t.allItems}</option>
+                                {categoryItems.map((item) => (
+                                  <option key={item.id} value={item.id}>
+                                    {item.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="p-3">
+                              <select
+                                className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                value={mapping.printerId || ''}
+                                onChange={(e) => updateStationRow(mapping.id, 'printerId', e.target.value)}
+                              >
+                                {localPrinters.length === 0 ? (
+                                  <option value="">{t.noItemsFound}</option>
+                                ) : (
+                                  localPrinters.map((printer) => (
+                                    <option key={printer.id} value={printer.id}>
+                                      {printer.name} ({printer.ipAddress})
+                                    </option>
+                                  ))
+                                )}
+                              </select>
+                            </td>
+                            <td className="p-3 text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                                onClick={() => handleDeleteStationMapping(mapping.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex gap-2 mt-4">
+                <Button onClick={handleAddStationMapping} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  {t.addMapping}
+                </Button>
+                <Button variant="outline" className="gap-2" onClick={handleSaveStationMappings}>
+                  <Save className="h-4 w-4" />
+                  {t.save}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="license" className="space-y-4">
+          <Card className="border-rose-100 shadow-sm overflow-hidden">
+            <CardHeader className="bg-rose-50/50 border-b border-rose-100">
+              <CardTitle className="text-rose-900">{t.licenseTitle}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-4 max-w-lg">
+                <div className="space-y-2">
+                  <Label htmlFor="license-key">{t.licenseKey}</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleSyncLicense}
+                      disabled={isActivating}
+                      title="Sync License"
+                      className="shrink-0"
+                    >
+                      <RefreshCw className={isActivating ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+                    </Button>
+                    <Input
+                      id="license-key"
+                      placeholder="POS-XXXX-XXXX-XXXX-XXXX"
+                      value={licenseKey}
+                      onChange={(e) => setLicenseKey(e.target.value)}
+                      disabled={!!serverLicenseKey || licenseInfo?.active}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleViewLicenseData}
+                      disabled={isActivating}
+                      className="shrink-0"
+                      title="View license data"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                {activationMessage && (
+                  <p className={`text-sm ${licenseInfo?.active ? 'text-green-600' : 'text-red-500'}`}>
+                    {activationMessage}
+                  </p>
+                )}
+
+                {licenseInfo?.active ? (
+                  <div className="mt-6 space-y-4">
+                    <div className="p-4 border border-green-200 bg-green-50 rounded-md">
+                      <p className="font-semibold text-green-800">{t.activeTitle}</p>
+                      <p className="text-sm text-green-700">{t.licenseStatus}</p>
+                      {licenseInfo.expiresAt && (
+                        <div className="space-y-1 mt-2">
+                          <p className="text-xs text-green-600 font-bold">
+                            {t.expires}: {licenseInfo.expiresAt} ({daysRemaining > 0 ? `${daysRemaining} ${t.daysLeft}` : 'Expired'})
+                          </p>
+                          {licenseInfo.renewDate && (
+                            <p className="text-[11px] text-green-700/80">
+                              {t.lastVerified}: {licenseInfo.renewDate}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {licenseInfo.key && (
+                        <p className="text-[11px] text-green-700/80 mt-2">
+                          {t.activeKey}: {licenseInfo.key}
+                        </p>
+                      )}
+                      <p className="text-xs text-green-600 font-mono mt-2">{t.activeMachineId}: {licenseInfo.machineId}</p>
+                      {licenseSyncAt && (
+                        <p className="text-[11px] text-green-700/80 mt-1">
+                          Last synced: {licenseSyncAt}
+                        </p>
+                      )}
+                      {/* {licenseApiData && (
+                        <div className="mt-3 rounded border border-green-200 bg-white/70 p-2 text-[11px] text-green-900">
+                          <p className="font-semibold">Saved License API Data</p>
+                          <ul className="mt-2 space-y-1">
+                            {Object.entries(licenseApiData).map(([key, value]) => (
+                              <li key={key} className="flex items-start gap-2">
+                                <span className="font-mono text-[10px] text-green-800">{key}:</span>
+                                <span className="break-words">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )} */}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2"
+                        onClick={handleSyncLicense}
+                        disabled={isActivating}
+                      >
+                        <RefreshCw className={isActivating ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+                        {t.refreshActivation}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2"
+                        onClick={handleCheckActivationStatus}
+                        disabled={isActivating}
+                      >
+                        <Eye className="h-4 w-4" />
+                        {t.checkActivation}
+                      </Button>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      className="w-full text-red-600 border-red-200 hover:bg-red-50"
+                      onClick={handleReturnLicense}
+                      disabled={isActivating}
+                    >
+                      {isActivating ? t.activating : t.returnLicense}
+                    </Button>
+                    
+                  </div>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {(licenseInfo.expiresAt || licenseInfo.renewDate || licenseInfo.key) && (
+                      <div className="p-3 border border-red-200 bg-red-50 rounded-md">
+                        {licenseInfo.expiresAt && (
+                          <p className="text-xs text-red-700 font-semibold">
+                            {t.expires}: {licenseInfo.expiresAt}
+                          </p>
+                        )}
+                        {licenseInfo.renewDate && (
+                          <p className="text-[11px] text-red-700/80 mt-1">
+                            {t.lastVerified}: {licenseInfo.renewDate}
+                          </p>
+                        )}
+                        {licenseInfo.key && (
+                          <p className="text-[11px] text-red-700/80 mt-1">
+                            {t.activeKey}: {licenseInfo.key}
+                          </p>
+                        )}
+                        {licenseInfo.machineId && (
+                          <p className="text-[11px] text-red-700/80 mt-1">
+                            {t.activeMachineId}: {licenseInfo.machineId}
+                          </p>
+                        )}
+                        {licenseSyncAt && (
+                          <p className="text-[11px] text-red-700/80 mt-1">
+                            Last synced: {licenseSyncAt}
+                          </p>
+                        )}
+                        {licenseApiData && (
+                          <div className="mt-2 rounded border border-red-200 bg-white/70 p-2 text-[11px] text-red-900">
+                            <p className="font-semibold">Saved License API Data</p>
+                            <ul className="mt-2 space-y-1">
+                              {Object.entries(licenseApiData).map(([key, value]) => (
+                                <li key={key} className="flex items-start gap-2">
+                                  <span className="font-mono text-[10px] text-red-800">{key}:</span>
+                                  <span className="break-words">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <Button
+                      className="w-full"
+                      onClick={handleActivateLicense}
+                      disabled={isActivating || !licenseKey}
+                    >
+                      {isActivating ? t.activating : t.activate}
+                    </Button>
+                    
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2"
+                        onClick={handleSyncLicense}
+                        disabled={isActivating}
+                      >
+                        <RefreshCw className={isActivating ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+                        {t.refreshActivation}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2"
+                        onClick={handleCheckActivationStatus}
+                        disabled={isActivating}
+                      >
+                        <Eye className="h-4 w-4" />
+                        {t.checkActivation}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* {licenseApiData && (
+                  <div className="mt-4 rounded-md border border-zinc-200 bg-white">
+                    <div className="border-b border-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-700">
+                      License Data
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-zinc-50 text-zinc-600">
+                          <tr>
+                            <th className="px-4 py-2 text-left font-semibold">License Key</th>
+                            <th className="px-4 py-2 text-left font-semibold">Product</th>
+                            <th className="px-4 py-2 text-left font-semibold">Status</th>
+                            <th className="px-4 py-2 text-left font-semibold">Expires</th>
+                            <th className="px-4 py-2 text-left font-semibold">Renew</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(() => {
+                            const row = getLicenseRow();
+                            return (
+                              <tr className="border-b border-indigo-50 bg-indigo-50/20 text-left text-indigo-600">
+                                <td className="px-4 py-2">{row.key || '-'}</td>
+                                <td className="px-4 py-2">{row.product || '-'}</td>
+                                <td className="px-4 py-2">
+                                  {String(row.status) || '-'}
+                                </td>
+                                <td className="px-4 py-2">{row.expires || '-'}</td>
+                                <td className="px-4 py-2">{row.renew || '-'}</td>
+                              </tr>
+                            );
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )} */}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="update" className="space-y-4">
+          <UpdateTab translations={{
+            systemUpdate: t.systemUpdate,
+            currentVersion: t.currentVersion,
+            latestVersion: t.latestVersion,
+            checkForUpdates: t.checkForUpdates,
+            checking: t.checking,
+            updateNow: t.updateNow,
+            updating: t.updating,
+            updateAvailable: t.updateAvailable,
+            upToDate: t.upToDate,
+            updateFailed: t.updateFailed,
+            updateSuccess: t.updateSuccess,
+            updateConfirm: t.updateConfirm,
+            updateDescription: t.updateDescription
+          }} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

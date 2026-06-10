@@ -1,0 +1,5 @@
+{
+  "name": "Supabase POS System",
+  "description": "A comprehensive Point of Sale system connected to Supabase, featuring order management, inventory, expenses, reports, and advanced settings.",
+  "requestFramePermissions": []
+}
