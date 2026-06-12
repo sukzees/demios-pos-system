@@ -2560,8 +2560,10 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       : '';
     const transferQrHtml = (receiptSettings.showBankDetail && bankForDisplay?.qrCodeImage)
       ? '<div style="text-align:center; margin-top: 12px; padding-top: 10px; border-top: 1px dotted #000;">' +
-      '<div class="font-bold" style="font-size: 12px; margin-bottom: 6px;">Scan to Pay</div>' +
-      '<img src="' + bankForDisplay.qrCodeImage + '" alt="Bank QR Code" style="width: 130px; height: 130px; object-fit: contain; display: block; margin: 0 auto;" />' +
+      '<div class="font-bold" style="font-size: 14px; margin-bottom: 8px;">Scan to Pay</div>' +
+      '<div style="background: white; padding: 10px; display: inline-block; border: 2px solid #000;">' +
+      '<img src="' + bankForDisplay.qrCodeImage + '" alt="Bank QR Code" style="width: 220px; height: 220px; object-fit: contain; display: block; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; image-rendering: pixelated;" />' +
+      '</div>' +
       '</div>'
       : '';
 
@@ -2572,6 +2574,7 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '<meta charset="UTF-8">' +
       '<style>' +
       "@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;500;700&display=swap');" +
+      "* { font-family: 'Noto Sans Lao', sans-serif; }" +
       "body { font-family: 'Noto Sans Lao', sans-serif; padding: 20px; max-width: 300px; margin: 0 auto; color: #000; }" +
       '.text-center { text-align: center; }' +
       '.mb-4 { margin-bottom: 1rem; }' +
@@ -2582,8 +2585,9 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '.flex { display: flex; justify-content: space-between; }' +
       '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 10px 0; }' +
       '.space-y-1 > div { margin-bottom: 4px; }' +
-      'table { width: 100%; border-collapse: collapse; }' +
-      'th, td { font-size: 12px; }' +
+      'table { width: 100%; border-collapse: collapse; font-family: \'Noto Sans Lao\', sans-serif; }' +
+      'th, td { font-size: 12px; font-family: \'Noto Sans Lao\', sans-serif; }' +
+      'h1, h2, h3, h4, h5, h6, p, div, span { font-family: \'Noto Sans Lao\', sans-serif; }' +
       '</style>' +
       '</head>' +
       '<body>' +
