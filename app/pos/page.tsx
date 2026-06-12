@@ -2546,18 +2546,22 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '<span>' + formatCurrency(change) + '</span>' +
       '</div>'
       : '';
-    const transferDetailsHtml = (activeTab === 'transfer' && receiptSettings.showBankDetail && selectedTransferBank)
+    
+    // Get first enabled bank for QR code display (regardless of payment method)
+    const bankForDisplay = selectedTransferBank || transferBanks.find(b => b.enabledForTransfer);
+    
+    const transferDetailsHtml = (receiptSettings.showBankDetail && bankForDisplay)
       ? '<div style="margin-top: 8px; border-top: 1px dotted #000; padding-top: 6px;">' +
       '<div class="font-bold" style="margin-bottom: 4px;">Bank Transfer Details</div>' +
-      '<div>Bank: ' + (selectedTransferBank?.bankName || '-') + '</div>' +
-      '<div>Account Name: ' + (selectedTransferBank?.accountName || '-') + '</div>' +
-      '<div>Account No: ' + (selectedTransferBank?.accountNumber || '-') + '</div>' +
+      '<div>Bank: ' + (bankForDisplay?.bankName || '-') + '</div>' +
+      '<div>Account Name: ' + (bankForDisplay?.accountName || '-') + '</div>' +
+      '<div>Account No: ' + (bankForDisplay?.accountNumber || '-') + '</div>' +
       '</div>'
       : '';
-    const transferQrHtml = (activeTab === 'transfer' && receiptSettings.showBankDetail && selectedTransferBank?.qrCodeImage)
+    const transferQrHtml = (receiptSettings.showBankDetail && bankForDisplay?.qrCodeImage)
       ? '<div style="text-align:center; margin-top: 12px; padding-top: 10px; border-top: 1px dotted #000;">' +
       '<div class="font-bold" style="font-size: 12px; margin-bottom: 6px;">Scan to Pay</div>' +
-      '<img src="' + selectedTransferBank.qrCodeImage + '" alt="Bank QR Code" style="width: 160px; height: 160px; object-fit: contain; display: block; margin: 0 auto;" />' +
+      '<img src="' + bankForDisplay.qrCodeImage + '" alt="Bank QR Code" style="width: 160px; height: 160px; object-fit: contain; display: block; margin: 0 auto;" />' +
       '</div>'
       : '';
 
