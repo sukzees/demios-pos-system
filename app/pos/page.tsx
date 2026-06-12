@@ -2546,9 +2546,9 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '<span>' + formatCurrency(change) + '</span>' +
       '</div>'
       : '';
-    const transferDetailsHtml = (activeTab === 'transfer' && receiptSettings.showBankDetail)
+    const transferDetailsHtml = (activeTab === 'transfer' && receiptSettings.showBankDetail && selectedTransferBank)
       ? '<div style="margin-top: 8px; border-top: 1px dotted #000; padding-top: 6px;">' +
-      '<div class="font-bold" style="margin-bottom: 4px;">Bank</div>' +
+      '<div class="font-bold" style="margin-bottom: 4px;">Bank Transfer Details</div>' +
       '<div>Bank: ' + (selectedTransferBank?.bankName || '-') + '</div>' +
       '<div>Account Name: ' + (selectedTransferBank?.accountName || '-') + '</div>' +
       '<div>Account No: ' + (selectedTransferBank?.accountNumber || '-') + '</div>' +
@@ -2556,8 +2556,8 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       : '';
     const transferQrHtml = (activeTab === 'transfer' && receiptSettings.showBankDetail && selectedTransferBank?.qrCodeImage)
       ? '<div style="text-align:center; margin-top: 12px; padding-top: 10px; border-top: 1px dotted #000;">' +
-      '<div class="font-bold" style="font-size: 12px; margin-bottom: 6px;">Bank QR Code</div>' +
-      '<img src="' + selectedTransferBank.qrCodeImage + '" alt="Bank QR Code" style="width: 130px; height: 130px; object-fit: contain; display: block; margin: 0 auto;" />' +
+      '<div class="font-bold" style="font-size: 12px; margin-bottom: 6px;">Scan to Pay</div>' +
+      '<img src="' + selectedTransferBank.qrCodeImage + '" alt="Bank QR Code" style="width: 160px; height: 160px; object-fit: contain; display: block; margin: 0 auto;" />' +
       '</div>'
       : '';
 
@@ -2644,9 +2644,6 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '<div class="text-center mt-6 text-xs">' +
       receiptSettings.footerText +
       '</div>' +
-      '<script>' +
-      'window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 500); }' +
-      '</script>' +
       '</body>' +
       '</html>';
 
@@ -2675,24 +2672,27 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
     }
 
     // System-Driver or no printer configured - use browser print
-    if (silentPrint) {
-      // Silent print mode - use new window with auto print
-      const printWindow = window.open('', '_blank', 'width=800,height=600');
-      if (printWindow) {
-        printWindow.document.open();
-        printWindow.document.write(receiptHtml);
-        printWindow.document.close();
-        // Auto print and close handled by script in receiptHtml
-      } else {
-        console.error('Could not open print window. Check popup blocker.');
-      }
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(receiptHtml);
+      printWindow.document.close();
+      
+      // Wait for content to load before printing
+      printWindow.onload = function() {
+        printWindow.focus();
+        printWindow.print();
+        
+        // Only close if silentPrint is enabled
+        if (silentPrint) {
+          setTimeout(() => {
+            printWindow.close();
+          }, 500);
+        }
+      };
     } else {
-      // Manual print mode - open window without auto close
-      const printWindow = window.open('', '_blank', 'width=400,height=600');
-      if (printWindow) {
-        printWindow.document.write(receiptHtml);
-        printWindow.document.close();
-      }
+      console.error('Could not open print window. Check popup blocker.');
+      alert('Could not open print window. Please allow popups for this site.');
     }
   };
 
