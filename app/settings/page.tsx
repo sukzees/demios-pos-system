@@ -158,6 +158,7 @@ const TRANSLATIONS = {
   lo: {
     settings: 'ການຕັ້ງຄ່າ',
     generalSetting: 'ຕັ້ງຄ່າທົ່ວໄປ',
+    unitConfig: 'ຕັ້ງຄ່າຫົວໜ່ວຍ',
     bankConfig: 'ຕັ້ງຄ່າທະນາຄານ',
     configPrinting: 'ຕັ້ງຄ່າການພິມ',
     receiptCustomization: 'ປັບແຕ່ງໃບບິນ',

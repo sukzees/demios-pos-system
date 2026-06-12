@@ -2561,7 +2561,7 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
     const transferQrHtml = (receiptSettings.showBankDetail && bankForDisplay?.qrCodeImage)
       ? '<div style="text-align:center; margin-top: 12px; padding-top: 10px; border-top: 1px dotted #000;">' +
       '<div class="font-bold" style="font-size: 12px; margin-bottom: 6px;">Scan to Pay</div>' +
-      '<img src="' + bankForDisplay.qrCodeImage + '" alt="Bank QR Code" style="width: 160px; height: 160px; object-fit: contain; display: block; margin: 0 auto;" />' +
+      '<img src="' + bankForDisplay.qrCodeImage + '" alt="Bank QR Code" style="width: 130px; height: 130px; object-fit: contain; display: block; margin: 0 auto;" />' +
       '</div>'
       : '';
 
