@@ -2260,19 +2260,19 @@ export default function SettingsPage() {
                   <div className="flex justify-center">
                     <div className={`${kitchenBillSize === '80mm' ? 'w-[400px]' : 'w-[280px]'} bg-blue-50/30 p-4 border border-blue-200 shadow-sm font-mono`}>
                       <div className="text-center font-bold text-blue-900 text-base">*** KITCHEN ***</div>
-                      <div className="border-t border-dashed border-blue-300 my-1"></div>
+                      <div className="border-t border-dashed border-blue-300 my-2"></div>
                       <div className="text-blue-800 font-semibold text-sm">
                         <div>Table T1</div>
                         <div>{new Date().toLocaleString()}</div>
                       </div>
-                      <div className="border-t border-dashed border-blue-300 my-1"></div>
-                      <div className="text-blue-800 text-sm">
+                      <div className="border-t border-dashed border-blue-300 my-2"></div>
+                      <div className="text-blue-800 text-sm space-y-1">
                         <div>2x  Pad Thai</div>
-                        <div className="pl-4 text-xs">Large</div>
+                        <div className="pl-5 text-xs">Large</div>
                       </div>
-                      <div className="border-t border-dashed border-blue-300 my-1"></div>
+                      <div className="border-t border-dashed border-blue-300 my-2"></div>
                       <div className="text-center text-[10px] text-blue-600 mt-2">
-                        {kitchenBillSize === '80mm' ? '48 chars width' : '32 chars width'}
+                        {kitchenBillSize === '80mm' ? '80mm paper' : '58mm paper'}
                       </div>
                     </div>
                   </div>
@@ -2361,23 +2361,23 @@ export default function SettingsPage() {
                     <div className="flex justify-center">
                       <div className={`${voidBillSize === '80mm' ? 'w-[400px]' : 'w-[280px]'} bg-red-50/30 p-4 border border-red-200 shadow-sm font-mono`}>
                         <div className="text-center font-bold text-red-700 text-base">*** CANCEL ORDER ***</div>
-                        <div className="border-t border-dashed border-red-300 my-1"></div>
+                        <div className="border-t border-dashed border-red-300 my-2"></div>
                         <div className="text-red-800 font-semibold text-sm">
                           <div>Table T1</div>
                           <div>{new Date().toLocaleString()}</div>
                         </div>
-                        <div className="border-t border-dashed border-red-300 my-1"></div>
+                        <div className="border-t border-dashed border-red-300 my-2"></div>
                         <div className="text-red-800">
                           <div className="font-semibold text-sm">CANCELLED ITEM:</div>
                           <div className="h-2"></div>
                           <div className="text-sm">1x  Pad Thai</div>
-                          <div className="pl-4 text-xs">Large</div>
+                          <div className="pl-5 text-xs">Large</div>
                         </div>
-                        <div className="border-t border-dashed border-red-300 my-1"></div>
+                        <div className="border-t border-dashed border-red-300 my-2"></div>
                         <div className="text-red-800 text-sm">Please discard this item</div>
-                        <div className="border-t border-dashed border-red-300 my-1"></div>
+                        <div className="border-t border-dashed border-red-300 my-2"></div>
                         <div className="text-center text-[10px] text-red-600 mt-2">
-                          {voidBillSize === '80mm' ? '48 chars width' : '32 chars width'}
+                          {voidBillSize === '80mm' ? '80mm paper' : '58mm paper'}
                         </div>
                       </div>
                     </div>

@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   total_amount NUMERIC NOT NULL DEFAULT 0,
   status TEXT NOT NULL CHECK (status IN ('pending', 'completed', 'cancelled')),
-  payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'card', 'online')),
+  payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'card', 'online', 'transfer')),
   notes TEXT,
   table_id UUID REFERENCES public.tables(id) ON DELETE SET NULL,
   zone_id UUID REFERENCES public.zones(id) ON DELETE SET NULL,

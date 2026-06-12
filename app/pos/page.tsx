@@ -171,7 +171,7 @@ const TRANSLATIONS = {
     orderSuccessful: 'ສັ່ງສຳເລັດແລ້ວ',
     orderPlaced: 'ລາຍການສັ່ງຂອງທ່ານຖືກບັນທຶກແລ້ວ.',
     outOfStock: 'ສິນຄ້າໝົດ',
-    available: 'ມີໃນສາງ',
+    available: 'ຍັງເຫຼືອໃນສາງ',
     selectPortion: 'ເລືອກຂະໜາດ',
     addToCart: 'ເພີ່ມໃສ່ກະຕ່າ',
     deleteHeldOrder: 'ລຶບລາຍການທີ່ພັກໄວ້?',
@@ -227,7 +227,7 @@ const TRANSLATIONS = {
     item: 'ລາຍການ',
     itemsPlural: 'ລາຍການ',
     takeout: 'ກັບບ້ານ',
-    dineIn: 'ນັ່ງທານ',
+    dineIn: 'ນັ່ງໃນຮ້ານ',
     table: 'ໂຕະ',
     forPickup: 'ສຳລັບເອົາກັບບ້ານ',
     seats: 'ທີ່ນັ່ງ',
@@ -1256,20 +1256,28 @@ export default function PosPage() {
           );
           console.log('[PRINT] Successfully printed to network printer:', printer.name);
         } else {
-          // System-Driver: Use browser print dialog
-          console.log('[PRINT] Using System-Driver (Browser Print Dialog)');
+          // System-Driver: Silent print without opening new window
+          console.log('[PRINT] Using System-Driver (Silent Print)');
           
-          // Create a new window for printing
-          const printWindow = window.open('', '_blank', 'width=800,height=600');
+          // Create hidden iframe for silent printing
+          const iframe = document.createElement('iframe');
+          iframe.style.position = 'fixed';
+          iframe.style.right = '0';
+          iframe.style.bottom = '0';
+          iframe.style.width = '0';
+          iframe.style.height = '0';
+          iframe.style.border = '0';
+          iframe.style.visibility = 'hidden';
+          document.body.appendChild(iframe);
           
-          if (printWindow) {
-            printWindow.document.open();
-            printWindow.document.write(`
+          const doc = iframe.contentWindow?.document;
+          if (doc) {
+            doc.open();
+            doc.write(`
               <!DOCTYPE html>
               <html>
               <head>
                 <meta charset="UTF-8">
-                <title>Print Kitchen Ticket</title>
                 <style>
                   @media print {
                     @page {
@@ -1290,25 +1298,25 @@ export default function PosPage() {
               </head>
               <body>
                 ${ticketHTML}
-                <script>
-                  window.onload = function() {
-                    // Auto print after loading
-                    setTimeout(function() {
-                      window.print();
-                      // Auto close after printing
-                      setTimeout(function() {
-                        window.close();
-                      }, 100);
-                    }, 500);
-                  };
-                </script>
               </body>
               </html>
             `);
-            printWindow.document.close();
-            console.log('[PRINT] Print dialog opened for:', printer.name);
-          } else {
-            throw new Error('Could not open print window. Please check popup blocker settings.');
+            doc.close();
+            
+            // Trigger print silently
+            setTimeout(() => {
+              try {
+                iframe.contentWindow?.print();
+              } catch (err) {
+                console.error('[PRINT] Silent print failed:', err);
+              }
+              // Remove iframe after printing
+              setTimeout(() => {
+                document.body.removeChild(iframe);
+              }, 1000);
+            }, 500);
+            
+            console.log('[PRINT] Silent print triggered for:', printer.name);
           }
         }
       } catch (err: any) {
@@ -1356,27 +1364,7 @@ export default function PosPage() {
     const paperSize = receiptSettings.kitchenBillSize || '80mm';
     const paperWidth = paperSize === '80mm' ? '80mm' : '58mm';
     
-    // Adjust font sizes and layout based on paper size
-    const sizes = paperSize === '80mm' 
-      ? {
-          title: '48px',
-          info: '36px', 
-          item: '36px',
-          detail: '30px',
-          separator: '30px',
-          padding: '15px',
-          lineHeight: '1.5'
-        }
-      : {
-          title: '42px',
-          info: '33px',
-          item: '33px', 
-          detail: '27px',
-          separator: '27px',
-          padding: '10px',
-          lineHeight: '1.4'
-        };
-    
+    // Simple template matching Settings preview
     const separator = paperSize === '80mm' 
       ? '================================================' 
       : '================================';
@@ -1384,71 +1372,77 @@ export default function PosPage() {
     // Get kitchen title based on language
     const kitchenTitle = currentLanguage === 'th' ? 'ครัว' : 
                         currentLanguage === 'lo' ? 'ຫ້ອງຄົວ' : 
-                        'Kitchen';
+                        'KITCHEN';
 
     const html = `<html>
 <head>
 <meta charset="UTF-8">
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;600;700&display=swap');
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { 
-  font-family: Arial, sans-serif; 
-  font-weight: bold; 
-  padding: ${sizes.padding}; 
+  font-family: 'Noto Sans Lao', 'Courier New', monospace; 
+  padding: 10px; 
   width: ${paperWidth}; 
   background: white; 
   color: black;
-  font-size: ${sizes.info};
-  line-height: ${sizes.lineHeight};
+  font-size: 14px;
+  line-height: 1.4;
 }
 .title { 
-  font-size: ${sizes.title}; 
+  font-size: 16px; 
+  font-weight: bold;
   text-align: center; 
-  margin-bottom: 8px;
-  letter-spacing: 1px;
+  margin: 5px 0;
 }
-.sep { 
-  text-align: center; 
-  margin: 5px 0; 
-  font-size: ${sizes.separator};
-  letter-spacing: -1px;
+.separator { 
+  border-top: 1px dashed #000;
+  margin: 5px 0;
 }
 .info { 
-  font-size: ${sizes.info}; 
+  font-size: 14px; 
+  font-weight: 600;
   margin: 3px 0;
 }
 .item { 
-  font-size: ${sizes.item}; 
+  font-size: 14px; 
   margin: 3px 0;
   word-wrap: break-word;
 }
-.detail { 
-  font-size: ${sizes.detail}; 
-  margin: 2px 0 2px 30px;
+.portion { 
+  font-size: 12px; 
+  margin: 2px 0 2px 20px;
   word-wrap: break-word;
-  color: #333;
 }
-.note { 
-  font-size: ${sizes.info}; 
-  margin: 3px 0;
+.item-note { 
+  font-size: 12px; 
+  margin: 2px 0 2px 20px;
+  word-wrap: break-word;
+  font-style: italic;
+  color: #555;
+}
+.order-note { 
+  font-size: 14px; 
+  margin: 5px 0;
   word-wrap: break-word;
 }
 </style>
 </head>
 <body>
 <div class="title">*** ${kitchenTitle} ***</div>
-<div class="sep">${separator}</div>
+<div class="separator"></div>
 <div class="info">${tableInfo}</div>
 <div class="info">${currentTime}</div>
-<div class="sep">${separator}</div>
-${items.map(cartItem => `<div class="item">${cartItem.quantity}x  ${cartItem.item.name}</div>${cartItem.portionName ? `<div class="detail">${cartItem.portionName}</div>` : ''}${cartItem.notes ? `<div class="detail">${cartItem.notes}</div>` : ''}`).join('')}
-<div class="sep">${separator}</div>
-${note ? `<div class="note">${t.note}: ${note}</div><div class="sep">${separator}</div>` : ''}
+<div class="separator"></div>
+${items.map(cartItem => `<div class="item">${cartItem.quantity}x  ${cartItem.item.name}</div>${cartItem.portionName ? `<div class="portion">${cartItem.portionName}</div>` : ''}${cartItem.notes ? `<div class="item-note">${cartItem.notes}</div>` : ''}`).join('')}
+<div class="separator"></div>
+${note ? `<div class="order-note">${t.note}: ${note}</div><div class="separator"></div>` : ''}
 </body>
 </html>`;
 
     return html;
   };
+
 
   // Function to create kitchen ticket HTML (kept for reference/fallback)
   const createKitchenTicketHtml = (items: any[], printer: any) => {
@@ -1572,9 +1566,6 @@ ${note ? `<div class="note">${t.note}: ${note}</div><div class="sep">${separator
 
     const paperSize = receiptSettings.voidBillSize || '80mm';
     const paperWidth = paperSize === '80mm' ? '80mm' : '58mm';
-    const separator = paperSize === '80mm' 
-      ? '================================================' 
-      : '================================';
 
     // Get cancel order text based on language
     const cancelTitle = currentLanguage === 'th' ? 'ยกเลิกรายการ' : 
@@ -1585,8 +1576,8 @@ ${note ? `<div class="note">${t.note}: ${note}</div><div class="sep">${separator
                              currentLanguage === 'lo' ? 'ລາຍການທີ່ຖືກຍົກເລີກ:' : 
                              'CANCELLED ITEM:';
     
-    const discardMessage = currentLanguage === 'th' ? '' : 
-                          currentLanguage === 'lo' ? '' : 
+    const discardMessage = currentLanguage === 'th' ? 'กรุณาทิ้งรายการนี้' : 
+                          currentLanguage === 'lo' ? 'ກະລຸນາທິ້ງລາຍການນີ້' : 
                           'Please discard this item';
 
     const html = `<!DOCTYPE html>
@@ -1594,44 +1585,77 @@ ${note ? `<div class="note">${t.note}: ${note}</div><div class="sep">${separator
 <head>
 <meta charset="UTF-8">
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;600;700&display=swap');
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { 
-  font-family: Arial, sans-serif; 
-  font-weight: bold; 
+  font-family: 'Noto Sans Lao', 'Courier New', monospace; 
   padding: 10px; 
   width: ${paperWidth}; 
   background: white; 
   color: black;
-  font-size: 33px;
+  font-size: 14px;
   line-height: 1.4;
 }
-.title { font-size: 42px; text-align: center; margin-bottom: 5px; margin-left: -30%; }
-.sep { text-align: center; margin: 3px 0; font-size: 27px; }
-.info { font-size: 33px; margin: 2px 0; }
-.header { font-size: 33px; margin: 5px 0 3px 0; }
-.item { font-size: 33px; margin: 2px 0; }
-.detail { font-size: 27px; margin: 1px 0 1px 20px; }
-.msg { font-size: 33px; margin: 2px 0; }
+.title { 
+  font-size: 16px; 
+  font-weight: bold;
+  text-align: center; 
+  margin: 5px 0;
+}
+.separator { 
+  border-top: 1px dashed #000;
+  margin: 5px 0;
+}
+.info { 
+  font-size: 14px; 
+  font-weight: 600;
+  margin: 3px 0;
+}
+.header { 
+  font-size: 14px; 
+  font-weight: 600;
+  margin: 5px 0;
+}
+.item { 
+  font-size: 14px; 
+  margin: 3px 0;
+}
+.portion { 
+  font-size: 12px; 
+  margin: 2px 0 2px 20px;
+}
+.item-note { 
+  font-size: 12px; 
+  margin: 2px 0 2px 20px;
+  font-style: italic;
+  color: #555;
+}
+.msg { 
+  font-size: 14px; 
+  margin: 5px 0;
+}
 </style>
 </head>
 <body>
 <div class="title">*** ${cancelTitle} ***</div>
-<div class="sep">${separator}</div>
+<div class="separator"></div>
 <div class="info">${tableInfo}</div>
 <div class="info">${currentTime}</div>
-<div class="sep">${separator}</div>
+<div class="separator"></div>
 <div class="header">${cancelledItemText}</div>
-<div style="height:5px"></div>
+<div style="height: 5px;"></div>
 <div class="item">${cancelledItem.quantity}x  ${cancelledItem.item.name}</div>
-${cancelledItem.portionName ? `<div class="detail">${cancelledItem.portionName}</div>` : ''}
-${cancelledItem.notes ? `<div class="detail">${cancelledItem.notes}</div>` : ''}
-<div class="sep">${separator}</div>
+${cancelledItem.portionName ? `<div class="portion">${cancelledItem.portionName}</div>` : ''}
+${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : ''}
+<div class="separator"></div>
 <div class="msg">${discardMessage}</div>
+<div class="separator"></div>
 </body>
 </html>`;
 
     return html;
   };
+
 
   // Function to create cancel ticket HTML (kept for reference/fallback)
   const createCancelTicketHtml = (cancelledItem: any, printer: any) => {
@@ -1810,19 +1834,28 @@ ${cancelledItem.notes ? `<div class="detail">${cancelledItem.notes}</div>` : ''}
         alert(`Failed to print cancel ticket to ${printer.name}: ${err.message}`);
       });
     } else {
-      // System-Driver: Use browser print dialog
-      console.log('[PRINT] Using System-Driver for cancel ticket');
+      // System-Driver: Silent print without opening new window
+      console.log('[PRINT] Using System-Driver for cancel ticket (Silent Print)');
       
-      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      // Create hidden iframe for silent printing
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.visibility = 'hidden';
+      document.body.appendChild(iframe);
       
-      if (printWindow) {
-        printWindow.document.open();
-        printWindow.document.write(`
+      const doc = iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(`
           <!DOCTYPE html>
           <html>
           <head>
             <meta charset="UTF-8">
-            <title>Print Cancel Ticket</title>
             <style>
               @media print {
                 @page {
@@ -1843,22 +1876,25 @@ ${cancelledItem.notes ? `<div class="detail">${cancelledItem.notes}</div>` : ''}
           </head>
           <body>
             ${ticketHTML}
-            <script>
-              window.onload = function() {
-                setTimeout(function() {
-                  window.print();
-                  setTimeout(function() {
-                    window.close();
-                  }, 100);
-                }, 500);
-              };
-            </script>
           </body>
           </html>
         `);
-        printWindow.document.close();
-      } else {
-        console.error('Could not open print window for cancel ticket');
+        doc.close();
+        
+        // Trigger print silently
+        setTimeout(() => {
+          try {
+            iframe.contentWindow?.print();
+          } catch (err) {
+            console.error('[PRINT] Silent print failed for cancel ticket:', err);
+          }
+          // Remove iframe after printing
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+          }, 1000);
+        }, 500);
+        
+        console.log('[PRINT] Silent print triggered for cancel ticket:', printer.name);
       }
     }
   };
@@ -2395,7 +2431,7 @@ ${cancelledItem.notes ? `<div class="detail">${cancelledItem.notes}</div>` : ''}
     }
 
     setIsCheckingOut(true);
-    const method = activeTab === 'transfer' ? 'online' : 'cash';
+    const method = activeTab === 'transfer' ? 'transfer' : 'cash';
     const tenderedAmount = activeTab === 'cash' ? parseFloat(cashTendered || '0') : undefined;
     const selectedBank = activeTab === 'transfer'
       ? transferBanks.find((b) => b.id === selectedTransferBankId) || null

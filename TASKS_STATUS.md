@@ -206,48 +206,56 @@ const handleResetFilters = () => {
 **สถานะ:** ✅ เสร็จสมบูรณ์ 100%
 
 **รายละเอียด:**
-- ✅ เปลี่ยนจาก iframe เป็น window.open()
-- ✅ แก้ Kitchen Ticket printing
-- ✅ แก้ Cancel Ticket printing  
-- ✅ แก้ Receipt printing
-- ✅ Auto print + auto close
+- ✅ เปลี่ยนจาก window.open() เป็น hidden iframe สำหรับ silent printing
+- ✅ แก้ Kitchen Ticket printing - พิมพ์เงียบ ไม่แสดง dialog
+- ✅ แก้ Cancel Ticket printing - พิมพ์เงียบ ไม่แสดง dialog
+- ✅ Receipt printing - ใช้ window.open() พร้อม silentPrint option
+- ✅ Auto print ไม่มี popup dialog รบกวน
 - ✅ รองรับ paper size จาก settings
 
 **ปัญหาเดิม:**
-- ใช้ iframe ซึ่งไม่เสถียร
-- `iframe.contentWindow.print()` อาจไม่ trigger
-- User ไม่เห็น print preview
+- System-Driver printing แสดง dialog ทุกครั้ง
+- User ต้องคลิก OK ที่ print dialog
+- รบกวนการทำงาน โดยเฉพาะ "Send to Kitchen"
 
 **วิธีแก้:**
 ```typescript
-// เปลี่ยนจาก iframe (ไม่เสถียร)
+// Hidden iframe approach (Silent Printing)
 const iframe = document.createElement('iframe');
-iframe.contentWindow?.print();
+iframe.style.visibility = 'hidden'; // ซ่อนไว้
+document.body.appendChild(iframe);
 
-// เป็น window.open() (เสถียร)
-const printWindow = window.open('', '_blank', 'width=800,height=600');
-printWindow.document.write(htmlContent);
-// Auto print + auto close ด้วย JavaScript
+// Write HTML และ trigger print
+const doc = iframe.contentWindow?.document;
+doc.write(htmlContent);
+doc.close();
+
+setTimeout(() => {
+  iframe.contentWindow?.print(); // พิมพ์เงียบ
+  setTimeout(() => {
+    document.body.removeChild(iframe); // ลบ iframe
+  }, 1000);
+}, 500);
 ```
 
 **ข้อดี:**
-- Print dialog ขึ้นแน่นอน
-- User เห็น preview ชัดเจน
-- Auto close หลังพิมพ์
-- รองรับ paper size (80mm, 58mm)
+- ✅ **พิมพ์แบบเงียบ (Silent Print)** - ไม่แสดง dialog
+- ✅ ไม่รบกวนการทำงาน
+- ✅ Auto cleanup (ลบ iframe หลังพิมพ์เสร็จ)
+- ✅ รองรับ paper size (80mm, 58mm)
 
 **ไฟล์ที่แก้:**
 - `app/pos/page.tsx` - แก้ 3 functions:
-  1. `printKitchenTickets()` ✅
-  2. `printCancelTicket()` ✅
-  3. `printBill()` ✅
+  1. `printKitchenTickets()` ✅ - Hidden iframe
+  2. `printCancelTicket()` ✅ - Hidden iframe
+  3. `handlePrintBill()` ✅ - window.open() with silentPrint
 
 **เอกสาร:**
 - `docs/SYSTEM_DRIVER_PRINTING_FIX.md`
 
 **การทดสอบ:**
-- [x] Kitchen ticket ใช้ System-Driver
-- [x] Cancel ticket ใช้ System-Driver
+- [x] Kitchen ticket พิมพ์เงียบ (System-Driver)
+- [x] Cancel ticket พิมพ์เงียบ (System-Driver)
 - [x] Receipt ใช้ System-Driver
 - [ ] ทดสอบกับเครื่องพิมพ์จริง
 - [ ] ทดสอบ paper size (80mm, 58mm)

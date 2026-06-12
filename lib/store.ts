@@ -89,7 +89,7 @@ type PendingAction =
   | { type: 'ADD_EXPENSE'; payload: Omit<Expense, 'id' | 'created_at'> & { tempId: string } }
   | { type: 'ADD_EMPLOYEE'; payload: Omit<Employee, 'id' | 'created_at'> & { tempId: string } }
   | { type: 'UPDATE_STOCK'; payload: { itemId: string; stock: number } }
-  | { type: 'CHECKOUT'; payload: { cart: CartLine[]; paymentMethod: 'cash' | 'card' | 'online'; totalAmount: number; date: string; notes?: string; cashTendered?: number; selectedBank?: { id: string; bankName: string; accountName: string; accountNumber: string; qrCodeImage?: string } | null } };
+  | { type: 'CHECKOUT'; payload: { cart: CartLine[]; paymentMethod: 'cash' | 'card' | 'online' | 'transfer'; totalAmount: number; date: string; notes?: string; cashTendered?: number; selectedBank?: { id: string; bankName: string; accountName: string; accountNumber: string; qrCodeImage?: string } | null } };
 
 interface PosState {
   user: Employee | null;
@@ -222,7 +222,7 @@ interface PosState {
   removeHeldOrder: (orderId: string) => void;
   setHeldOrders: (orders: { id: string; cart: CartLine[]; date: string; note?: string; table?: any; orderType?: 'dine-in' | 'takeout' | 'delivery' | null }[]) => void;
   checkout: (
-    paymentMethod: 'cash' | 'card' | 'online',
+    paymentMethod: 'cash' | 'card' | 'online' | 'transfer',
     notes?: string,
     cashTendered?: number,
     selectedBank?: { id: string; bankName: string; accountName: string; accountNumber: string; qrCodeImage?: string } | null,
@@ -2036,7 +2036,7 @@ export const usePosStore = create<PosState>()(
               // Update shift amounts
               set(state => ({
                 shiftCashAmount: state.shiftCashAmount + (paymentMethod === 'cash' && Number.isFinite(cashTendered) ? (cashTendered || 0) : 0),
-                shiftTransferAmount: state.shiftTransferAmount + (paymentMethod === 'online' || paymentMethod === 'card' ? totalAmount : 0)
+                shiftTransferAmount: state.shiftTransferAmount + (paymentMethod === 'transfer' || paymentMethod === 'card' || paymentMethod === 'online' ? totalAmount : 0)
               }));
 
               // Sync shift to database
@@ -2045,7 +2045,7 @@ export const usePosStore = create<PosState>()(
                 try {
                   const shiftData = {
                     cash_amount: shiftCashAmount + (paymentMethod === 'cash' && Number.isFinite(cashTendered) ? (cashTendered || 0) : 0),
-                    transfer_amount: shiftTransferAmount + (paymentMethod === 'online' || paymentMethod === 'card' ? totalAmount : 0)
+                    transfer_amount: shiftTransferAmount + (paymentMethod === 'transfer' || paymentMethod === 'card' || paymentMethod === 'online' ? totalAmount : 0)
                   };
                   
                   // Update existing open shift
@@ -2069,7 +2069,7 @@ export const usePosStore = create<PosState>()(
                       .insert({
                         start_time: get().shiftStartTime,
                         cash_amount: shiftCashAmount + (paymentMethod === 'cash' && Number.isFinite(cashTendered) ? (cashTendered || 0) : 0),
-                        transfer_amount: shiftTransferAmount + (paymentMethod === 'online' || paymentMethod === 'card' ? totalAmount : 0),
+                        transfer_amount: shiftTransferAmount + (paymentMethod === 'transfer' || paymentMethod === 'card' || paymentMethod === 'online' ? totalAmount : 0),
                         status: 'open',
                         started_by: user?.name || null
                       });

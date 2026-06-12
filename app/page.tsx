@@ -22,6 +22,8 @@ const TRANSLATIONS = {
     checking: 'Checking...',
     supabaseNotConfigured: 'Supabase is not configured. Showing mock data. Please configure your Supabase URL and Anon Key in the environment variables.',
     totalRevenue: 'Total Revenue',
+    cashRevenue: 'Cash Revenue',
+    transferRevenue: 'Transfer Revenue',
     orders: 'Orders',
     averageOrderValue: 'Average Order Value',
     activeItems: 'Active Items',
@@ -54,6 +56,8 @@ const TRANSLATIONS = {
     checking: 'ກຳລັງກວດສອບ...',
     supabaseNotConfigured: 'Supabase ບໍ່ໄດ້ຖືກຕັ້ງຄ່າ. ກຳລັງສະແດງຂໍ້ມູນທົດລອງ. ກະລຸນາຕັ້ງຄ່າ Supabase URL ແລະ Anon Key ໃນ environment variables.',
     totalRevenue: 'ລາຍຮັບທັງໝົດ',
+    cashRevenue: 'ລາຍຮັບເງິນສົດ',
+    transferRevenue: 'ລາຍຮັບໂອນເງິນ',
     orders: 'ລາຍການສັ່ງ',
     averageOrderValue: 'ມູນຄ່າສະເລ່ຍຕໍ່ບິນ',
     activeItems: 'ສິນຄ້າທີ່ມີຢູ່',
@@ -86,6 +90,8 @@ const TRANSLATIONS = {
     checking: 'กำลังตรวจสอบ...',
     supabaseNotConfigured: 'ไม่ได้กำหนดค่า Supabase กำลังแสดงข้อมูลจำลอง กรุณากำหนดค่า Supabase URL และ Anon Key ใน environment variables',
     totalRevenue: 'รายได้รวม',
+    cashRevenue: 'รายได้เงินสด',
+    transferRevenue: 'รายได้เงินโอน',
     orders: 'รายการสั่งซื้อ',
     averageOrderValue: 'ยอดขายเฉลี่ยต่อบิล',
     activeItems: 'สินค้าที่มีอยู่',
@@ -125,7 +131,9 @@ export default function DashboardPage() {
     profitMargin: 0,
     totalExpenses: 0,
     netProfit: 0,
-    netProfitMargin: 0
+    netProfitMargin: 0,
+    cashRevenue: 0,
+    transferRevenue: 0
   });
   const [chartData, setChartData] = useState<any[]>([]);
   const [lowStockItems, setLowStockItems] = useState<Item[]>([]);
@@ -235,7 +243,7 @@ export default function DashboardPage() {
         try {
           const { data: orders } = await supabase
             .from('orders')
-            .select('total_amount, created_at, status');
+            .select('total_amount, created_at, status, payment_method');
           const { data: recentOrders } = await supabase
             .from('orders')
             .select('id, total_amount, created_at, status')
@@ -256,6 +264,15 @@ export default function DashboardPage() {
                 return createdAt >= start && createdAt <= end;
               });
               const totalRev = completedOrders.reduce((sum, order: any) => sum + Number(order.total_amount || 0), 0);
+              
+              // Calculate revenue by payment method
+              // Default to 'cash' for old orders without payment_method
+              const cashRev = completedOrders
+                .filter((order: any) => !order.payment_method || order.payment_method === 'cash')
+                .reduce((sum, order: any) => sum + Number(order.total_amount || 0), 0);
+              const transferRev = completedOrders
+                .filter((order: any) => order.payment_method === 'transfer')
+                .reduce((sum, order: any) => sum + Number(order.total_amount || 0), 0);
               
               // Calculate profit
               let totalCost = 0;
@@ -297,7 +314,9 @@ export default function DashboardPage() {
                 profitMargin,
                 totalExpenses,
                 netProfit,
-                netProfitMargin
+                netProfitMargin,
+                cashRevenue: cashRev,
+                transferRevenue: transferRev
               });
 
               setChartData(makeChartData(completedOrders, start, end));
@@ -351,6 +370,8 @@ export default function DashboardPage() {
             return createdAt >= start && createdAt <= end;
           });
           const totalRev = completedInRange.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+          const cashRev = totalRev * 0.6; // Mock: assume 60% cash
+          const transferRev = totalRev * 0.4; // Mock: assume 40% transfer
           const totalCost = totalRev * 0.35; // Mock: assume 35% cost
           const totalProfit = totalRev - totalCost;
           const profitMargin = totalRev > 0 ? (totalProfit / totalRev) * 100 : 0;
@@ -367,7 +388,9 @@ export default function DashboardPage() {
             profitMargin,
             totalExpenses,
             netProfit,
-            netProfitMargin
+            netProfitMargin,
+            cashRevenue: cashRev,
+            transferRevenue: transferRev
           });
           setChartData(makeChartData(mockOrders, start, end));
           setLowStockItems([
@@ -487,7 +510,9 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Row 1: Total Revenue, Transfer Revenue, Cash Revenue, Net Profit */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Total Revenue */}
         <Card className="border-blue-200 bg-blue-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-blue-900">{t.totalRevenue}</CardTitle>
@@ -498,6 +523,47 @@ export default function DashboardPage() {
             <p className="text-xs text-blue-600/70 italic">+20.1% {t.fromLastMonth}</p>
           </CardContent>
         </Card>
+        
+        {/* Transfer Revenue */}
+        <Card className="border-indigo-200 bg-indigo-50/50 shadow-sm overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-semibold text-indigo-900">{t.transferRevenue}</CardTitle>
+            <DollarSign className="h-4 w-4 text-indigo-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-indigo-700">{formatCurrency(stats.transferRevenue, currencySettings)}</div>
+            <p className="text-xs text-indigo-600/70 italic">{stats.totalRevenue > 0 ? ((stats.transferRevenue / stats.totalRevenue) * 100).toFixed(1) : 0}%</p>
+          </CardContent>
+        </Card>
+        
+        {/* Cash Revenue */}
+        <Card className="border-cyan-200 bg-cyan-50/50 shadow-sm overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-semibold text-cyan-900">{t.cashRevenue}</CardTitle>
+            <DollarSign className="h-4 w-4 text-cyan-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-cyan-700">{formatCurrency(stats.cashRevenue, currencySettings)}</div>
+            <p className="text-xs text-cyan-600/70 italic">{stats.totalRevenue > 0 ? ((stats.cashRevenue / stats.totalRevenue) * 100).toFixed(1) : 0}%</p>
+          </CardContent>
+        </Card>
+        
+        {/* Net Profit */}
+        <Card className="border-teal-200 bg-teal-50/50 shadow-sm overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-semibold text-teal-900">{t.netProfit}</CardTitle>
+            <TrendingUp className="h-4 w-4 text-teal-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-teal-700">{formatCurrency(stats.netProfit, currencySettings)}</div>
+            <p className="text-xs text-teal-600/70 italic">{t.netMargin}: {stats.netProfitMargin.toFixed(1)}%</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Row 2: Orders, Average Order Value, Active Items */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {/* Orders */}
         <Card className="border-emerald-200 bg-emerald-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-emerald-900">{t.orders}</CardTitle>
@@ -508,6 +574,8 @@ export default function DashboardPage() {
             <p className="text-xs text-emerald-600/70 italic">+15% {t.fromLastMonth}</p>
           </CardContent>
         </Card>
+        
+        {/* Average Order Value */}
         <Card className="border-violet-200 bg-violet-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-violet-900">{t.averageOrderValue}</CardTitle>
@@ -518,6 +586,8 @@ export default function DashboardPage() {
             <p className="text-xs text-violet-600/70 italic">+5% {t.fromLastMonth}</p>
           </CardContent>
         </Card>
+        
+        {/* Active Items */}
         <Card className="border-amber-200 bg-amber-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-amber-900">{t.activeItems}</CardTitle>
@@ -530,17 +600,9 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="border-green-200 bg-green-50/50 shadow-sm overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-semibold text-green-900">{t.totalProfit}</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-700">{formatCurrency(stats.totalProfit, currencySettings)}</div>
-            <p className="text-xs text-green-600/70 italic">{t.profitMargin}: {stats.profitMargin.toFixed(1)}%</p>
-          </CardContent>
-        </Card>
+      {/* Row 3: Total Expenses, Total Profit */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Total Expenses */}
         <Card className="border-rose-200 bg-rose-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-rose-900">{t.totalExpenses}</CardTitle>
@@ -551,17 +613,20 @@ export default function DashboardPage() {
             <p className="text-xs text-rose-600/70 italic">&nbsp;</p>
           </CardContent>
         </Card>
-        <Card className="border-teal-200 bg-teal-50/50 shadow-sm overflow-hidden">
+        
+        {/* Total Profit */}
+        <Card className="border-green-200 bg-green-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-semibold text-teal-900">{t.netProfit}</CardTitle>
-            <TrendingUp className="h-4 w-4 text-teal-600" />
+            <CardTitle className="text-sm font-semibold text-green-900">{t.totalProfit}</CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-teal-700">{formatCurrency(stats.netProfit, currencySettings)}</div>
-            <p className="text-xs text-teal-600/70 italic">{t.netMargin}: {stats.netProfitMargin.toFixed(1)}%</p>
+            <div className="text-2xl font-bold text-green-700">{formatCurrency(stats.totalProfit, currencySettings)}</div>
+            <p className="text-xs text-green-600/70 italic">{t.profitMargin}: {stats.profitMargin.toFixed(1)}%</p>
           </CardContent>
         </Card>
       </div>
+      
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4 border-zinc-200 shadow-sm overflow-hidden">
           <CardHeader className="bg-zinc-50/50 border-b border-zinc-100">
