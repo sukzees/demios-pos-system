@@ -88,10 +88,11 @@ export type Item = {
   cost_price?: number;
   min_stock?: number;
   inventory_category_id?: string | null;
-  category_id: string;
+  category_id?: string;
   image_url?: string;
   stock?: number;
   is_recipe?: boolean;
+  type?: 'standalone' | 'ingredient' | 'recipe' | 'saleOnly';
   created_at: string;
 };
 

@@ -1469,7 +1469,7 @@ export default function ItemsPage() {
                                   setEditingItem(item);
                                   setEditItemName(item.name);
                                   setEditItemPrice(item.price.toString());
-                                  setEditItemCategory(item.category_id);
+                                  setEditItemCategory(item.category_id || '');
                                   setEditItemStock(String((item as any).stock ?? 0));
                                   setIsEditingRecipe(isRecipeEntity);
                                   setEditInventoryItemSearch('');
