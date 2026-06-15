@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 
@@ -89,6 +89,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
+      preload: path.join(__dirname, 'preload.js'),
     },
     icon: path.join(__dirname, '../public/icons/icon.ico'),
     title: 'POS System',
@@ -300,6 +301,35 @@ app.on('quit', () => {
 
 // Prevent multiple instances
 const gotTheLock = app.requestSingleInstanceLock();
+
+// IPC Handler for silent printing
+ipcMain.handle('print-silent', async (event, html, printerName) => {
+  try {
+    const printWindow = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+      },
+    });
+
+    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+    const options = {
+      silent: true,
+      printBackground: true,
+      deviceName: printerName || '',
+    };
+
+    await printWindow.webContents.print(options);
+    printWindow.close();
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Electron] Silent print error:', error);
+    return { success: false, error: error.message };
+  }
+});
 
 if (!gotTheLock) {
   app.quit();

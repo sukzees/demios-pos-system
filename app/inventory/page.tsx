@@ -554,7 +554,7 @@ function InventoryContent() {
     if (isSupabaseConfigured) {
       try {
         const [itemsRes, categoriesRes, portionsRes] = await Promise.all([
-          supabase.from('items').select('*').order('created_at', { ascending: false }),
+          supabase.from('inventory_items').select('*').order('created_at', { ascending: false }),
           supabase.from('inventory_categories').select('*').order('name'),
           supabase.from('item_portions').select('item_id, portion_name, portion_stock, portion_cost_price, portion_price')
         ]);
@@ -647,7 +647,7 @@ function InventoryContent() {
     const stock = hasPortionStock ? portionStockByItemId[item.id] : (item.stock || 0);
     const minStockAlert = Math.max(0, Number((item as any).min_stock ?? 10));
     const categoryId = String((item as any).inventory_category_id || item.category_id || '');
-    const isStandalone = Boolean(item.is_recipe);
+    const isStandalone = item.type === 'standalone';
     const isOutOfStock = stock === 0;
     const isLowStock = stock > 0 && stock <= minStockAlert;
     const needsAttention = isOutOfStock || isLowStock;
@@ -870,7 +870,7 @@ function InventoryContent() {
           statusText = t.lowStock;
         }
 
-        const typeText = item.is_recipe ? t.standalone : t.ingredient;
+        const typeText = item.type === 'standalone' ? t.standalone : t.ingredient;
         const unit = (item as any).unit || 'pcs';
         const costPrice = (item as any).cost_price ?? item.price ?? 0;
 
@@ -959,7 +959,7 @@ function InventoryContent() {
     try {
       if (isSupabaseConfigured) {
         await supabase.from('item_portions').delete().in('item_id', idsToDelete);
-        const { error } = await supabase.from('items').delete().in('id', idsToDelete);
+        const { error } = await supabase.from('inventory_items').delete().in('id', idsToDelete);
         if (error) throw error;
       }
 
@@ -1096,13 +1096,15 @@ function InventoryContent() {
       if (editingId) {
         // Update existing item
         const { error } = await supabase
-          .from('items')
+          .from('inventory_items')
           .update({
             name: newItem.name,
             cost_price: parseFloat(newItem.price),
+            price: parseFloat(newItem.price),
             inventory_category_id: newItem.inventory_category_id,
             stock: parseInt(newItem.stock) || 0,
-            is_recipe: newItem.itemType === 'standalone',
+            type: newItem.itemType,
+            unit: newItem.unit || 'pcs',
             min_stock: Math.max(0, parseInt(newItem.min_stock) || 0)
           })
           .eq('id', editingId);
@@ -1116,18 +1118,17 @@ function InventoryContent() {
         if (isSupabaseConfigured) {
           const stock = parseInt(newItem.stock) || 0;
           const { data, error } = await supabase
-            .from('items')
+            .from('inventory_items')
             .insert({
               name: newItem.name,
               price: basePrice,
               cost_price: parseFloat(newItem.price),
-              category_id: null,
               inventory_category_id: newItem.inventory_category_id,
               stock,
               image_url: '',
-              is_recipe: newItem.itemType === 'standalone',
-              min_stock: Math.max(0, parseInt(newItem.min_stock) || 0),
-              show_in_menu: false  // Inventory items don't show in menu by default
+              type: newItem.itemType,
+              unit: newItem.unit || 'pcs',
+              min_stock: Math.max(0, parseInt(newItem.min_stock) || 0)
             })
             .select()
             .single();
@@ -1153,7 +1154,8 @@ function InventoryContent() {
               inventory_category_id: newItem.inventory_category_id,
               stock: parseInt(newItem.stock) || 0,
               image_url: '',
-              is_recipe: newItem.itemType === 'standalone',
+              type: newItem.itemType,
+              unit: newItem.unit || 'pcs',
               min_stock: Math.max(0, parseInt(newItem.min_stock) || 0),
               created_at: new Date().toISOString()
             },
@@ -1179,8 +1181,8 @@ function InventoryContent() {
       price: String((item as any).cost_price ?? item.price ?? ''),
       inventory_category_id: String((item as any).inventory_category_id ?? ''),
       stock: (item.stock || 0).toString(),
-      itemType: item.is_recipe ? 'standalone' : 'ingredient',
-      unit: 'pcs',
+      itemType: item.type || 'ingredient',
+      unit: item.unit || 'pcs',
       min_stock: String((item as any).min_stock ?? 10)
     });
     await loadItemPortions(item.id);
@@ -1938,8 +1940,8 @@ function InventoryContent() {
                             </td>
                             <td className="p-4">
                               <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
-                                ${item.is_recipe ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
-                                {item.is_recipe ? `${t.standalone}` : `${t.ingredient}`}
+                                ${item.type === 'standalone' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
+                                {item.type === 'standalone' ? `${t.standalone}` : `${t.ingredient}`}
                               </span>
                             </td>
                             <td className="p-4">

@@ -728,12 +728,19 @@ export const usePosStore = create<PosState>()(
         if (!get().isSupabaseConfigured || !get().isOnline) return;
 
         try {
-          const [itemsRes, categoriesRes] = await Promise.all([
-            supabase.from('items').select('*').eq('show_in_menu', true),  // Only show items marked for menu
+          const [itemsRes, inventoryItemsRes, categoriesRes] = await Promise.all([
+            supabase.from('items').select('*'),  // Menu items
+            supabase.from('inventory_items').select('*'),  // Inventory items
             supabase.from('categories').select('*')
           ]);
 
-          if (itemsRes.data) set({ items: itemsRes.data });
+          // Combine items and inventory_items for Items & Categories page
+          const allItems = [
+            ...(itemsRes.data || []),
+            ...(inventoryItemsRes.data || [])
+          ];
+
+          if (allItems.length > 0) set({ items: allItems });
           if (categoriesRes.data) set({ categories: categoriesRes.data });
         } catch (error) {
           // Error fetching data

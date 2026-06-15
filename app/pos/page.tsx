@@ -69,6 +69,7 @@ const TRANSLATIONS = {
     confirmTransfer: 'Confirm Transfer',
     verifyTransfer: 'Please verify the transfer receipt before confirming.',
     note: 'Note',
+    notes: 'Notes',
     heldOrders: 'Held Orders',
     allCarts: 'All Carts',
     noSavedCarts: 'No saved carts',
@@ -116,8 +117,8 @@ const TRANSLATIONS = {
     time: 'Time:',
     cannotBeUndoneWarning: '⚠️ This action cannot be undone.',
     choosePortionFor: 'Choose a portion for',
-    item: 'ITEM',
-    itemsPlural: 'ITEMS',
+    item: 'Item',
+    itemsPlural: 'Items',
     takeout: 'Takeout',
     dineIn: 'Dine In',
     table: 'Table',
@@ -148,6 +149,11 @@ const TRANSLATIONS = {
     allItemsCancelled: 'All items cancelled',
     sentToKitchenStatus: 'Sent to Kitchen',
     cancelledStatus: 'Cancelled',
+    date: 'Date',
+    unit: 'Unit',
+    price: 'Price',
+    bankTransferDetails: 'Bank Transfer Details',
+    scanToPay: 'Scan to Pay',
   },
   lo: {
     pos: 'ຂາຍສິນຄ້າ',
@@ -259,6 +265,12 @@ const TRANSLATIONS = {
     printing: 'ກຳລັງພິມ...',
     sentToKitchenStatus: 'ສົ່ງຄົວແລ້ວ',
     cancelledStatus: 'ຍົກເລີກ',
+    date: 'ວັນທີ',
+    unit: 'ຈຳນວນ',
+    price: 'ລາຄາ',
+    notes: 'ໝາຍເຫດ',
+    bankTransferDetails: 'ລາຍລະອຽດໂອນເງິນ',
+    scanToPay: 'ສະແກນເພື່ອຈ່າຍ',
   },
   th: {
     pos: 'ขายหน้าร้าน',
@@ -370,6 +382,12 @@ const TRANSLATIONS = {
     printing: 'กำลังพิมพ์...',
     sentToKitchenStatus: 'ส่งครัวแล้ว',
     cancelledStatus: 'ยกเลิก',
+    date: 'วันที่',
+    unit: 'จำนวน',
+    price: 'ราคา',
+    notes: 'หมายเหตุ',
+    bankTransferDetails: 'รายละเอียดโอนเงิน',
+    scanToPay: 'สแกนเพื่อจ่าย',
   }
 };
 
@@ -2497,9 +2515,9 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
     // No need to switch tabs anymore
   };
 
-  const handlePrintBill = () => {
+  const handlePrintBill = async () => {
     if (cart.length === 0) return;
-    const paymentMethodLabel = activeTab === 'transfer' ? 'Transfer' : 'Cash';
+    const paymentMethodLabel = activeTab === 'transfer' ? t.transfer : t.cash;
     const tendered = parseFloat(cashTendered || '0');
     const change = Math.max(0, tendered - total);
     const selectedTransferBank = transferBanks.find((b) => b.id === selectedTransferBankId);
@@ -2515,34 +2533,34 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
 
     const noteHtml = note ?
       '<div style="margin-top: 10px; border-top: 1px dotted #000; padding-top: 5px;">' +
-      '<span class="font-bold">Notes:</span><br>' +
+      '<span class="font-bold">' + t.notes + ':</span><br>' +
       '<span>' + note + '</span>' +
       '</div>' : '';
 
     const tipHtml =
       '<div class="flex justify-between">' +
-      '<span>Tip</span>' +
+      '<span>' + t.tip + '</span>' +
       '<span>' + formatCurrency(tipAmount) + '</span>' +
       '</div>';
     const discountHtml = discountAmount > 0
       ? '<div class="flex justify-between" style="color:#dc2626;">' +
-      '<span>Discount' + (discountType === 'percent' ? ' (' + Math.min(rawDiscountValue, 100) + '%)' : '') + '</span>' +
+      '<span>' + t.discount + (discountType === 'percent' ? ' (' + Math.min(rawDiscountValue, 100) + '%)' : '') + '</span>' +
       '<span>-' + formatCurrency(discountAmount) + '</span>' +
       '</div>'
       : '';
 
     const paymentMethodHtml =
       '<div class="flex justify-between">' +
-      '<span>Payment Method</span>' +
+      '<span>' + t.paymentMethod + '</span>' +
       '<span>' + paymentMethodLabel + '</span>' +
       '</div>';
     const cashDetailsHtml = activeTab === 'cash'
       ? '<div class="flex justify-between">' +
-      '<span>Cash Tendered</span>' +
+      '<span>' + t.cashTendered + '</span>' +
       '<span>' + formatCurrency(Number.isFinite(tendered) ? tendered : 0) + '</span>' +
       '</div>' +
       '<div class="flex justify-between">' +
-      '<span>Change</span>' +
+      '<span>' + t.change + '</span>' +
       '<span>' + formatCurrency(change) + '</span>' +
       '</div>'
       : '';
@@ -2552,15 +2570,15 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
     
     const transferDetailsHtml = (receiptSettings.showBankDetail && bankForDisplay)
       ? '<div style="margin-top: 8px; border-top: 1px dotted #000; padding-top: 6px;">' +
-      '<div class="font-bold" style="margin-bottom: 4px;">Bank Transfer Details</div>' +
-      '<div>Bank: ' + (bankForDisplay?.bankName || '-') + '</div>' +
-      '<div>Account Name: ' + (bankForDisplay?.accountName || '-') + '</div>' +
-      '<div>Account No: ' + (bankForDisplay?.accountNumber || '-') + '</div>' +
+      '<div class="font-bold" style="margin-bottom: 4px;">' + t.bankTransferDetails + '</div>' +
+      '<div>' + t.bank + ': ' + (bankForDisplay?.bankName || '-') + '</div>' +
+      '<div>' + t.accountName + ': ' + (bankForDisplay?.accountName || '-') + '</div>' +
+      '<div>' + t.accountNumber + ': ' + (bankForDisplay?.accountNumber || '-') + '</div>' +
       '</div>'
       : '';
     const transferQrHtml = (receiptSettings.showBankDetail && bankForDisplay?.qrCodeImage)
       ? '<div style="text-align:center; margin-top: 12px; padding-top: 10px; border-top: 1px dotted #000;">' +
-      '<div class="font-bold" style="font-size: 14px; margin-bottom: 8px;">Scan to Pay</div>' +
+      '<div class="font-bold" style="font-size: 14px; margin-bottom: 8px;">' + t.scanToPay + '</div>' +
       '<div style="background: white; padding: 10px; display: inline-block; border: 2px solid #000;">' +
       '<img src="' + bankForDisplay.qrCodeImage + '" alt="Bank QR Code" style="width: 220px; height: 220px; object-fit: contain; display: block; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; image-rendering: pixelated;" />' +
       '</div>' +
@@ -2598,17 +2616,17 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       (receiptSettings.headerText ? '<div class="text-xs mt-2">' + receiptSettings.headerText + '</div>' : '') +
       '</div>' +
       '<div class="text-xs mb-4">' +
-      'Date: ' + new Date().toLocaleString() +
-      (receiptSettings.showTableNumber !== false && currentTable ? '<br/>Table: ' + currentTable.table_number : '') +
+      t.date + ': ' + new Date().toLocaleString() +
+      (receiptSettings.showTableNumber !== false && currentTable ? '<br/>' + t.table + ': ' + currentTable.table_number : '') +
       '</div>' +
       '<div class="border-y text-xs">' +
       '<table>' +
       '<thead>' +
       '<tr>' +
-      '<th style="text-align:left; padding-bottom: 4px;">Item</th>' +
-      '<th style="text-align:right; padding-bottom: 4px;">Unit</th>' +
-      '<th style="text-align:right; padding-bottom: 4px;">Price</th>' +
-      '<th style="text-align:right; padding-bottom: 4px;">Total</th>' +
+      '<th style="text-align:left; padding-bottom: 4px;">' + t.item + '</th>' +
+      '<th style="text-align:right; padding-bottom: 4px;">' + t.unit + '</th>' +
+      '<th style="text-align:right; padding-bottom: 4px;">' + t.price + '</th>' +
+      '<th style="text-align:right; padding-bottom: 4px;">' + t.total + '</th>' +
       '</tr>' +
       '</thead>' +
       '<tbody>' +
@@ -2618,12 +2636,12 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '</div>' +
       '<div class="space-y-1 text-xs mb-4">' +
       '<div class="flex justify-between">' +
-      '<span>Subtotal</span>' +
+      '<span>' + t.subtotal + '</span>' +
       '<span>' + formatCurrency(cartTotal) + '</span>' +
       '</div>' +
       discountHtml +
       '<div class="flex justify-between">' +
-      `<span>Tax (${generalSettings.taxRate}%)</span>` +
+      `<span>${t.tax} (${generalSettings.taxRate}%)</span>` +
       '<span>' + formatCurrency(tax) + '</span>' +
       '</div>' +
       tipHtml +
@@ -2634,7 +2652,7 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '</div>' +
       '<div style="text-align: center; margin-top: 10px; border-top: 1px dashed #000; padding-top: 10px;">' +
       '<div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 12px;">' +
-      '<div style="font-weight: bold; font-size: 14px;">TOTAL</div>' +
+      '<div style="font-weight: bold; font-size: 14px;">' + t.total.toUpperCase() + '</div>' +
       '<div style="font-weight: bold; font-size: 18px;">' + formatCurrency(total) + '</div>' +
       '</div>' +
       '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center;">' +
@@ -2664,6 +2682,7 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       targetPrinter = printerConfigs.find((p: any) => p.isDefault && p.enabled);
     }
 
+    // Network printer
     if (targetPrinter && targetPrinter.ipAddress !== 'System-Driver') {
       setIsPrinting(true);
       setPrintingMessage(`Printing bill to ${targetPrinter.name}...`);
@@ -2679,7 +2698,24 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       return;
     }
 
-    // System-Driver or no printer configured - use browser print
+    // Check if running in Electron and silentPrint is enabled
+    if (typeof window !== 'undefined' && (window as any).electronAPI && silentPrint) {
+      try {
+        const result = await (window as any).electronAPI.printSilent(receiptHtml, targetPrinter?.name || '');
+        if (result.success) {
+          console.log('Silent print successful');
+          return;
+        } else {
+          console.error('Silent print failed:', result.error);
+          // Fall back to browser print
+        }
+      } catch (error) {
+        console.error('Electron print error:', error);
+        // Fall back to browser print
+      }
+    }
+
+    // System-Driver or no printer configured or Electron print failed - use browser print
     const printWindow = window.open('', '_blank', 'width=400,height=600');
     if (printWindow) {
       printWindow.document.open();

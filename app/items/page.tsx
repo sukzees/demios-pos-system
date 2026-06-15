@@ -311,6 +311,10 @@ export default function ItemsPage() {
   const [recipeHasIngredients, setRecipeHasIngredients] = useState<{ [key: string]: boolean }>({});
   const [portionStockByProduct, setPortionStockByProduct] = useState<Record<string, number>>({});
 
+  // Search state for Linked Inventory Item dropdown
+  const [inventoryItemSearch, setInventoryItemSearch] = useState('');
+  const [editInventoryItemSearch, setEditInventoryItemSearch] = useState('');
+
   // Add Item Form State
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
   const [newItemName, setNewItemName] = useState('');
@@ -516,6 +520,7 @@ export default function ItemsPage() {
       setNewItemStock('0');
       setNewItemType('standalone');
       setSelectedStandaloneInventoryItemId('');
+      setInventoryItemSearch('');
       setNewItemDescription('');
       setNewItemUnit('pcs');
       setNewItemMinStock('0');
@@ -704,11 +709,19 @@ export default function ItemsPage() {
   };
 
   const getStandaloneInventoryItems = () => {
-    return items.filter(item => item.is_recipe !== false);
+    // Standalone Inventory Items come from inventory_items table
+    // They have type = 'standalone'
+    const standaloneItems = items.filter(item => 
+      item.type === 'standalone'
+    );
+    console.log('All items from inventory_items:', items);
+    console.log('Standalone inventory items (type === standalone):', standaloneItems);
+    return standaloneItems;
   };
 
   const getAvailableIngredients = () => {
-    return items.filter(item => item.is_recipe === false);
+    // Ingredients come from inventory_items table with type = 'ingredient'
+    return items.filter(item => item.type === 'ingredient');
   };
 
   const loadRecipeIngredients = async (recipeId: string) => {
@@ -784,15 +797,43 @@ export default function ItemsPage() {
         return;
       }
 
-      if (isEditingRecipe) {
+      // Check if currently should be a recipe (based on editItemType)
+      const shouldBeRecipe = editItemType === 'recipe' || editItemType === 'saleOnly';
+      const wasRecipe = isEditingRecipe;
+
+      if (shouldBeRecipe) {
+        // Save as recipe
         const priceToSave = editHasPortions ? parseFloat(validEditPortions[0].price) : parseFloat(editItemPrice);
-        await supabase.from('recipes').update({ name: editItemName, category_id: editItemCategory, price: priceToSave }).eq('id', editingItem.id);
+        
+        if (wasRecipe) {
+          // Update existing recipe
+          await supabase.from('recipes').update({ name: editItemName, category_id: editItemCategory, price: priceToSave }).eq('id', editingItem.id);
+        } else {
+          // Convert standalone to recipe - need to delete from items and create in recipes
+          await deleteItem(editingItem.id);
+          const { data: newRecipe, error } = await supabase
+            .from('recipes')
+            .insert({
+              name: editItemName,
+              category_id: editItemCategory,
+              price: priceToSave,
+              is_recipe: true
+            })
+            .select()
+            .single();
+          
+          if (error) throw error;
+          if (newRecipe) {
+            // Update editingItem id for portions sync
+            editingItem.id = newRecipe.id;
+          }
+        }
         
         // Delete existing ingredients
         await supabase.from('recipe_ingredients').delete().eq('recipe_id', editingItem.id);
         
         // Sale-only menu items intentionally have no ingredients, so they never deduct stock.
-        if (editItemType === 'recipe' && editHasIngredients && editRecipeIngredients.length > 0) {
+        if (editItemType === 'recipe' && editRecipeIngredients.length > 0) {
           await supabase.from('recipe_ingredients').insert(editRecipeIngredients.map(ing => ({
             recipe_id: editingItem.id, ingredient_id: ing.ingredient_id, quantity_needed: ing.quantity_needed, unit: ing.unit
           })));
@@ -800,9 +841,29 @@ export default function ItemsPage() {
         
         await syncPortionsForEdit(editingItem.id, true, validEditPortions);
       } else {
-        const priceToSave = editHasPortions ? parseFloat(validEditPortions[0].price) : parseFloat(editItemPrice);
-        await editItem(editingItem.id, { name: editItemName, price: priceToSave, category_id: editItemCategory, stock: parseInt(editItemStock) || 0 });
-        await syncPortionsForEdit(editingItem.id, false, validEditPortions);
+        // Save as standalone item
+        if (wasRecipe) {
+          // Convert recipe to standalone - need to delete from recipes and link to inventory item
+          await supabase.from('recipe_ingredients').delete().eq('recipe_id', editingItem.id);
+          await supabase.from('recipes').delete().eq('id', editingItem.id);
+          
+          // Update the linked inventory item
+          if (editStandaloneInventoryItemId) {
+            const priceToSave = editHasPortions ? parseFloat(validEditPortions[0].price) : parseFloat(editItemPrice);
+            await editItem(editStandaloneInventoryItemId, {
+              name: editItemName,
+              price: priceToSave,
+              category_id: editItemCategory,
+              is_recipe: true
+            });
+            await syncStandalonePortions(editStandaloneInventoryItemId, validEditPortions);
+          }
+        } else {
+          // Update existing standalone item
+          const priceToSave = editHasPortions ? parseFloat(validEditPortions[0].price) : parseFloat(editItemPrice);
+          await editItem(editingItem.id, { name: editItemName, price: priceToSave, category_id: editItemCategory, stock: parseInt(editItemStock) || 0 });
+          await syncPortionsForEdit(editingItem.id, false, validEditPortions);
+        }
       }
 
       setIsEditItemOpen(false);
@@ -861,7 +922,13 @@ export default function ItemsPage() {
 
   const displayCategories = categories.length > 0 ? categories : (isSupabaseConfigured ? [] : MOCK_CATEGORIES);
   const menuItems = items.length > 0
-    ? items.filter(item => item.is_recipe !== false).map(item => ({ ...item, itemSource: 'standalone' as const }))
+    ? items
+        .filter(item => 
+          // Only show items from 'items' table (not inventory_items)
+          // Items table has category_id, inventory_items has inventory_category_id
+          item.category_id !== undefined && item.category_id !== null
+        )
+        .map(item => ({ ...item, itemSource: 'standalone' as const }))
     : (isSupabaseConfigured ? [] : MOCK_ITEMS.map(item => ({ ...item, itemSource: 'standalone' as const })));
   const recipeItems = recipes.length > 0 ? recipes.map(recipe => ({ ...recipe, is_recipe: true, itemSource: 'recipe' as const })) : [];
   const displayItems = [...menuItems, ...recipeItems];
@@ -1009,9 +1076,31 @@ export default function ItemsPage() {
                     >
                       <SelectTrigger className="h-11 rounded-xl bg-white"><SelectValue placeholder={t.selectStandaloneInventory} /></SelectTrigger>
                       <SelectContent>
-                        {getStandaloneInventoryItems().map((item) => (
-                          <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                        ))}
+                        <div className="p-2 border-b border-zinc-200 sticky top-0 bg-white z-10">
+                          <Input
+                            type="text"
+                            placeholder={currentLanguage === 'th' ? 'ค้นหา...' : currentLanguage === 'lo' ? 'ຄົ້ນຫາ...' : 'Search...'}
+                            value={inventoryItemSearch}
+                            onChange={(e) => setInventoryItemSearch(e.target.value)}
+                            className="h-9 rounded-lg"
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                        {getStandaloneInventoryItems()
+                          .filter(item => 
+                            item.name.toLowerCase().includes(inventoryItemSearch.toLowerCase())
+                          )
+                          .map((item) => (
+                            <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                          ))}
+                        {getStandaloneInventoryItems().filter(item => 
+                          item.name.toLowerCase().includes(inventoryItemSearch.toLowerCase())
+                        ).length === 0 && (
+                          <SelectItem value="no-results" disabled>
+                            {currentLanguage === 'th' ? 'ไม่พบรายการที่ค้นหา' : currentLanguage === 'lo' ? 'ບໍ່ພົບລາຍການທີ່ຄົ້ນຫາ' : 'No results found'}
+                          </SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                     {getStandaloneInventoryItems().length === 0 ? (
@@ -1122,6 +1211,12 @@ export default function ItemsPage() {
                           onValueChange={(value) => {
                             const nextType = value as 'standalone' | 'recipe' | 'saleOnly';
                             setEditItemType(nextType);
+                            if (nextType === 'standalone') {
+                              setEditRecipeIngredients([]);
+                              setEditHasIngredients(false);
+                            } else {
+                              setEditStandaloneInventoryItemId('');
+                            }
                             if (nextType === 'saleOnly') {
                               setEditHasIngredients(false);
                               setEditHasPortions(false);
@@ -1129,7 +1224,6 @@ export default function ItemsPage() {
                               setEditPortionRows([{ name: '', price: '', stock: '0', costPrice: '0' }]);
                             }
                           }}
-                          disabled={!isEditingRecipe}
                         >
                           <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
                           <SelectContent>
@@ -1139,18 +1233,53 @@ export default function ItemsPage() {
                           </SelectContent>
                         </Select>
                       </div>
-                      {!isEditingRecipe && (
+                      {editItemType === 'standalone' && (
                         <div className="grid gap-2 rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
                           <Label>{t.linkInventoryItem}</Label>
-                          <Select value={editStandaloneInventoryItemId} disabled>
+                          <Select 
+                            value={editStandaloneInventoryItemId} 
+                            onValueChange={setEditStandaloneInventoryItemId}
+                          >
                             <SelectTrigger className="h-11 rounded-xl bg-white"><SelectValue placeholder={t.selectStandaloneInventory} /></SelectTrigger>
                             <SelectContent>
-                              {getStandaloneInventoryItems().map((item) => (
-                                <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                              ))}
+                              <div className="p-2 border-b border-zinc-200 sticky top-0 bg-white z-10">
+                                <Input
+                                  type="text"
+                                  placeholder={currentLanguage === 'th' ? 'ค้นหา...' : currentLanguage === 'lo' ? 'ຄົ້ນຫາ...' : 'Search...'}
+                                  value={editInventoryItemSearch}
+                                  onChange={(e) => setEditInventoryItemSearch(e.target.value)}
+                                  className="h-9 rounded-lg"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onKeyDown={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                              {getStandaloneInventoryItems()
+                                .filter(item => 
+                                  item.name.toLowerCase().includes(editInventoryItemSearch.toLowerCase())
+                                )
+                                .length === 0 ? (
+                                <SelectItem value="no-items" disabled>
+                                  {editInventoryItemSearch 
+                                    ? (currentLanguage === 'th' ? 'ไม่พบรายการที่ค้นหา' : currentLanguage === 'lo' ? 'ບໍ່ພົບລາຍການທີ່ຄົ້ນຫາ' : 'No results found')
+                                    : t.noStandaloneInventoryItems
+                                  }
+                                </SelectItem>
+                              ) : (
+                                getStandaloneInventoryItems()
+                                  .filter(item => 
+                                    item.name.toLowerCase().includes(editInventoryItemSearch.toLowerCase())
+                                  )
+                                  .map((item) => (
+                                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                                  ))
+                              )}
                             </SelectContent>
                           </Select>
-                          <p className="text-xs text-emerald-700">{t.standaloneLinkHelp}</p>
+                          {getStandaloneInventoryItems().length === 0 ? (
+                            <p className="text-xs text-red-600">{t.noStandaloneInventoryItems}</p>
+                          ) : (
+                            <p className="text-xs text-emerald-700">{t.standaloneLinkHelp}</p>
+                          )}
                         </div>
                       )}
                       
@@ -1178,41 +1307,35 @@ export default function ItemsPage() {
                       )}
 
                       {/* Recipe Ingredients Section */}
-                      {isEditingRecipe && editItemType === 'recipe' && (
+                      {editItemType === 'recipe' && (
                         <div className="grid gap-2">
-                          <label className="flex items-center gap-2 text-sm font-medium">
-                            <input type="checkbox" checked={editHasIngredients} onChange={(e) => setEditHasIngredients(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" />
-                            {t.hasIngredients}
-                          </label>
-                          {editHasIngredients && (
-                            <div className="space-y-4 p-4 rounded-xl border border-blue-100 bg-blue-50/30">
-                              <div className="flex justify-between items-center">
-                                <Label className="font-bold flex items-center gap-2">
-                                  <ChefHat className="h-4 w-4 text-blue-600" />
-                                  {t.recipeIngredients}
-                                </Label>
-                                <Button onClick={addEditRecipeIngredient} variant="outline" size="sm" className="rounded-lg h-9"><Plus className="h-4 w-4 mr-2" /> {t.add}</Button>
-                              </div>
-                              {editRecipeIngredients.length === 0 ? (
-                                <p className="text-sm text-zinc-500 text-center py-4">ไม่มีส่วนประกอบ</p>
-                              ) : (
-                                editRecipeIngredients.map((ing, idx) => {
-                                  const ingredientItem = getAvailableIngredients().find(i => i.id === ing.ingredient_id);
-                                  return (
-                                    <div key={idx} className="flex gap-2 items-center bg-white p-3 rounded-lg border border-zinc-200">
-                                      <Select value={ing.ingredient_id} onValueChange={(v) => updateEditRecipeIngredient(idx, 'ingredient_id', v)}>
-                                        <SelectTrigger className="grow rounded-lg"><SelectValue placeholder={t.selectIngredient} /></SelectTrigger>
-                                        <SelectContent>{getAvailableIngredients().map(i => (<SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>))}</SelectContent>
-                                      </Select>
-                                      <Input type="number" step="0.01" className="w-24 rounded-lg" placeholder="จำนวน" value={ing.quantity_needed} onChange={(e) => updateEditRecipeIngredient(idx, 'quantity_needed', parseFloat(e.target.value) || 0)} />
-                                      <Input className="w-20 rounded-lg" placeholder="หน่วย" value={ing.unit} onChange={(e) => updateEditRecipeIngredient(idx, 'unit', e.target.value)} />
-                                      <Button variant="ghost" size="icon" className="text-red-500" onClick={() => removeEditRecipeIngredient(idx)}><Trash2 className="h-4 w-4" /></Button>
-                                    </div>
-                                  );
-                                })
-                              )}
+                          <div className="space-y-4 pt-2 p-4 rounded-xl border border-blue-100 bg-blue-50/30">
+                            <div className="flex justify-between items-center">
+                              <Label className="text-base font-bold flex items-center gap-2">
+                                <ChefHat className="h-4 w-4 text-blue-600" />
+                                {t.recipeIngredients}
+                              </Label>
+                              <Button onClick={addEditRecipeIngredient} variant="outline" size="sm" className="rounded-lg h-9"><Plus className="h-4 w-4 mr-2" /> {t.add}</Button>
                             </div>
-                          )}
+                            {editRecipeIngredients.length === 0 ? (
+                              <p className="text-sm text-zinc-500 text-center py-4">Click Add to add ingredients</p>
+                            ) : (
+                              editRecipeIngredients.map((ingredient, index) => {
+                                const ingredientItem = getAvailableIngredients().find(i => i.id === ingredient.ingredient_id);
+                                return (
+                                  <div key={index} className="flex gap-2 items-center bg-white p-3 rounded-lg border border-zinc-200">
+                                    <Select value={ingredient.ingredient_id} onValueChange={(v) => updateEditRecipeIngredient(index, 'ingredient_id', v)}>
+                                      <SelectTrigger className="h-10 rounded-lg grow"><SelectValue placeholder={t.selectIngredient} /></SelectTrigger>
+                                      <SelectContent>{getAvailableIngredients().map(item => (<SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>))}</SelectContent>
+                                    </Select>
+                                    <Input type="number" step="0.01" className="w-24 h-10 rounded-lg" placeholder="จำนวน" value={ingredient.quantity_needed} onChange={(e) => updateEditRecipeIngredient(index, 'quantity_needed', parseFloat(e.target.value) || 0)} />
+                                    <Input className="w-20 h-10 rounded-lg" placeholder="หน่วย" value={ingredient.unit} onChange={(e) => updateEditRecipeIngredient(index, 'unit', e.target.value)} />
+                                    <Button variant="ghost" size="icon" className="text-red-500" onClick={() => removeEditRecipeIngredient(index)}><Trash2 className="h-4 w-4" /></Button>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1349,6 +1472,7 @@ export default function ItemsPage() {
                                   setEditItemCategory(item.category_id);
                                   setEditItemStock(String((item as any).stock ?? 0));
                                   setIsEditingRecipe(isRecipeEntity);
+                                  setEditInventoryItemSearch('');
                                   const nextEditType = isRecipeEntity ? (recipeHasIngredients[item.id] ? 'recipe' : 'saleOnly') : 'standalone';
                                   setEditItemType(nextEditType);
                                   setEditStandaloneInventoryItemId(isRecipeEntity ? '' : item.id);

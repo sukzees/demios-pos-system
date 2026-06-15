@@ -13,6 +13,7 @@ const TRANSLATIONS = {
     generalSetting: 'General Setting',
     unitConfig: 'Config Unit',
     bankConfig: 'Bank Config',
+    databaseConfig: 'Database Config',
     configPrinting: 'Config Printing',
     receiptCustomization: 'Receipt Customization',
     stationMapping: 'Station Mapping',
@@ -55,7 +56,7 @@ const TRANSLATIONS = {
     actions: 'Actions',
     saveBankSettings: 'Save Bank Settings',
     printingSettings: 'Printing Settings',
-    autoPrint: 'Auto print receipt on checkout',
+    autoPrint: 'Auto print',
     silentPrint: 'Silent print (bypass print dialog)',
     printerConfiguration: 'Printer Configuration',
     detectedLocalPrinters: 'Detected Local Printers',
@@ -105,6 +106,8 @@ const TRANSLATIONS = {
     enterLicense: 'Enter License Key',
     activating: 'Activating...',
     activate: 'Activate License',
+    verify: 'Verify',
+    verifying: 'Verifying...',
     returnLicense: 'Return License',
     refreshActivation: 'Refresh Activation Status',
     checkActivation: 'Check Activation Status',
@@ -148,18 +151,31 @@ const TRANSLATIONS = {
     checking: 'Checking...',
     updateNow: 'Update Now',
     updating: 'Updating...',
+    saving: 'Saving...',
     updateAvailable: 'New update available! Click "Update Now" to install.',
     upToDate: 'You are running the latest version.',
     updateFailed: 'Failed to check for updates',
     updateSuccess: 'Update completed! The application will restart now.',
     updateConfirm: 'This will update the application and restart it. Continue?',
     updateDescription: 'Check for and install system updates. Updates include bug fixes, new features, and performance improvements.',
+    databaseSettings: 'Database Settings',
+    supabaseUrl: 'Supabase URL',
+    supabaseAnonKey: 'Supabase Anon Key',
+    supabaseServiceRoleKey: 'Supabase Service Role Key (Optional)',
+    saveDatabaseSettings: 'Save Database Settings',
+    testConnection: 'Test Connection',
+    connectionSuccess: 'Connection successful!',
+    connectionFailed: 'Connection failed. Please check your credentials.',
+    databaseDescription: 'Configure your Supabase database connection. After saving, you need to restart the application for changes to take effect.',
+    restartRequired: 'Restart Required',
+    restartMessage: 'Database settings saved! Please restart the application for changes to take effect.',
   },
   lo: {
     settings: 'ການຕັ້ງຄ່າ',
     generalSetting: 'ຕັ້ງຄ່າທົ່ວໄປ',
     unitConfig: 'ຕັ້ງຄ່າຫົວໜ່ວຍ',
     bankConfig: 'ຕັ້ງຄ່າທະນາຄານ',
+    databaseConfig: 'ຕັ້ງຄ່າຖານຂໍ້ມູນ',
     configPrinting: 'ຕັ້ງຄ່າການພິມ',
     receiptCustomization: 'ປັບແຕ່ງໃບບິນ',
     stationMapping: 'ຈັບຄູ່ສະຖານີ',
@@ -191,7 +207,7 @@ const TRANSLATIONS = {
     actions: 'ຈັດການ',
     saveBankSettings: 'ບັນທຶກການຕັ້ງຄ່າທະນາຄານ',
     printingSettings: 'ການຕັ້ງຄ່າການພິມ',
-    autoPrint: 'ພິມໃບບິນອັດຕະໂນມັດເມື່ອຊຳລະເງິນ',
+    autoPrint: 'ພິມອັດຕະໂນມັດ',
     silentPrint: 'ພິມແບບງຽບ (ຂ້າມໜ້າຕ່າງການພິມ)',
     printerConfiguration: 'ການຕັ້ງຄ່າເຄື່ອງພິມ',
     detectedLocalPrinters: 'ເຄື່ອງພິມທີ່ກວດພົບ',
@@ -233,6 +249,8 @@ const TRANSLATIONS = {
     enterLicense: 'ປ້ອນລະຫັດລິຂະສິດ',
     activating: 'ກຳລັງເປີດໃຊ້...',
     activate: 'ເປີດໃຊ້ລິຂະສິດ',
+    verify: 'ກວດສອບ',
+    verifying: 'ກຳລັງກວດສອບ...',
     returnLicense: 'ຄືນລິຂະສິດ',
     refreshActivation: 'ໂຫຼດສະຖານະໃໝ່',
     checkActivation: 'ກວດສອບສະຖານະ',
@@ -276,12 +294,24 @@ const TRANSLATIONS = {
     checking: 'ກຳລັງກວດສອບ...',
     updateNow: 'ອັບເດດດຽວນີ້',
     updating: 'ກຳລັງອັບເດດ...',
+    saving: 'ກຳລັງບັນທຶກ...',
     updateAvailable: 'ມີອັບເດດໃໝ່! ກົດ "ອັບເດດດຽວນີ້" ເພື່ອຕິດຕັ້ງ.',
     upToDate: 'ທ່ານກຳລັງໃຊ້ເວີຊັນລ່າສຸດແລ້ວ.',
     updateFailed: 'ບໍ່ສາມາດກວດສອບອັບເດດໄດ້',
     updateSuccess: 'ອັບເດດສຳເລັດ! ແອັບພລິເຄຊັນຈະເລີ່ມໃໝ່ດຽວນີ້.',
     updateConfirm: 'ນີ້ຈະອັບເດດແອັບພລິເຄຊັນ ແລະ ເລີ່ມໃໝ່. ສືບຕໍ່ບໍ?',
     updateDescription: 'ກວດສອບ ແລະ ຕິດຕັ້ງອັບເດດລະບົບ. ອັບເດດປະກອບມີການແກ້ໄຂບັນຫາ, ຄຸນສົມບັດໃໝ່, ແລະ ການປັບປຸງປະສິດທິພາບ.',
+    databaseSettings: 'ການຕັ້ງຄ່າຖານຂໍ້ມູນ',
+    supabaseUrl: 'Supabase URL',
+    supabaseAnonKey: 'Supabase Anon Key',
+    supabaseServiceRoleKey: 'Supabase Service Role Key (ເລືອກໄດ້)',
+    saveDatabaseSettings: 'ບັນທຶກການຕັ້ງຄ່າຖານຂໍ້ມູນ',
+    testConnection: 'ທົດສອບການເຊື່ອມຕໍ່',
+    connectionSuccess: 'ເຊື່ອມຕໍ່ສຳເລັດ!',
+    connectionFailed: 'ເຊື່ອມຕໍ່ບໍ່ສຳເລັດ. ກະລຸນາກວດສອບຂໍ້ມູນຂອງທ່ານ.',
+    databaseDescription: 'ຕັ້ງຄ່າການເຊື່ອມຕໍ່ຖານຂໍ້ມູນ Supabase. ຫຼັງຈາກບັນທຶກແລ້ວ, ທ່ານຕ້ອງເລີ່ມແອັບພລິເຄຊັນໃໝ່ເພື່ອໃຫ້ການປ່ຽນແປງມີຜົນ.',
+    restartRequired: 'ຕ້ອງເລີ່ມໃໝ່',
+    restartMessage: 'ບັນທຶກການຕັ້ງຄ່າຖານຂໍ້ມູນແລ້ວ! ກະລຸນາເລີ່ມແອັບພລິເຄຊັນໃໝ່ເພື່ອໃຫ້ການປ່ຽນແປງມີຜົນ.',
     kitchenBillAndVoidBill: 'ບິນຄົວ ແລະ ບິນຍະການ',
     kitchenBillSettings: 'ການຕັ້ງຄ່າບິນຄົວ',
     voidBillSettings: 'ການຕັ້ງຄ່າບິນຍະການ',
@@ -296,6 +326,7 @@ const TRANSLATIONS = {
     generalSetting: 'ตั้งค่าทั่วไป',
     unitConfig: 'ตั้งค่าหน่วย',
     bankConfig: 'ตั้งค่าธนาคาร',
+    databaseConfig: 'ตั้งค่าฐานข้อมูล',
     configPrinting: 'ตั้งค่าการพิมพ์',
     receiptCustomization: 'ปรับแต่งใบเสร็จ',
     stationMapping: 'จับคู่สถานี',
@@ -338,7 +369,7 @@ const TRANSLATIONS = {
     actions: 'จัดการ',
     saveBankSettings: 'บันทึกการตั้งค่าธนาคาร',
     printingSettings: 'การตั้งค่าการพิมพ์',
-    autoPrint: 'พิมพ์ใบเสร็จอัตโนมัติเมื่อชำระเงิน',
+    autoPrint: 'พิมพ์อัตโนมัติ',
     silentPrint: 'พิมพ์แบบเงียบ (ข้ามหน้าต่างการพิมพ์)',
     printerConfiguration: 'การตั้งค่าเครื่องพิมพ์',
     detectedLocalPrinters: 'เครื่องพิมพ์ที่ตรวจพบ',
@@ -388,6 +419,8 @@ const TRANSLATIONS = {
     enterLicense: 'กรอกรหัสลิขสิทธิ์',
     activating: 'กำลังเปิดใช้งาน...',
     activate: 'เปิดใช้งานลิขสิทธิ์',
+    verify: 'ตรวจสอบ',
+    verifying: 'กำลังตรวจสอบ...',
     returnLicense: 'คืนลิขสิทธิ์',
     refreshActivation: 'รีเฟรชสถานะ',
     checkActivation: 'ตรวจสอบสถานะ',
@@ -431,12 +464,24 @@ const TRANSLATIONS = {
     checking: 'กำลังตรวจสอบ...',
     updateNow: 'อัปเดตเดี๋ยวนี้',
     updating: 'กำลังอัปเดต...',
+    saving: 'กำลังบันทึก...',
     updateAvailable: 'มีอัปเดตใหม่! คลิก "อัปเดตเดี๋ยวนี้" เพื่อติดตั้ง',
     upToDate: 'คุณกำลังใช้เวอร์ชันล่าสุดแล้ว',
     updateFailed: 'ไม่สามารถตรวจสอบอัปเดตได้',
     updateSuccess: 'อัปเดตสำเร็จ! แอปพลิเคชันจะรีสตาร์ทเดี๋ยวนี้',
     updateConfirm: 'นี่จะอัปเดตแอปพลิเคชันและรีสตาร์ท ดำเนินการต่อหรือไม่?',
     updateDescription: 'ตรวจสอบและติดตั้งอัปเดตระบบ อัปเดตประกอบด้วยการแก้ไขบั๊ก ฟีเจอร์ใหม่ และการปรับปรุงประสิทธิภาพ',
+    databaseSettings: 'การตั้งค่าฐานข้อมูล',
+    supabaseUrl: 'Supabase URL',
+    supabaseAnonKey: 'Supabase Anon Key',
+    supabaseServiceRoleKey: 'Supabase Service Role Key (ไม่บังคับ)',
+    saveDatabaseSettings: 'บันทึกการตั้งค่าฐานข้อมูล',
+    testConnection: 'ทดสอบการเชื่อมต่อ',
+    connectionSuccess: 'เชื่อมต่อสำเร็จ!',
+    connectionFailed: 'เชื่อมต่อไม่สำเร็จ กรุณาตรวจสอบข้อมูลของคุณ',
+    databaseDescription: 'ตั้งค่าการเชื่อมต่อฐานข้อมูล Supabase หลังจากบันทึกแล้ว คุณต้องรีสตาร์ทแอปพลิเคชันเพื่อให้การเปลี่ยนแปลงมีผล',
+    restartRequired: 'ต้องรีสตาร์ท',
+    restartMessage: 'บันทึกการตั้งค่าฐานข้อมูลแล้ว! กรุณารีสตาร์ทแอปพลิเคชันเพื่อให้การเปลี่ยนแปลงมีผล',
   }
 };
 
@@ -575,6 +620,14 @@ export default function SettingsPage() {
   const [activationMessage, setActivationMessage] = useState('');
   const [daysRemaining, setDaysRemaining] = useState(0);
 
+  // Database
+  const [supabaseUrl, setSupabaseUrl] = useState('');
+  const [supabaseAnonKey, setSupabaseAnonKey] = useState('');
+  const [supabaseServiceRoleKey, setSupabaseServiceRoleKey] = useState('');
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [isSavingDatabase, setIsSavingDatabase] = useState(false);
+  const [databaseMessage, setDatabaseMessage] = useState('');
+
   useEffect(() => {
     let active = true;
 
@@ -603,7 +656,22 @@ export default function SettingsPage() {
       }
     };
 
+    const loadEnvVariables = async () => {
+      try {
+        const response = await fetch('/api/env');
+        const data = await response.json();
+        if (data.success && data.env) {
+          setSupabaseUrl(data.env.NEXT_PUBLIC_SUPABASE_URL || '');
+          setSupabaseAnonKey(data.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '');
+          setSupabaseServiceRoleKey(data.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || '');
+        }
+      } catch (error) {
+        console.error('Failed to load environment variables:', error);
+      }
+    };
+
     loadServerLicenseKey();
+    loadEnvVariables();
 
     return () => {
       active = false;
@@ -810,6 +878,131 @@ export default function SettingsPage() {
       setActivationMessage('An error occurred during activation.');
     } finally {
       setIsActivating(false);
+    }
+  };
+
+  const handleVerifyLicense = async () => {
+    if (!licenseKey.trim()) {
+      setActivationMessage(t.noKey);
+      return;
+    }
+
+    setIsActivating(true);
+    setActivationMessage('');
+
+    try {
+      const normalizedKey = licenseKey.trim();
+      const machineId = licenseInfo?.machineId || `mach-${Math.random().toString(36).substring(2, 10)}`;
+
+      // First, sync the license from remote API
+      const syncResponse = await fetch('/api/license/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: normalizedKey
+        })
+      });
+      const syncData = await syncResponse.json();
+
+      if (!syncData.success) {
+        setActivationMessage(syncData.error || 'Failed to verify license');
+        return;
+      }
+
+      // Then verify the license
+      const verifyResponse = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          license_key: normalizedKey,
+          machine_id: machineId
+        })
+      });
+      const verifyData = await verifyResponse.json();
+
+      if (verifyData.valid && updateLicenseState(normalizedKey, machineId, verifyData)) {
+        setActivationMessage('License verified successfully!');
+        setServerLicenseKey(normalizedKey);
+        return;
+      }
+
+      setActivationMessage(verifyData.error || 'License verification failed');
+    } catch (error) {
+      console.error('License verification error:', error);
+      setActivationMessage('An error occurred during verification.');
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    if (!supabaseUrl || !supabaseAnonKey) {
+      setDatabaseMessage('Please enter both Supabase URL and Anon Key');
+      return;
+    }
+
+    setIsTestingConnection(true);
+    setDatabaseMessage('');
+
+    try {
+      // Test connection by trying to create a Supabase client
+      const { createClient } = await import('@supabase/supabase-js');
+      const testClient = createClient(supabaseUrl, supabaseAnonKey);
+      
+      // Try a simple query
+      const { error } = await testClient.from('items').select('count', { count: 'exact', head: true });
+      
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "table not found" which is OK for testing
+        throw error;
+      }
+
+      setDatabaseMessage(t.connectionSuccess);
+    } catch (error: any) {
+      console.error('Connection test failed:', error);
+      setDatabaseMessage(t.connectionFailed + ' ' + (error.message || ''));
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
+
+  const handleSaveDatabaseSettings = async () => {
+    if (!supabaseUrl || !supabaseAnonKey) {
+      setDatabaseMessage('Please enter both Supabase URL and Anon Key');
+      return;
+    }
+
+    setIsSavingDatabase(true);
+    setDatabaseMessage('');
+
+    try {
+      const envData = {
+        NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseAnonKey,
+      };
+
+      if (supabaseServiceRoleKey) {
+        (envData as any).NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY = supabaseServiceRoleKey;
+      }
+
+      const response = await fetch('/api/env', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ env: envData })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setDatabaseMessage(t.restartMessage);
+        alert(t.restartMessage);
+      } else {
+        setDatabaseMessage(data.error || 'Failed to save database settings');
+      }
+    } catch (error: any) {
+      console.error('Failed to save database settings:', error);
+      setDatabaseMessage('An error occurred while saving: ' + (error.message || ''));
+    } finally {
+      setIsSavingDatabase(false);
     }
   };
 
@@ -1475,6 +1668,7 @@ export default function SettingsPage() {
           <TabsTrigger value="void-bill">{t.kitchenBillAndVoidBill}</TabsTrigger>
           <TabsTrigger value="station">{t.stationMapping}</TabsTrigger>
           <TabsTrigger value="license">{t.licenseKey}</TabsTrigger>
+          <TabsTrigger value="database">{t.databaseConfig}</TabsTrigger>
           <TabsTrigger value="update">{t.systemUpdate}</TabsTrigger>
         </TabsList>
 
@@ -2517,34 +2711,28 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <Label htmlFor="license-key">{t.licenseKey}</Label>
                   <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleSyncLicense}
-                      disabled={isActivating}
-                      title="Sync License"
-                      className="shrink-0"
-                    >
-                      <RefreshCw className={isActivating ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-                    </Button>
                     <Input
                       id="license-key"
                       placeholder="POS-XXXX-XXXX-XXXX-XXXX"
                       value={licenseKey}
                       onChange={(e) => setLicenseKey(e.target.value)}
-                      disabled={!!serverLicenseKey || licenseInfo?.active}
+                      className="flex-1"
                     />
                     <Button
                       type="button"
-                      variant="outline"
-                      onClick={handleViewLicenseData}
-                      disabled={isActivating}
-                      className="shrink-0"
-                      title="View license data"
+                      variant="default"
+                      onClick={handleVerifyLicense}
+                      disabled={isActivating || !licenseKey.trim()}
+                      className="shrink-0 min-w-[100px]"
                     >
-                      <Eye className="h-4 w-4" />
+                      {isActivating ? t.verifying : t.verify}
                     </Button>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    {currentLanguage === 'en' && 'Enter your license key and click Verify to activate or update your license.'}
+                    {currentLanguage === 'lo' && 'ປ້ອນລະຫັດລິຂະສິດຂອງທ່ານ ແລະ ກົດກວດສອບເພື່ອເປີດໃຊ້ຫຼືອັບເດດລິຂະສິດຂອງທ່ານ.'}
+                    {currentLanguage === 'th' && 'ป้อนรหัสลิขสิทธิ์ของคุณและคลิกตรวจสอบเพื่อเปิดใช้งานหรืออัปเดตลิขสิทธิ์ของคุณ'}
+                  </p>
                 </div>
                 {activationMessage && (
                   <p className={`text-sm ${licenseInfo?.active ? 'text-green-600' : 'text-red-500'}`}>
@@ -2613,6 +2801,15 @@ export default function SettingsPage() {
                       >
                         <Eye className="h-4 w-4" />
                         {t.checkActivation}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={handleViewLicenseData}
+                        disabled={isActivating}
+                        title="View license data"
+                      >
+                        <Eye className="h-4 w-4" />
                       </Button>
                     </div>
 
@@ -2697,6 +2894,15 @@ export default function SettingsPage() {
                         <Eye className="h-4 w-4" />
                         {t.checkActivation}
                       </Button>
+                      <Button
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={handleViewLicenseData}
+                        disabled={isActivating}
+                        title="View license data"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -2737,6 +2943,85 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 )} */}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="database" className="space-y-4">
+          <Card className="border-indigo-100 shadow-sm overflow-hidden">
+            <CardHeader className="bg-indigo-50/50 border-b border-indigo-100">
+              <CardTitle className="text-indigo-900">{t.databaseSettings}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="max-w-2xl space-y-4">
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    {t.databaseDescription}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="supabase-url">{t.supabaseUrl}</Label>
+                  <Input
+                    id="supabase-url"
+                    type="url"
+                    placeholder="https://your-project.supabase.co"
+                    value={supabaseUrl}
+                    onChange={(e) => setSupabaseUrl(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="supabase-anon-key">{t.supabaseAnonKey}</Label>
+                  <Input
+                    id="supabase-anon-key"
+                    type="password"
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    value={supabaseAnonKey}
+                    onChange={(e) => setSupabaseAnonKey(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="supabase-service-key">{t.supabaseServiceRoleKey}</Label>
+                  <Input
+                    id="supabase-service-key"
+                    type="password"
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    value={supabaseServiceRoleKey}
+                    onChange={(e) => setSupabaseServiceRoleKey(e.target.value)}
+                  />
+                </div>
+
+                {databaseMessage && (
+                  <div className={`p-3 rounded-lg border ${
+                    databaseMessage.includes(t.connectionSuccess) || databaseMessage.includes(t.restartMessage)
+                      ? 'bg-green-50 border-green-200 text-green-800'
+                      : 'bg-red-50 border-red-200 text-red-800'
+                  }`}>
+                    <p className="text-sm">{databaseMessage}</p>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={handleTestConnection}
+                    disabled={isTestingConnection || isSavingDatabase}
+                    className="flex-1"
+                  >
+                    {isTestingConnection ? t.checking : t.testConnection}
+                  </Button>
+                  <Button
+                    onClick={handleSaveDatabaseSettings}
+                    disabled={isTestingConnection || isSavingDatabase}
+                    className="flex-1"
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {isSavingDatabase ? t.saving : t.saveDatabaseSettings}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

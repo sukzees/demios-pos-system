@@ -1,7 +1,7 @@
 -- ============================================
 -- Supabase POS System - Complete Schema
--- Version: 2.1
--- Last Updated: 2026-05-07
+-- Version: 2.4
+-- Last Updated: 2026-06-15
 -- ============================================
 
 -- Enable UUID extension
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS public.inventory_categories (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 3. Items Table (Menu Items & Inventory Items)
+-- 3. Items Table (Menu Items Only)
 CREATE TABLE IF NOT EXISTS public.items (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   name TEXT NOT NULL,
@@ -37,6 +37,37 @@ CREATE TABLE IF NOT EXISTS public.items (
   image_url TEXT,
   stock INTEGER DEFAULT 0,
   is_recipe BOOLEAN DEFAULT false,
+  show_in_menu BOOLEAN DEFAULT true,
+  type TEXT CHECK (type IN ('standalone', 'recipe', 'saleOnly')) DEFAULT 'recipe',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 3a. Inventory Items Table (Inventory/Stock Items Only)
+CREATE TABLE IF NOT EXISTS public.inventory_items (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  name TEXT NOT NULL,
+  price NUMERIC NOT NULL DEFAULT 0,
+  cost_price NUMERIC,
+  min_stock INTEGER DEFAULT 10,
+  inventory_category_id UUID REFERENCES public.inventory_categories(id) ON DELETE SET NULL,
+  image_url TEXT,
+  stock INTEGER DEFAULT 0,
+  unit TEXT DEFAULT 'pcs',
+  type TEXT CHECK (type IN ('standalone', 'ingredient')) DEFAULT 'ingredient',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 3b. Recipes Table (Separate Recipe Items - Alternative to is_recipe flag)
+CREATE TABLE IF NOT EXISTS public.recipes (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  category_id UUID REFERENCES public.categories(id) ON DELETE SET NULL,
+  price NUMERIC DEFAULT 0,
+  image_url TEXT,
+  stock NUMERIC DEFAULT 0,
+  is_recipe BOOLEAN DEFAULT true,
+  show_in_menu BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -54,10 +85,17 @@ CREATE TABLE IF NOT EXISTS public.recipe_ingredients (
 CREATE TABLE IF NOT EXISTS public.item_portions (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   item_id UUID REFERENCES public.items(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  price NUMERIC NOT NULL,
+  recipe_id UUID REFERENCES public.recipes(id) ON DELETE CASCADE,
+  portion_name TEXT NOT NULL,
+  portion_price NUMERIC DEFAULT 0,
+  portion_stock NUMERIC DEFAULT 0,
+  unit TEXT,
   display_order INTEGER DEFAULT 0,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  CONSTRAINT check_item_or_recipe CHECK (
+    (item_id IS NOT NULL AND recipe_id IS NULL) OR
+    (item_id IS NULL AND recipe_id IS NOT NULL)
+  )
 );
 
 -- ============================================
@@ -247,9 +285,16 @@ CREATE TABLE IF NOT EXISTS public.license_keys (
 CREATE INDEX IF NOT EXISTS idx_items_category_id ON public.items(category_id);
 CREATE INDEX IF NOT EXISTS idx_items_inventory_category_id ON public.items(inventory_category_id);
 CREATE INDEX IF NOT EXISTS idx_items_is_recipe ON public.items(is_recipe);
+CREATE INDEX IF NOT EXISTS idx_items_show_in_menu ON public.items(show_in_menu);
+CREATE INDEX IF NOT EXISTS idx_items_type ON public.items(type);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_inventory_category_id ON public.inventory_items(inventory_category_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_type ON public.inventory_items(type);
+CREATE INDEX IF NOT EXISTS idx_recipes_category_id ON public.recipes(category_id);
+CREATE INDEX IF NOT EXISTS idx_recipes_show_in_menu ON public.recipes(show_in_menu);
 CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe_id ON public.recipe_ingredients(recipe_id);
 CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_ingredient_id ON public.recipe_ingredients(ingredient_id);
 CREATE INDEX IF NOT EXISTS idx_item_portions_item_id ON public.item_portions(item_id);
+CREATE INDEX IF NOT EXISTS idx_item_portions_recipe_id ON public.item_portions(recipe_id);
 CREATE INDEX IF NOT EXISTS idx_tables_zone_id ON public.tables(zone_id);
 CREATE INDEX IF NOT EXISTS idx_tables_status ON public.tables(status);
 CREATE INDEX IF NOT EXISTS idx_orders_table_id ON public.orders(table_id);
@@ -272,6 +317,8 @@ CREATE INDEX IF NOT EXISTS idx_shifts_start_time ON public.shifts(start_time);
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.inventory_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.recipes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.recipe_ingredients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.item_portions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.zones ENABLE ROW LEVEL SECURITY;
@@ -298,6 +345,8 @@ CREATE POLICY "Allow public access" ON public.inventory_categories FOR ALL USING
 
 -- Items & Related
 CREATE POLICY "Allow public access" ON public.items FOR ALL USING (true);
+CREATE POLICY "Allow public access" ON public.inventory_items FOR ALL USING (true);
+CREATE POLICY "Allow public access" ON public.recipes FOR ALL USING (true);
 CREATE POLICY "Allow public access" ON public.recipe_ingredients FOR ALL USING (true);
 CREATE POLICY "Allow public access" ON public.item_portions FOR ALL USING (true);
 
@@ -418,9 +467,11 @@ ON CONFLICT DO NOTHING;
 
 COMMENT ON TABLE public.categories IS 'Menu categories for items';
 COMMENT ON TABLE public.inventory_categories IS 'Inventory categories for stock management';
-COMMENT ON TABLE public.items IS 'Menu items and inventory items';
+COMMENT ON TABLE public.items IS 'Menu items only (for POS and Items & Categories page)';
+COMMENT ON TABLE public.inventory_items IS 'Inventory items only (for Inventory page - standalone products and ingredients)';
+COMMENT ON TABLE public.recipes IS 'Recipe items stored separately from regular items';
 COMMENT ON TABLE public.recipe_ingredients IS 'Ingredients needed for recipe items';
-COMMENT ON TABLE public.item_portions IS 'Different portion sizes for items';
+COMMENT ON TABLE public.item_portions IS 'Different portion sizes for items and recipes';
 COMMENT ON TABLE public.zones IS 'Restaurant zones/sections for table organization';
 COMMENT ON TABLE public.tables IS 'Restaurant tables with status tracking';
 COMMENT ON TABLE public.orders IS 'Customer orders';
@@ -436,8 +487,11 @@ COMMENT ON TABLE public.license_keys IS 'Software license management';
 
 COMMENT ON COLUMN public.orders.order_type IS 'Type of order: dine-in, takeout, or delivery';
 COMMENT ON COLUMN public.orders.table_id IS 'Reference to table if order is dine-in';
+COMMENT ON COLUMN public.orders.order_type IS 'Type of order: dine-in, takeout, or delivery';
 COMMENT ON COLUMN public.employees.permissions IS 'JSON object containing menu access and action permissions';
 COMMENT ON COLUMN public.items.is_recipe IS 'True if item is made from other ingredients';
+COMMENT ON COLUMN public.items.type IS 'Menu item type: standalone, recipe, or saleOnly';
+COMMENT ON COLUMN public.inventory_items.type IS 'Inventory item type: standalone (finished product) or ingredient (raw material)';
 COMMENT ON COLUMN public.tables.status IS 'Table availability: available, occupied, reserved, inactive';
 
 -- ============================================
@@ -451,7 +505,7 @@ CREATE TABLE IF NOT EXISTS public.schema_version (
 );
 
 INSERT INTO public.schema_version (version, description) VALUES
-  ('2.1', 'Added is_merged field to tables for split table functionality')
+  ('2.4', 'Added inventory_items table and type columns for better separation between Menu and Inventory')
 ON CONFLICT (version) DO UPDATE SET applied_at = timezone('utc'::text, now());
 
 -- ============================================
