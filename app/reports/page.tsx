@@ -661,10 +661,10 @@ export default function ReportsPage() {
             <div className="h-[300px] w-full">
               {mounted ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={salesData}>
+                  <LineChart data={salesData} margin={{ top: 10, right: 10, left: 15, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e4e4e7" />
                     <XAxis dataKey="date" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => formatCurrencyTick(value, currencySettings)} />
+                    <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => formatCurrencyTick(value, currencySettings)} width={90} />
                     <Tooltip
                       contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                     />
@@ -686,10 +686,10 @@ export default function ReportsPage() {
             <div className="h-[300px] w-full">
               {mounted ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={categoryData} layout="vertical">
+                  <BarChart data={categoryData} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e4e4e7" />
                     <XAxis type="number" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => formatCurrencyTick(value, currencySettings)} />
-                    <YAxis dataKey="name" type="category" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} width={80} />
+                    <YAxis dataKey="name" type="category" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} width={90} />
                     <Tooltip
                       cursor={{ fill: '#f4f4f5' }}
                       contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}

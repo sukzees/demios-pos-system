@@ -729,10 +729,21 @@ export const usePosStore = create<PosState>()(
 
         try {
           const [itemsRes, inventoryItemsRes, categoriesRes] = await Promise.all([
-            supabase.from('items').select('*'),  // Menu items
+            supabase.from('items').select('*'),  // Menu items (with inventory_item_id for standalone items)
             supabase.from('inventory_items').select('*'),  // Inventory items
             supabase.from('categories').select('*')
           ]);
+
+          console.log('[FETCH] Items from items table:', itemsRes.data?.length || 0);
+          console.log('[FETCH] Items from inventory_items table:', inventoryItemsRes.data?.length || 0);
+          
+          // Sample log for debugging
+          if (itemsRes.data && itemsRes.data.length > 0) {
+            console.log('[FETCH] Sample item from items table:', itemsRes.data[0]);
+          }
+          if (inventoryItemsRes.data && inventoryItemsRes.data.length > 0) {
+            console.log('[FETCH] Sample item from inventory_items table:', inventoryItemsRes.data[0]);
+          }
 
           // Combine items and inventory_items for Items & Categories page
           const allItems = [
@@ -740,9 +751,12 @@ export const usePosStore = create<PosState>()(
             ...(inventoryItemsRes.data || [])
           ];
 
+          console.log('[FETCH] Total combined items:', allItems.length);
+
           if (allItems.length > 0) set({ items: allItems });
           if (categoriesRes.data) set({ categories: categoriesRes.data });
         } catch (error) {
+          console.error('[FETCH] Error fetching data:', error);
           // Error fetching data
         }
       },
@@ -776,14 +790,8 @@ export const usePosStore = create<PosState>()(
                   items: state.items.map(i => i.id === tempId ? data : i)
                 }));
 
-                if ((itemData.stock || 0) > 0) {
-                  await supabase.from('inventory_transactions').insert({
-                    item_id: data.id,
-                    quantity_change: itemData.stock || 0,
-                    transaction_type: 'restock',
-                    notes: 'Initial stock (synced)'
-                  });
-                }
+                // Note: stock is managed in inventory_items table, not in items table
+                // Initial stock transactions should be created when adding to inventory_items
               }
             } else if (action.type === 'ADD_CATEGORY') {
               const { tempId, ...categoryData } = action.payload;
@@ -806,9 +814,23 @@ export const usePosStore = create<PosState>()(
               if (error) throw error;
             } else if (action.type === 'UPDATE_STOCK') {
               const { itemId, stock } = action.payload;
-              // We need to fetch the current item to calculate diff for transaction log
-              // But for simplicity in sync, we just set the stock value
-              const { error } = await supabase.from('items').update({ stock }).eq('id', itemId);
+              // Stock is now managed in inventory_items table, not in items table
+              // Find the item to determine if it has a linked inventory_item_id
+              const { data: itemData } = await supabase
+                .from('items')
+                .select('inventory_item_id, type')
+                .eq('id', itemId)
+                .single();
+              
+              const linkedInventoryItemId = itemData?.inventory_item_id;
+              const itemType = itemData?.type;
+              
+              let targetId = itemId;
+              if (itemType === 'standalone' && linkedInventoryItemId) {
+                targetId = linkedInventoryItemId;
+              }
+              
+              const { error } = await supabase.from('inventory_items').update({ stock }).eq('id', targetId);
               if (error) throw error;
 
               // We could add a transaction log here, but calculating the diff might be tricky if multiple updates happened
@@ -910,38 +932,99 @@ export const usePosStore = create<PosState>()(
               for (const cartItem of cart) {
                 const sourceId = cartItem.sourceItemId || cartItem.item.id;
                 if (cartItem.portionId) {
+                  // Fetch portion info first
                   const { data: portion } = await supabase
                     .from('item_portions')
-                    .select('portion_stock')
+                    .select('portion_stock, item_id')
                     .eq('id', cartItem.portionId)
                     .single();
 
                   if (portion) {
+                    // Deduct from item_portions
                     const newPortionStock = Math.max(0, (portion.portion_stock || 0) - cartItem.quantity);
                     await supabase
                       .from('item_portions')
                       .update({ portion_stock: newPortionStock })
                       .eq('id', cartItem.portionId);
+                    
+                    console.log(`[CHECKOUT-PORTION-OLD] Portion ${cartItem.portionId}: ${portion.portion_stock} -> ${newPortionStock}`);
+                    
+                    // Get inventory_item_id from the item
+                    if (portion.item_id) {
+                      const { data: item } = await supabase
+                        .from('items')
+                        .select('inventory_item_id, type')
+                        .eq('id', portion.item_id)
+                        .single();
+                      
+                      const inventoryItemId = item?.inventory_item_id;
+                      const itemType = item?.type;
+                      
+                      // Also deduct from inventory_items if linked
+                      if (inventoryItemId && itemType === 'standalone') {
+                        const { data: inventoryItem } = await supabase
+                          .from('inventory_items')
+                          .select('stock')
+                          .eq('id', inventoryItemId)
+                          .single();
+                        
+                        if (inventoryItem) {
+                          const newInventoryStock = Math.max(0, (inventoryItem.stock || 0) - cartItem.quantity);
+                          await supabase
+                            .from('inventory_items')
+                            .update({ stock: newInventoryStock })
+                            .eq('id', inventoryItemId);
+                          
+                          console.log(`[CHECKOUT-PORTION-OLD] Inventory ${inventoryItemId}: ${inventoryItem.stock} -> ${newInventoryStock}`);
+                          
+                          // Add transaction record
+                          transactions.push({
+                            inventory_item_id: inventoryItemId,
+                            quantity_change: -cartItem.quantity,
+                            transaction_type: 'sale',
+                            notes: `Portion sale (Order #${order.id.slice(0, 8)})`
+                          });
+                        }
+                      }
+                    }
                   }
                 }
 
                 if (inventoryItemIds.has(sourceId)) {
+                  // This is a menu item (not a recipe)
                   const { data: currentItem } = await supabase
                     .from('items')
-                    .select('stock')
+                    .select('type, inventory_item_id')
                     .eq('id', sourceId)
                     .single();
 
                   if (currentItem) {
-                    const newStock = Math.max(0, (currentItem.stock || 0) - cartItem.quantity);
-                    await supabase.from('items').update({ stock: newStock }).eq('id', sourceId);
-
-                    transactions.push({
-                      item_id: sourceId,
-                      quantity_change: -cartItem.quantity,
-                      transaction_type: 'sale',
-                      notes: `Order #${order.id.slice(0, 8)} (synced)`
-                    });
+                    const itemType = (currentItem as any).type;
+                    const inventoryItemId = (currentItem as any).inventory_item_id;
+                    
+                    // For standalone items, update stock ONLY in inventory_items table
+                    if (itemType === 'standalone' && inventoryItemId) {
+                      const { data: inventoryItem } = await supabase
+                        .from('inventory_items')
+                        .select('stock')
+                        .eq('id', inventoryItemId)
+                        .single();
+                      
+                      if (inventoryItem) {
+                        const newStock = Math.max(0, (inventoryItem.stock || 0) - cartItem.quantity);
+                        await supabase.from('inventory_items').update({ stock: newStock }).eq('id', inventoryItemId);
+                        
+                        // No longer sync to items table - items table doesn't have stock column
+                        
+                        transactions.push({
+                          inventory_item_id: inventoryItemId,
+                          quantity_change: -cartItem.quantity,
+                          transaction_type: 'sale',
+                          notes: `Order #${order.id.slice(0, 8)} - ${cartItem.item.name} (synced)`
+                        });
+                      }
+                    }
+                    // Sale Only items don't track stock, so do nothing
                   }
                 } else {
                   const { data: ingredients } = await supabase
@@ -951,22 +1034,58 @@ export const usePosStore = create<PosState>()(
 
                   for (const ingredient of ingredients || []) {
                     const deduction = Math.max(0, Math.ceil(Number(ingredient.quantity_needed || 0) * cartItem.quantity));
+                    
+                    // Get ingredient item to check its type
                     const { data: ingredientItem } = await supabase
                       .from('items')
-                      .select('stock')
+                      .select('id, type, inventory_item_id')
                       .eq('id', ingredient.ingredient_id)
                       .single();
 
                     if (ingredientItem) {
-                      const newStock = Math.max(0, (ingredientItem.stock || 0) - deduction);
-                      await supabase.from('items').update({ stock: newStock }).eq('id', ingredient.ingredient_id);
-
-                      transactions.push({
-                        item_id: ingredient.ingredient_id,
-                        quantity_change: -deduction,
-                        transaction_type: 'sale',
-                        notes: `Recipe sale: ${cartItem.item.name} (Order #${order.id.slice(0, 8)})`
-                      });
+                      const itemType = (ingredientItem as any).type;
+                      
+                      // Determine where to deduct stock from
+                      if (itemType === 'standalone' && (ingredientItem as any).inventory_item_id) {
+                        // Standalone items: deduct from inventory_items
+                        const inventoryItemId = (ingredientItem as any).inventory_item_id;
+                        const { data: invItem } = await supabase
+                          .from('inventory_items')
+                          .select('stock')
+                          .eq('id', inventoryItemId)
+                          .single();
+                        
+                        if (invItem) {
+                          const newStock = Math.max(0, ((invItem as any).stock || 0) - deduction);
+                          await supabase.from('inventory_items').update({ stock: newStock }).eq('id', inventoryItemId);
+                        }
+                        
+                        transactions.push({
+                          inventory_item_id: inventoryItemId,
+                          quantity_change: -deduction,
+                          transaction_type: 'sale',
+                          notes: `Recipe sale: ${cartItem.item.name} (Order #${order.id.slice(0, 8)})`
+                        });
+                      } else {
+                        // Items from inventory_items table: deduct directly
+                        const { data: invItem } = await supabase
+                          .from('inventory_items')
+                          .select('stock')
+                          .eq('id', ingredient.ingredient_id)
+                          .single();
+                        
+                        if (invItem) {
+                          const newStock = Math.max(0, ((invItem as any).stock || 0) - deduction);
+                          await supabase.from('inventory_items').update({ stock: newStock }).eq('id', ingredient.ingredient_id);
+                        }
+                        
+                        transactions.push({
+                          inventory_item_id: ingredient.ingredient_id,
+                          quantity_change: -deduction,
+                          transaction_type: 'sale',
+                          notes: `Recipe sale: ${cartItem.item.name} (Order #${order.id.slice(0, 8)})`
+                        });
+                      }
                     }
                   }
                 }
@@ -1032,14 +1151,8 @@ export const usePosStore = create<PosState>()(
                   items: state.items.map(i => i.id === tempId ? data : i)
                 }));
 
-                if ((newItem.stock || 0) > 0) {
-                  await addTransactionDirect({
-                    item_id: data.id,
-                    quantity_change: newItem.stock || 0,
-                    transaction_type: 'restock',
-                    notes: 'Initial stock'
-                  });
-                }
+                // Note: stock is managed in inventory_items table, not in items table
+                // Initial stock transactions should be created when adding to inventory_items
               }
             } catch (error: any) {
               // Error adding item
@@ -1293,25 +1406,33 @@ export const usePosStore = create<PosState>()(
       updateItemStock: async (itemId, stock, notes) => {
         const { isSupabaseConfigured, items, isOnline } = get();
         const item = items.find(i => i.id === itemId);
-        const oldStock = item?.stock || 0;
+        const oldStock = (item as any)?.stock || 0;
         const diff = stock - oldStock;
 
         if (diff === 0) return;
 
-        // Optimistic update
-        set({ items: items.map(i => i.id === itemId ? { ...i, stock } : i) });
+        // Optimistic update - update stock in local items array
+        set({ items: items.map(i => i.id === itemId ? { ...i, stock } as any : i) });
 
         if (isSupabaseConfigured) {
           if (isOnline) {
             try {
-              await updateStockDirect(itemId, stock);
+              // Update stock in inventory_items table (where stock is actually stored)
+              await supabase
+                .from('inventory_items')
+                .update({ stock })
+                .eq('id', itemId);
 
-              await addTransactionDirect({
-                item_id: itemId,
-                quantity_change: diff,
-                transaction_type: diff > 0 ? 'restock' : 'adjustment',
-                notes: notes || (diff > 0 ? 'Stock addition' : 'Manual adjustment')
-              });
+              // Add inventory transaction
+              await supabase
+                .from('inventory_transactions')
+                .insert({
+                  item_id: itemId,
+                  inventory_item_id: itemId,
+                  quantity_change: diff,
+                  transaction_type: diff > 0 ? 'restock' : 'adjustment',
+                  notes: notes || (diff > 0 ? 'Stock addition' : 'Manual adjustment')
+                });
 
             } catch (error) {
               // Error updating stock
@@ -1351,10 +1472,10 @@ export const usePosStore = create<PosState>()(
         const sourceItem = items.find(i => i.id === sourceId);
         const isRecipe = item.is_recipe === false;
         
-        // For portions, use item.stock (portion stock)
-        // For recipes, use the stock passed in (calculated from recipeStocks)
-        // For regular items, use stock from items array
-        const currentStock = portionId ? (item.stock ?? 0) : (isRecipe ? (item.stock ?? 0) : (sourceItem?.stock ?? 0));
+        // Stock is passed via item object from POS page (already calculated correctly)
+        // For portions, use the stock from the item (portion stock passed in)
+        // For recipes and other items, use stock from the item (calculated and passed in)
+        const currentStock = (item as any).stock ?? 0;
         const currentQty = existing ? existing.quantity : 0;
 
         // Check if enough stock (validation only)
@@ -1483,7 +1604,8 @@ export const usePosStore = create<PosState>()(
         const sourceId = cartItem.sourceItemId || cartItem.item.id;
         const item = items.find(i => i.id === sourceId);
 
-        const currentStock = Number(cartItem.item.stock ?? 0);
+        // Stock is stored in cart item (passed when adding to cart)
+        const currentStock = Number((cartItem.item as any).stock ?? 0);
         const exceeded = (() => {
           if (cartItem.portionId) {
             return quantity > currentStock;
@@ -1526,7 +1648,8 @@ export const usePosStore = create<PosState>()(
         
         // For portions, validate stock but don't deduct/return
         if (cartItem.portionId) {
-          const portionStock = cartItem.item.stock ?? 0;
+          // Stock is stored in cart item (passed when adding to cart)
+          const portionStock = (cartItem.item as any).stock ?? 0;
           
           if (quantity > portionStock) {
             alert(`Not enough stock for ${cartItem.portionName || cartItem.item.name}. Available: ${portionStock}`);
@@ -1549,7 +1672,8 @@ export const usePosStore = create<PosState>()(
         }
         
         // For regular items, validate stock but don't deduct/return
-        const currentStock = item?.stock ?? 0;
+        // Stock is stored in cart item (passed when adding to cart)
+        const currentStock = (item as any)?.stock ?? 0;
         
         if (quantity > currentStock) {
           alert(`Not enough stock for ${item?.name || cartItem.item.name}. Available: ${currentStock}`);
@@ -1767,22 +1891,9 @@ export const usePosStore = create<PosState>()(
         set({ cart: [] });
 
         if (!isSupabaseConfigured) {
-          // For offline mode, update stock locally
-          const deductedBySourceId = activeCart.reduce<Record<string, number>>((acc, cartLine) => {
-            const sourceId = cartLine.sourceItemId || cartLine.item.id;
-            acc[sourceId] = (acc[sourceId] || 0) + cartLine.quantity;
-            return acc;
-          }, {});
-
-          const newItems = items.map(item => {
-            const deductedQty = deductedBySourceId[item.id] || 0;
-            if (deductedQty > 0) {
-              return { ...item, stock: Math.max(0, (item.stock || 0) - deductedQty) };
-            }
-            return item;
-          });
-
-          set({ items: newItems });
+          // For offline mode, stock is managed in inventory_items
+          // Don't update stock locally since it's not in items table anymore
+          // Items displayed include inventory_items which have stock
           
           // Clear table info on successful checkout
           set({ currentTable: null, currentOrderType: null, isCheckingOut: false });
@@ -1919,45 +2030,122 @@ export const usePosStore = create<PosState>()(
             }
 
             for (const [portionId, qty] of Object.entries(portionDeductions)) {
+              // Fetch portion info first
               const { data: portion, error: portionFetchError } = await supabase
                 .from('item_portions')
-                .select('portion_stock')
+                .select('portion_stock, item_id')
                 .eq('id', portionId)
                 .single();
               if (portionFetchError) throw new Error(portionFetchError.message || 'Failed to fetch portion stock');
+              
+              // Deduct from item_portions
               const newPortionStock = Math.max(0, (portion?.portion_stock || 0) - qty);
               const { error: portionUpdateError } = await supabase
                 .from('item_portions')
                 .update({ portion_stock: newPortionStock })
                 .eq('id', portionId);
               if (portionUpdateError) throw new Error(portionUpdateError.message || 'Failed to update portion stock');
+              
+              console.log(`[CHECKOUT-PORTION] Portion ${portionId}: ${portion?.portion_stock} -> ${newPortionStock}`);
+              
+              // Get inventory_item_id from the item
+              if (portion?.item_id) {
+                const { data: item } = await supabase
+                  .from('items')
+                  .select('inventory_item_id, type')
+                  .eq('id', portion.item_id)
+                  .single();
+                
+                const inventoryItemId = item?.inventory_item_id;
+                const itemType = item?.type;
+                
+                // Also deduct from inventory_items if linked
+                if (inventoryItemId && itemType === 'standalone') {
+                  const { data: inventoryItem, error: invFetchError } = await supabase
+                    .from('inventory_items')
+                    .select('stock')
+                    .eq('id', inventoryItemId)
+                    .single();
+                  
+                  if (!invFetchError && inventoryItem) {
+                    const newInventoryStock = Math.max(0, (inventoryItem.stock || 0) - qty);
+                    const { error: invUpdateError } = await supabase
+                      .from('inventory_items')
+                      .update({ stock: newInventoryStock })
+                      .eq('id', inventoryItemId);
+                    
+                    if (invUpdateError) {
+                      console.warn(`Failed to update inventory for portion ${portionId}:`, invUpdateError);
+                    } else {
+                      console.log(`[CHECKOUT-PORTION] Inventory ${inventoryItemId}: ${inventoryItem.stock} -> ${newInventoryStock}`);
+                      
+                      // Add transaction record
+                      transactions.push({
+                        inventory_item_id: inventoryItemId,
+                        quantity_change: -qty,
+                        transaction_type: 'sale',
+                        notes: `Portion sale (Order #${order.id.slice(0, 8)})`
+                      });
+                    }
+                  }
+                }
+              }
             }
 
             for (const [itemId, qty] of Object.entries(inventoryDeductions)) {
-              console.log(`[CHECKOUT] Deducting ${qty} from item ${itemId}`);
-              const { data: currentItem, error: itemFetchError } = await supabase
-                .from('items')
-                .select('stock')
-                .eq('id', itemId)
-                .single();
-              if (itemFetchError) throw new Error(itemFetchError.message || 'Failed to fetch item stock');
+              // Find the item in local state to determine where to deduct stock
+              const itemInStore = items.find(i => i.id === itemId);
+              const itemType = (itemInStore as any)?.type;
+              const linkedInventoryItemId = (itemInStore as any)?.inventory_item_id;
               
-              const oldStock = currentItem?.stock || 0;
-              const newStock = Math.max(0, oldStock - qty);
-              console.log(`[CHECKOUT] Item ${itemId}: ${oldStock} -> ${newStock}`);
+              console.log(`[CHECKOUT] Deducting ${qty} from item ${itemId}`, { itemType, linkedInventoryItemId });
               
-              const { error: itemUpdateError } = await supabase
-                .from('items')
-                .update({ stock: newStock })
-                .eq('id', itemId);
-              if (itemUpdateError) throw new Error(itemUpdateError.message || 'Failed to update item stock');
+              // Sale Only items don't track stock
+              if (itemType === 'saleonly') {
+                console.log(`[CHECKOUT] Sale Only item ${itemId}: skipping stock deduction`);
+                continue;
+              }
+              
+              let targetInventoryId: string | null = null;
+              let oldStock = 0;
+              
+              if (linkedInventoryItemId) {
+                // Standalone item: deduct from linked inventory item
+                targetInventoryId = linkedInventoryItemId;
+                const { data: inventoryItem } = await supabase
+                  .from('inventory_items')
+                  .select('stock')
+                  .eq('id', linkedInventoryItemId)
+                  .single();
+                oldStock = inventoryItem?.stock || 0;
+              } else {
+                // Direct inventory item: deduct from inventory_items directly
+                targetInventoryId = itemId;
+                const { data: inventoryItem } = await supabase
+                  .from('inventory_items')
+                  .select('stock')
+                  .eq('id', itemId)
+                  .single();
+                oldStock = inventoryItem?.stock || 0;
+              }
+              
+              if (targetInventoryId) {
+                const newStock = Math.max(0, oldStock - qty);
+                console.log(`[CHECKOUT] Item ${itemId} -> inventory ${targetInventoryId}: ${oldStock} -> ${newStock}`);
+                
+                const { error: itemUpdateError } = await supabase
+                  .from('inventory_items')
+                  .update({ stock: newStock })
+                  .eq('id', targetInventoryId);
+                if (itemUpdateError) throw new Error(itemUpdateError.message || 'Failed to update inventory stock');
 
-              transactions.push({
-                item_id: itemId,
-                quantity_change: -qty,
-                transaction_type: 'sale',
-                notes: `Order #${order.id.slice(0, 8)}`
-              });
+                transactions.push({
+                  inventory_item_id: targetInventoryId,
+                  quantity_change: -qty,
+                  transaction_type: 'sale',
+                  notes: `Order #${order.id.slice(0, 8)}`
+                });
+              }
             }
 
             const ingredientDeductions: Record<string, number> = {};
@@ -1974,25 +2162,53 @@ export const usePosStore = create<PosState>()(
             }
 
             for (const [ingredientId, qty] of Object.entries(ingredientDeductions)) {
-              const { data: ingredientItem, error: ingredientFetchError } = await supabase
-                .from('items')
-                .select('stock')
-                .eq('id', ingredientId)
-                .single();
-              if (ingredientFetchError) throw new Error(ingredientFetchError.message || 'Failed to fetch ingredient stock');
-              const newStock = Math.max(0, (ingredientItem?.stock || 0) - qty);
-              const { error: ingredientUpdateError } = await supabase
-                .from('items')
-                .update({ stock: newStock })
-                .eq('id', ingredientId);
-              if (ingredientUpdateError) throw new Error(ingredientUpdateError.message || 'Failed to update ingredient stock');
+              // Find ingredient in local state to determine where to deduct stock
+              const ingredientInStore = items.find(i => i.id === ingredientId);
+              const ingredientType = (ingredientInStore as any)?.type;
+              const linkedInventoryItemId = (ingredientInStore as any)?.inventory_item_id;
+              
+              console.log(`[CHECKOUT] Deducting ingredient ${ingredientId} qty=${qty}`, { ingredientType, linkedInventoryItemId });
+              
+              let targetInventoryId: string | null = null;
+              let oldStock = 0;
+              
+              if (linkedInventoryItemId) {
+                // Standalone ingredient: deduct from linked inventory item
+                targetInventoryId = linkedInventoryItemId;
+                const { data: inventoryItem } = await supabase
+                  .from('inventory_items')
+                  .select('stock')
+                  .eq('id', linkedInventoryItemId)
+                  .single();
+                oldStock = inventoryItem?.stock || 0;
+              } else {
+                // Direct inventory ingredient: deduct from inventory_items
+                targetInventoryId = ingredientId;
+                const { data: inventoryItem } = await supabase
+                  .from('inventory_items')
+                  .select('stock')
+                  .eq('id', ingredientId)
+                  .single();
+                oldStock = inventoryItem?.stock || 0;
+              }
+              
+              if (targetInventoryId) {
+                const newStock = Math.max(0, oldStock - qty);
+                console.log(`[CHECKOUT] Ingredient ${ingredientId} -> inventory ${targetInventoryId}: ${oldStock} -> ${newStock}`);
+                
+                const { error: ingredientUpdateError } = await supabase
+                  .from('inventory_items')
+                  .update({ stock: newStock })
+                  .eq('id', targetInventoryId);
+                if (ingredientUpdateError) throw new Error(ingredientUpdateError.message || 'Failed to update ingredient stock');
 
-              transactions.push({
-                item_id: ingredientId,
-                quantity_change: -qty,
-                transaction_type: 'sale',
-                notes: `Recipe sale (Order #${order.id.slice(0, 8)})`
-              });
+                transactions.push({
+                  inventory_item_id: targetInventoryId,
+                  quantity_change: -qty,
+                  transaction_type: 'sale',
+                  notes: `Recipe sale (Order #${order.id.slice(0, 8)})`
+                });
+              }
             }
 
             if (transactions.length > 0) {

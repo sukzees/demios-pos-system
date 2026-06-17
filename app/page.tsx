@@ -32,8 +32,10 @@ const TRANSLATIONS = {
     netProfit: 'Net Profit',
     salesOverview: 'Sales Overview',
     lowStockAlert: 'Low Stock Alert',
+    outOfStockAlert: 'Out of Stock Alert',
     recentSales: 'Recent Sales',
     allStockHealthy: 'All stock levels are healthy.',
+    noItemsOutOfStock: 'No items out of stock.',
     outOfStock: 'Out of Stock',
     inStock: 'in stock',
     justNow: 'Just now',
@@ -66,8 +68,10 @@ const TRANSLATIONS = {
     netProfit: 'ກຳໄລສຸດທິ',
     salesOverview: 'ພາບລວມການຂາຍ',
     lowStockAlert: 'ແຈ້ງເຕືອນສິນຄ້າໃກ້ໝົດ',
+    outOfStockAlert: 'ແຈ້ງເຕືອນສິນຄ້າໝົດ',
     recentSales: 'ການຂາຍຫຼ້າສຸດ',
     allStockHealthy: 'ລະດັບສິນຄ້າທັງໝົດປົກກະຕິ.',
+    noItemsOutOfStock: 'ບໍ່ມີສິນຄ້າໝົດໃນສາງ.',
     outOfStock: 'ສິນຄ້າໝົດ',
     inStock: 'ມີໃນສາງ',
     justNow: 'ເມື່ອກີ້ນີ້',
@@ -100,8 +104,10 @@ const TRANSLATIONS = {
     netProfit: 'กำไรสุทธิ',
     salesOverview: 'ภาพรวมยอดขาย',
     lowStockAlert: 'แจ้งเตือนสินค้าใกล้หมด',
+    outOfStockAlert: 'แจ้งเตือนสินค้าหมด',
     recentSales: 'รายการขายล่าสุด',
     allStockHealthy: 'ระดับสต็อกสินค้าทั้งหมดปกติ',
+    noItemsOutOfStock: 'ไม่มีสินค้าหมดในสต็อก',
     outOfStock: 'สินค้าหมด',
     inStock: 'มีในสต็อก',
     justNow: 'เมื่อครู่นี้',
@@ -136,7 +142,8 @@ export default function DashboardPage() {
     transferRevenue: 0
   });
   const [chartData, setChartData] = useState<any[]>([]);
-  const [lowStockItems, setLowStockItems] = useState<Item[]>([]);
+  const [lowStockItems, setLowStockItems] = useState<any[]>([]);
+  const [outOfStockItems, setOutOfStockItems] = useState<any[]>([]);
   const [recentSales, setRecentSales] = useState<{ id: string; total_amount: number; created_at: string }[]>([]);
   const [nowMs, setNowMs] = useState(0);
 
@@ -253,6 +260,8 @@ export default function DashboardPage() {
           const { count: itemsCount } = await supabase.from('items').select('*', { count: 'exact', head: true });
           const { data: items } = await supabase.from('items').select('*');
           const { data: portions } = await supabase.from('item_portions').select('item_id, portion_stock');
+          const { data: inventoryItems } = await supabase.from('inventory_items').select('*');
+          const { data: inventoryPortions } = await supabase.from('item_portions').select('inventory_item_id, portion_stock');
           const { data: orderItems } = await supabase.from('order_items').select('item_id, quantity, price_at_time');
           const { data: expenses } = await supabase.from('expenses').select('amount, created_at');
 
@@ -330,27 +339,32 @@ export default function DashboardPage() {
               total_amount: Number(o.total_amount || 0),
               created_at: String(o.created_at || new Date().toISOString())
             })));
-            if (items) {
+            if (inventoryItems) {
               const portionStockByItemId: Record<string, number> = {};
-              for (const portion of portions || []) {
-                if (!portion.item_id) continue;
-                portionStockByItemId[portion.item_id] = (portionStockByItemId[portion.item_id] || 0) + Number(portion.portion_stock || 0);
+              for (const portion of inventoryPortions || []) {
+                if (!portion.inventory_item_id) continue;
+                portionStockByItemId[portion.inventory_item_id] = (portionStockByItemId[portion.inventory_item_id] || 0) + Number(portion.portion_stock || 0);
               }
 
-              const lowStockLikeInventory = items
-                .map((item: any) => {
-                  const hasPortionStock = Object.prototype.hasOwnProperty.call(portionStockByItemId, item.id);
-                  const effectiveStock = hasPortionStock ? portionStockByItemId[item.id] : Number(item.stock || 0);
-                  return { ...item, stock: effectiveStock };
-                })
-                .filter((item: any) => {
-                  const stock = Number(item.stock || 0);
-                  return stock > 0 && stock < 10;
-                })
-                .sort((a: any, b: any) => Number(a.stock || 0) - Number(b.stock || 0))
+              const mappedInventoryItems = inventoryItems.map((item: any) => {
+                const hasPortionStock = Object.prototype.hasOwnProperty.call(portionStockByItemId, item.id);
+                const effectiveStock = hasPortionStock ? portionStockByItemId[item.id] : Number((item as any).stock || 0);
+                const minStockAlert = Math.max(0, Number(item.min_stock ?? 10));
+                return { ...item, stock: effectiveStock, minStockAlert };
+              });
+
+              const lowStock = mappedInventoryItems
+                .filter((item: any) => item.stock > 0 && item.stock <= item.minStockAlert)
+                .sort((a: any, b: any) => a.stock - b.stock)
                 .slice(0, 5);
 
-              setLowStockItems(lowStockLikeInventory as Item[]);
+              const outOfStock = mappedInventoryItems
+                .filter((item: any) => item.stock === 0)
+                .sort((a: any, b: any) => a.name.localeCompare(b.name))
+                .slice(0, 5);
+
+              setLowStockItems(lowStock as any[]);
+              setOutOfStockItems(outOfStock);
             }
           }
         } catch (error) {
@@ -395,7 +409,11 @@ export default function DashboardPage() {
           setChartData(makeChartData(mockOrders, start, end));
           setLowStockItems([
             { id: 'i7', name: 'Onion Rings', price: 4.99, category_id: 'c3', stock: 5, created_at: '' },
-            { id: 'i3', name: 'Double Burger', price: 12.99, category_id: 'c1', stock: 8, created_at: '' },
+            { id: 'i3', name: 'Double Burger', price: 12.99, category_id: 'c1', stock: 3, created_at: '' },
+          ]);
+          setOutOfStockItems([
+            { id: 'mock-out-1', name: 'Brioche Buns', price: 1.50, category_id: 'c1', stock: 0, created_at: '' },
+            { id: 'mock-out-2', name: 'Fresh Lettuce', price: 0.50, category_id: 'c1', stock: 0, created_at: '' },
           ]);
           setRecentSales(completedInRange.slice(0, 5).map((o) => ({
             id: String(o.id),
@@ -406,12 +424,10 @@ export default function DashboardPage() {
       }
     };
     fetchDashboardData();
-    const intervalId = setInterval(fetchDashboardData, 10000);
     const handleFocus = () => fetchDashboardData();
     window.addEventListener('focus', handleFocus);
     return () => {
       isMounted = false;
-      clearInterval(intervalId);
       window.removeEventListener('focus', handleFocus);
     };
   }, [isSupabaseConfigured, isCheckingConfig, dateRange, customDateFrom, customDateTo]);
@@ -636,7 +652,7 @@ export default function DashboardPage() {
             <div className="h-[350px] w-full">
               {mounted ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
+                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: 15, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e4e4e7" />
                     <XAxis
                       dataKey="name"
@@ -651,6 +667,7 @@ export default function DashboardPage() {
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(value) => formatCurrencyTick(value, currencySettings)}
+                      width={90}
                     />
                     <Tooltip
                       cursor={{ fill: '#f4f4f5' }}
@@ -666,6 +683,41 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
         <div className="col-span-3 space-y-4">
+          <Card className="border-red-100 shadow-sm overflow-hidden flex flex-col">
+            <CardHeader className="bg-red-50/50 border-b border-red-100 py-4">
+              <CardTitle className="flex items-center gap-2 text-red-900 text-base font-bold">
+                <AlertTriangle className="h-5 w-5 text-red-500" />
+                {t.outOfStockAlert}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 p-0">
+              <div className="divide-y divide-red-50">
+                {outOfStockItems.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <Package className="h-8 w-8 text-zinc-200 mx-auto mb-2" />
+                    <p className="text-sm text-zinc-500">{t.noItemsOutOfStock}</p>
+                  </div>
+                ) : (
+                  outOfStockItems.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between p-4 hover:bg-red-50/30 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-red-50 flex items-center justify-center border border-red-100">
+                          <Package className="h-5 w-5 text-red-500" />
+                        </div>
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-bold text-zinc-800">{item.name}</p>
+                          <p className="text-xs text-zinc-500 font-medium">#{item.id.slice(0, 8).toUpperCase()}</p>
+                        </div>
+                      </div>
+                      <div className="rounded-xl px-3 py-1.5 text-xs font-bold shadow-sm bg-red-50 text-red-600 border border-red-100">
+                        {t.outOfStock}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
           <Card className="border-rose-100 shadow-sm overflow-hidden flex flex-col">
             <CardHeader className="bg-rose-50/50 border-b border-rose-100 py-4">
               <CardTitle className="flex items-center gap-2 text-rose-900 text-base font-bold">
@@ -693,11 +745,11 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div className={`rounded-xl px-3 py-1.5 text-xs font-bold shadow-sm ${
-                        (item.stock || 0) === 0
+                        ((item as any).stock || 0) === 0
                           ? 'bg-red-50 text-red-600 border border-red-100'
                           : 'bg-amber-50 text-amber-600 border border-amber-100'
                         }`}>
-                        {(item.stock || 0) === 0 ? t.outOfStock : `${item.stock} ${t.inStock}`}
+                        {((item as any).stock || 0) === 0 ? t.outOfStock : `${(item as any).stock} ${t.inStock}`}
                       </div>
                     </div>
                   ))

@@ -89,8 +89,9 @@ export type Item = {
   min_stock?: number;
   inventory_category_id?: string | null;
   category_id?: string;
+  inventory_item_id?: string | null;
   image_url?: string;
-  stock?: number;
+  // stock removed - use inventory_items table instead
   is_recipe?: boolean;
   type?: 'standalone' | 'ingredient' | 'recipe' | 'saleOnly';
   created_at: string;
@@ -181,6 +182,7 @@ export type StationMapping = {
 export type InventoryTransaction = {
   id: string;
   item_id: string;
+  inventory_item_id?: string;
   quantity_change: number;
   transaction_type: 'sale' | 'restock' | 'adjustment' | 'waste';
   notes?: string;

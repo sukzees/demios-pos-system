@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS public.items (
   min_stock INTEGER,
   category_id UUID REFERENCES public.categories(id) ON DELETE SET NULL,
   inventory_category_id UUID REFERENCES public.inventory_categories(id) ON DELETE SET NULL,
+  inventory_item_id UUID REFERENCES public.inventory_items(id) ON DELETE SET NULL,
   image_url TEXT,
   stock INTEGER DEFAULT 0,
   is_recipe BOOLEAN DEFAULT false,

@@ -283,7 +283,8 @@ const MOCK_CATEGORIES: Category[] = [
   { id: 'c3', name: 'Sides', created_at: '' },
 ];
 
-const MOCK_ITEMS: Item[] = [
+// MOCK_ITEMS - use any[] type since these include stock (for offline mode)
+const MOCK_ITEMS: any[] = [
   { id: 'i1', name: 'Classic Burger', price: 8.99, category_id: 'c1', stock: 50, created_at: '' },
   { id: 'i2', name: 'Cheese Burger', price: 9.99, category_id: 'c1', stock: 45, created_at: '' },
   { id: 'i3', name: 'Double Burger', price: 12.99, category_id: 'c1', stock: 30, created_at: '' },
@@ -320,7 +321,7 @@ export default function ItemsPage() {
   const [newItemName, setNewItemName] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemCategory, setNewItemCategory] = useState('');
-  const [newItemStock, setNewItemStock] = useState('0');
+  // stock removed - managed in inventory_items table
   const [newItemType, setNewItemType] = useState<'standalone' | 'recipe' | 'saleOnly'>('standalone');
   const [selectedStandaloneInventoryItemId, setSelectedStandaloneInventoryItemId] = useState('');
   const [newItemDescription, setNewItemDescription] = useState('');
@@ -336,7 +337,7 @@ export default function ItemsPage() {
   const [editItemName, setEditItemName] = useState('');
   const [editItemPrice, setEditItemPrice] = useState('');
   const [editItemCategory, setEditItemCategory] = useState('');
-  const [editItemStock, setEditItemStock] = useState('0');
+  // stock removed - managed in inventory_items table
   const [editStandaloneInventoryItemId, setEditStandaloneInventoryItemId] = useState('');
   const [editItemType, setEditItemType] = useState<'standalone' | 'recipe' | 'saleOnly'>('standalone');
   const [editRecipeIngredients, setEditRecipeIngredients] = useState<{ ingredient_id: string; quantity_needed: number; unit: string }[]>([]);
@@ -362,11 +363,64 @@ export default function ItemsPage() {
     }
   }, [isSupabaseConfigured, fetchItemsAndCategories]);
 
+  // Auto-sync: Every 1 minute, calculate total portion stock and sync to inventory_items
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    const syncPortionStockToInventory = async () => {
+      try {
+        // Get all portions linked to inventory items
+        const { data: portions } = await supabase
+          .from('item_portions')
+          .select('inventory_item_id, portion_stock');
+        
+        if (!portions || portions.length === 0) return;
+
+        // Calculate total stock for each inventory_item_id
+        const stockByInventoryItem: Record<string, number> = {};
+        for (const portion of portions as any[]) {
+          const invId = portion.inventory_item_id;
+          if (invId) {
+            stockByInventoryItem[invId] = (stockByInventoryItem[invId] || 0) + (portion.portion_stock || 0);
+          }
+        }
+
+        // Update inventory_items with calculated totals
+        for (const [inventoryItemId, totalStock] of Object.entries(stockByInventoryItem)) {
+          await supabase
+            .from('inventory_items')
+            .update({ stock: totalStock })
+            .eq('id', inventoryItemId);
+        }
+
+        console.log('[AUTO-SYNC] Synced portion stocks to inventory_items:', Object.keys(stockByInventoryItem).length, 'items');
+      } catch (error) {
+        console.error('[AUTO-SYNC] Error syncing portion stocks:', error);
+      }
+    };
+
+    // Run immediately on mount
+    syncPortionStockToInventory();
+
+    // Set up interval to run every 1 minute (60000ms)
+    const intervalId = setInterval(syncPortionStockToInventory, 60000);
+
+    // Clean up interval on unmount
+    return () => clearInterval(intervalId);
+  }, [isSupabaseConfigured]);
+
   useEffect(() => {
     if (recipes.length > 0 && items.length > 0) {
       calculateAllRecipeStocks();
     }
   }, [recipes, items]);
+
+  // Reload portions when the linked inventory item changes in edit modal
+  useEffect(() => {
+    if (isEditItemOpen && editItemType === 'standalone' && editStandaloneInventoryItemId) {
+      loadPortionsForEdit(editingItem?.id || '', false, editStandaloneInventoryItemId);
+    }
+  }, [editStandaloneInventoryItemId, editItemType, isEditItemOpen, editingItem?.id]);
 
   const fetchRecipes = async () => {
     try {
@@ -440,30 +494,62 @@ export default function ItemsPage() {
         }
 
         const priceToSave = hasPortions ? parseFloat(validPortions[0].price) : parseFloat(newItemPrice || String(selectedInventoryItem.price || 0));
-        await editItem(selectedInventoryItem.id, {
-          name: newItemName.trim() || selectedInventoryItem.name,
-          price: priceToSave,
-          category_id: newItemCategory,
-          stock: selectedInventoryItem.stock || 0,
-          is_recipe: true
-        });
-        await syncStandalonePortions(selectedInventoryItem.id, validPortions);
-      } else if (newItemType === 'saleOnly') {
-        const basePrice = parseFloat(newItemPrice);
-
-        const { data, error } = await supabase
-          .from('recipes')
+        
+        // Create record in items table to show in menu, linked to inventory_item
+        // Stock is managed in inventory_items table, not in items table
+        const { data: newItem, error: itemError } = await supabase
+          .from('items')
           .insert({
-            name: newItemName,
+            name: newItemName.trim() || selectedInventoryItem.name,
+            price: priceToSave,
             category_id: newItemCategory,
+            inventory_item_id: selectedInventoryItem.id, // Link to inventory_items
+            type: 'standalone',
+            show_in_menu: true,
+            is_recipe: false
+          })
+          .select()
+          .single();
+        
+        if (itemError) throw itemError;
+        
+        if (newItem) {
+          await syncStandalonePortions(newItem.id, validPortions);
+        }
+      } else if (newItemType === 'saleOnly') {
+        const basePrice = hasPortions ? parseFloat(validPortions[0].price) : parseFloat(newItemPrice);
+
+        // Sale Only items should be saved in items table, not recipes table
+        const { data, error } = await supabase
+          .from('items')
+          .insert({
+            name: newItemName.trim(),
             price: basePrice,
-            is_recipe: true
+            category_id: newItemCategory,
+            type: 'saleonly',
+            is_recipe: false, // Sale only items have is_recipe = false
+            show_in_menu: true
           })
           .select()
           .single();
 
         if (error) throw error;
         if (!data) throw new Error('Sale-only item was not created');
+        
+        // Save portions if any
+        if (hasPortions && validPortions.length > 0) {
+          await supabase
+            .from('item_portions')
+            .insert(
+              validPortions.map((portion) => ({
+                item_id: data.id,
+                portion_name: portion.name.trim(),
+                portion_price: parseFloat(portion.price),
+                portion_cost_price: parseFloat(portion.costPrice) || 0,
+                portion_stock: parseInt(portion.stock) || 0
+              }))
+            );
+        }
       } else if (recipeIngredients.length > 0) {
         if (!newItemName.trim()) {
           alert(t.fillAllFields);
@@ -517,7 +603,7 @@ export default function ItemsPage() {
       setNewItemName('');
       setNewItemPrice('');
       setNewItemCategory('');
-      setNewItemStock('0');
+      // stock removed - managed in inventory_items
       setNewItemType('standalone');
       setSelectedStandaloneInventoryItemId('');
       setInventoryItemSearch('');
@@ -575,13 +661,13 @@ export default function ItemsPage() {
     try {
       const { data, error } = await supabase
         .from('item_portions')
-        .select('item_id, recipe_id, portion_stock');
+        .select('item_id, recipe_id, inventory_item_id, portion_stock');
 
       if (error) throw error;
 
       const totals: Record<string, number> = {};
       for (const row of data || []) {
-        const productId = row.item_id || row.recipe_id;
+        const productId = row.item_id || row.recipe_id || row.inventory_item_id;
         if (!productId) continue;
         totals[productId] = (totals[productId] || 0) + Number(row.portion_stock || 0);
       }
@@ -592,7 +678,7 @@ export default function ItemsPage() {
     }
   };
 
-  const loadPortionsForEdit = async (id: string, isRecipeEntity: boolean) => {
+  const loadPortionsForEdit = async (id: string, isRecipeEntity: boolean, inventoryItemId?: string) => {
     if (!isSupabaseConfigured) {
       setEditHasPortions(false);
       setEditPortionRows([{ name: '', price: '', stock: '0', costPrice: '0' }]);
@@ -600,14 +686,59 @@ export default function ItemsPage() {
     }
 
     try {
-      let query = supabase
-        .from('item_portions')
-        .select('portion_name, portion_price, portion_cost_price, portion_stock')
-        .order('created_at', { ascending: true });
+      let data: any[] = [];
+      let itemPortions: any[] = [];
+      let invPortions: any[] = [];
 
-      query = isRecipeEntity ? query.eq('recipe_id', id) : query.eq('item_id', id);
-      const { data, error } = await query;
-      if (error) throw error;
+      // Query portions by item_id (for all non-recipe items)
+      if (!isRecipeEntity) {
+        const { data: itemData, error: itemError } = await supabase
+          .from('item_portions')
+          .select('portion_name, portion_price, portion_cost_price, portion_stock')
+          .eq('item_id', id)
+          .order('created_at', { ascending: true });
+        if (itemError) throw itemError;
+        itemPortions = itemData || [];
+      }
+
+      // Query portions by inventory_item_id (for standalone items linked to inventory)
+      if (!isRecipeEntity && inventoryItemId) {
+        const { data: invData, error: invError } = await supabase
+          .from('item_portions')
+          .select('portion_name, portion_price, portion_cost_price, portion_stock')
+          .eq('inventory_item_id', inventoryItemId)
+          .order('created_at', { ascending: true });
+        if (invError) throw invError;
+        invPortions = invData || [];
+      }
+
+      // Query portions by recipe_id (for recipes)
+      if (isRecipeEntity) {
+        const { data: recipeData, error: recipeError } = await supabase
+          .from('item_portions')
+          .select('portion_name, portion_price, portion_cost_price, portion_stock')
+          .eq('recipe_id', id)
+          .order('created_at', { ascending: true });
+        if (recipeError) throw recipeError;
+        data = recipeData || [];
+      } else {
+        // Merge portions: item's own portions take precedence, fallback to inventory item's portions
+        const mergedMap = new Map<string, any>();
+        
+        // Add inventory item's portions first (as fallback)
+        for (const p of invPortions) {
+          const name = String(p.portion_name || '').trim().toLowerCase();
+          if (name) mergedMap.set(name, p);
+        }
+        
+        // Override with item's own portions (take precedence)
+        for (const p of itemPortions) {
+          const name = String(p.portion_name || '').trim().toLowerCase();
+          if (name) mergedMap.set(name, p);
+        }
+        
+        data = Array.from(mergedMap.values());
+      }
 
       if (data && data.length > 0) {
         setEditHasPortions(true);
@@ -631,26 +762,128 @@ export default function ItemsPage() {
     if (!isSupabaseConfigured) return;
 
     try {
-      const deleteQuery = supabase.from('item_portions').delete();
-      const { error: deleteError } = isRecipeEntity
-        ? await deleteQuery.eq('recipe_id', id)
-        : await deleteQuery.eq('item_id', id);
-      if (deleteError) throw deleteError;
+      // Debug log to see what's being saved
+      console.log('[SAVE-PORTIONS] Updating portions:', validPortions);
 
-      if (editHasPortions && validPortions.length > 0) {
-        const payload = validPortions.map((portion) => ({
-          item_id: isRecipeEntity ? null : id,
-          recipe_id: isRecipeEntity ? id : null,
-          portion_name: portion.name.trim(),
-          portion_price: parseFloat(portion.price),
+      // Get inventory_item_id for standalone items first
+      let inventoryItemId = null;
+      if (!isRecipeEntity) {
+        const { data: item } = await supabase
+          .from('items')
+          .select('inventory_item_id, type')
+          .eq('id', id)
+          .single();
+        
+        if (item?.inventory_item_id && item?.type === 'standalone') {
+          inventoryItemId = item.inventory_item_id;
+        }
+      }
+
+      // Get existing portions - search by correct foreign key
+      let existingPortions: any[] = [];
+      if (isRecipeEntity) {
+        const { data } = await supabase
+          .from('item_portions')
+          .select('id, portion_name')
+          .eq('recipe_id', id);
+        existingPortions = data || [];
+      } else if (inventoryItemId) {
+        // For standalone items, search by inventory_item_id
+        const { data } = await supabase
+          .from('item_portions')
+          .select('id, portion_name')
+          .eq('inventory_item_id', inventoryItemId);
+        existingPortions = data || [];
+      } else {
+        // For sale-only items, search by item_id
+        const { data } = await supabase
+          .from('item_portions')
+          .select('id, portion_name')
+          .eq('item_id', id);
+        existingPortions = data || [];
+      }
+
+      const existingMap = new Map(
+        (existingPortions || []).map(p => [p.portion_name.toLowerCase(), p.id])
+      );
+
+      // Update or insert portions
+      for (const portion of validPortions) {
+        const portionName = portion.name.trim();
+        const portionKey = portionName.toLowerCase();
+        const existingId = existingMap.get(portionKey);
+
+        const data: any = {
+          portion_name: portionName,
+          portion_price: parseFloat(portion.price) || 0,
           portion_cost_price: parseFloat(portion.costPrice) || 0,
           portion_stock: parseInt(portion.stock) || 0,
-        }));
-        const { error: insertError } = await supabase.from('item_portions').insert(payload);
-        if (insertError) throw insertError;
+        };
+
+        if (existingId) {
+          // Update existing portion - แก้ไขข้อมูลเดิม ไม่ลบแล้วสร้างใหม่
+          const { error } = await supabase
+            .from('item_portions')
+            .update(data)
+            .eq('id', existingId);
+          
+          if (error) console.error('[SAVE-PORTIONS] Update error:', error);
+          else console.log('[SAVE-PORTIONS] Updated:', portionName);
+          
+          existingMap.delete(portionKey); // Mark as processed
+        } else {
+          // Insert new portion - เพิ่มใหม่เฉพาะที่ยังไม่มี
+          if (isRecipeEntity) {
+            data.recipe_id = id;
+            data.item_id = null;
+            data.inventory_item_id = null;
+          } else if (inventoryItemId) {
+            data.inventory_item_id = inventoryItemId;
+            data.item_id = null;
+            data.recipe_id = null;
+          } else {
+            data.item_id = id;
+            data.recipe_id = null;
+            data.inventory_item_id = null;
+          }
+
+          const { error } = await supabase
+            .from('item_portions')
+            .insert(data);
+          
+          if (error) console.error('[SAVE-PORTIONS] Insert error:', error);
+          else console.log('[SAVE-PORTIONS] Inserted:', portionName);
+        }
+      }
+
+      // Delete portions that were removed
+      const toDelete = Array.from(existingMap.values());
+      if (toDelete.length > 0) {
+        const { error } = await supabase
+          .from('item_portions')
+          .delete()
+          .in('id', toDelete);
+        
+        if (error) console.error('[SAVE-PORTIONS] Delete error:', error);
+        else console.log('[SAVE-PORTIONS] Deleted:', toDelete.length);
+      }
+
+      console.log('[SAVE-PORTIONS] Success!');
+      
+      // Sync total stock to inventory_items
+      if (inventoryItemId && validPortions.length > 0) {
+        const totalStock = validPortions.reduce((sum, p) => sum + (parseInt(p.stock) || 0), 0);
+        const { error: invUpdateError } = await supabase
+          .from('inventory_items')
+          .update({ stock: totalStock })
+          .eq('id', inventoryItemId);
+        
+        if (!invUpdateError) {
+          console.log(`[SYNC] Updated inventory ${inventoryItemId} stock to ${totalStock}`);
+        }
       }
     } catch (error: any) {
-      console.warn('Failed to save portions:', error?.message || error);
+      console.error('Failed to save portions:', error?.message || error);
     }
   };
 
@@ -714,14 +947,35 @@ export default function ItemsPage() {
     const standaloneItems = items.filter(item => 
       item.type === 'standalone'
     );
-    console.log('All items from inventory_items:', items);
-    console.log('Standalone inventory items (type === standalone):', standaloneItems);
-    return standaloneItems;
+    
+    // Remove duplicates by ID to prevent duplicate key warnings
+    const uniqueItems = standaloneItems.reduce((acc, current) => {
+      const exists = acc.find(item => item.id === current.id);
+      if (!exists) {
+        acc.push(current);
+      }
+      return acc;
+    }, [] as typeof standaloneItems);
+    
+    // console.log('All items from inventory_items:', items); 
+    // console.log('Standalone inventory items (type === standalone):', uniqueItems);
+    return uniqueItems;
   };
 
   const getAvailableIngredients = () => {
     // Ingredients come from inventory_items table with type = 'ingredient'
-    return items.filter(item => item.type === 'ingredient');
+    const ingredients = items.filter(item => item.type === 'ingredient');
+    
+    // Remove duplicates by ID to prevent duplicate key warnings
+    const uniqueIngredients = ingredients.reduce((acc, current) => {
+      const exists = acc.find(item => item.id === current.id);
+      if (!exists) {
+        acc.push(current);
+      }
+      return acc;
+    }, [] as typeof ingredients);
+    
+    return uniqueIngredients;
   };
 
   const loadRecipeIngredients = async (recipeId: string) => {
@@ -763,7 +1017,20 @@ export default function ItemsPage() {
       const stocks = ingredients.map(ingredient => {
         const ingredientItem = items.find(item => item.id === ingredient.ingredient_id);
         if (!ingredientItem) return 0;
-        return Math.floor((ingredientItem.stock || 0) / (ingredient.quantity_needed || 1));
+        
+        // Get stock from inventory_items for standalone ingredients
+        const itemType = (ingredientItem as any).type;
+        let availableStock = 0;
+        
+        if (itemType === 'standalone' && (ingredientItem as any).inventory_item_id) {
+          const linkedInvItem = items.find(invItem => invItem.id === (ingredientItem as any).inventory_item_id);
+          availableStock = (linkedInvItem as any)?.stock ?? 0;
+        } else {
+          // For items from inventory_items table
+          availableStock = (ingredientItem as any)?.stock ?? 0;
+        }
+        
+        return Math.floor(availableStock / (ingredient.quantity_needed || 1));
       });
 
       return Math.min(...stocks);
@@ -797,73 +1064,46 @@ export default function ItemsPage() {
         return;
       }
 
-      // Check if currently should be a recipe (based on editItemType)
-      const shouldBeRecipe = editItemType === 'recipe' || editItemType === 'saleOnly';
       const wasRecipe = isEditingRecipe;
 
-      if (shouldBeRecipe) {
-        // Save as recipe
+      // แก้ไขข้อมูลในตารางที่มันอยู่เดิม - ไม่ย้ายระหว่างตาราง
+      if (wasRecipe) {
+        // อยู่ใน recipes table - แก้ไขที่นี่
         const priceToSave = editHasPortions ? parseFloat(validEditPortions[0].price) : parseFloat(editItemPrice);
+        await supabase.from('recipes').update({ 
+          name: editItemName, 
+          category_id: editItemCategory, 
+          price: priceToSave 
+        }).eq('id', editingItem.id);
         
-        if (wasRecipe) {
-          // Update existing recipe
-          await supabase.from('recipes').update({ name: editItemName, category_id: editItemCategory, price: priceToSave }).eq('id', editingItem.id);
-        } else {
-          // Convert standalone to recipe - need to delete from items and create in recipes
-          await deleteItem(editingItem.id);
-          const { data: newRecipe, error } = await supabase
-            .from('recipes')
-            .insert({
-              name: editItemName,
-              category_id: editItemCategory,
-              price: priceToSave,
-              is_recipe: true
-            })
-            .select()
-            .single();
-          
-          if (error) throw error;
-          if (newRecipe) {
-            // Update editingItem id for portions sync
-            editingItem.id = newRecipe.id;
-          }
-        }
-        
-        // Delete existing ingredients
+        // อัพเดท recipe ingredients
         await supabase.from('recipe_ingredients').delete().eq('recipe_id', editingItem.id);
-        
-        // Sale-only menu items intentionally have no ingredients, so they never deduct stock.
         if (editItemType === 'recipe' && editRecipeIngredients.length > 0) {
           await supabase.from('recipe_ingredients').insert(editRecipeIngredients.map(ing => ({
-            recipe_id: editingItem.id, ingredient_id: ing.ingredient_id, quantity_needed: ing.quantity_needed, unit: ing.unit
+            recipe_id: editingItem.id, 
+            ingredient_id: ing.ingredient_id, 
+            quantity_needed: ing.quantity_needed, 
+            unit: ing.unit
           })));
         }
         
+        // อัพเดท portions
         await syncPortionsForEdit(editingItem.id, true, validEditPortions);
       } else {
-        // Save as standalone item
-        if (wasRecipe) {
-          // Convert recipe to standalone - need to delete from recipes and link to inventory item
-          await supabase.from('recipe_ingredients').delete().eq('recipe_id', editingItem.id);
-          await supabase.from('recipes').delete().eq('id', editingItem.id);
-          
-          // Update the linked inventory item
-          if (editStandaloneInventoryItemId) {
-            const priceToSave = editHasPortions ? parseFloat(validEditPortions[0].price) : parseFloat(editItemPrice);
-            await editItem(editStandaloneInventoryItemId, {
-              name: editItemName,
-              price: priceToSave,
-              category_id: editItemCategory,
-              is_recipe: true
-            });
-            await syncStandalonePortions(editStandaloneInventoryItemId, validEditPortions);
-          }
-        } else {
-          // Update existing standalone item
-          const priceToSave = editHasPortions ? parseFloat(validEditPortions[0].price) : parseFloat(editItemPrice);
-          await editItem(editingItem.id, { name: editItemName, price: priceToSave, category_id: editItemCategory, stock: parseInt(editItemStock) || 0 });
-          await syncPortionsForEdit(editingItem.id, false, validEditPortions);
-        }
+        // อยู่ใน items table - แก้ไขที่นี่ (ไม่ย้ายไป recipes)
+        const priceToSave = editHasPortions ? parseFloat(validEditPortions[0].price) : parseFloat(editItemPrice);
+        
+        // อัพเดทข้อมูลใน items table
+        await editItem(editingItem.id, { 
+          name: editItemName, 
+          price: priceToSave, 
+          category_id: editItemCategory,
+          inventory_item_id: editStandaloneInventoryItemId || (editingItem as any).inventory_item_id,
+          type: editItemType === 'saleOnly' ? 'saleOnly' : 'standalone' // อัพเดท type แต่ยังอยู่ใน items table
+        });
+        
+        // อัพเดท portions (UPDATE ข้อมูลเดิม ไม่ลบแล้วสร้างใหม่)
+        await syncPortionsForEdit(editingItem.id, false, validEditPortions);
       }
 
       setIsEditItemOpen(false);
@@ -928,9 +1168,9 @@ export default function ItemsPage() {
           // Items table has category_id, inventory_items has inventory_category_id
           item.category_id !== undefined && item.category_id !== null
         )
-        .map(item => ({ ...item, itemSource: 'standalone' as const }))
-    : (isSupabaseConfigured ? [] : MOCK_ITEMS.map(item => ({ ...item, itemSource: 'standalone' as const })));
-  const recipeItems = recipes.length > 0 ? recipes.map(recipe => ({ ...recipe, is_recipe: true, itemSource: 'recipe' as const })) : [];
+        .map(item => ({ ...item, itemSource: 'standalone' as const, uniqueKey: `item-${item.id}` }))
+    : (isSupabaseConfigured ? [] : MOCK_ITEMS.map(item => ({ ...item, itemSource: 'standalone' as const, uniqueKey: `mock-${item.id}` })));
+  const recipeItems = recipes.length > 0 ? recipes.map(recipe => ({ ...recipe, is_recipe: true, itemSource: 'recipe' as const, uniqueKey: `recipe-${recipe.id}` })) : [];
   const displayItems = [...menuItems, ...recipeItems];
   
   // Smart Filter Logic
@@ -954,7 +1194,22 @@ export default function ItemsPage() {
     let matchesStock = true;
     if (filterStock !== 'all') {
       const hasPortionStock = Object.prototype.hasOwnProperty.call(portionStockByProduct, item.id);
-      const itemStock = hasPortionStock ? portionStockByProduct[item.id] : (isRecipeEntity ? (recipeStocks[item.id] || 0) : (item.stock || 0));
+      
+      // Get stock based on item type
+      let itemStock = 0;
+      const itemType = (item as any).type;
+      
+      if (hasPortionStock) {
+        itemStock = portionStockByProduct[item.id];
+      } else if (isRecipeEntity) {
+        itemStock = recipeStocks[item.id] || 0;
+      } else if (itemType === 'standalone' && (item as any).inventory_item_id) {
+        const linkedInvItem = items.find(invItem => invItem.id === (item as any).inventory_item_id);
+        itemStock = (linkedInvItem as any)?.stock ?? 0;
+      } else {
+        // Items from inventory_items table
+        itemStock = (item as any)?.stock ?? 0;
+      }
       
       if (filterStock === 'in-stock') {
         matchesStock = itemStock > 10;
@@ -1089,13 +1344,13 @@ export default function ItemsPage() {
                         </div>
                         {getStandaloneInventoryItems()
                           .filter(item => 
-                            item.name.toLowerCase().includes(inventoryItemSearch.toLowerCase())
+                            item?.name?.toLowerCase().includes(inventoryItemSearch.toLowerCase())
                           )
-                          .map((item) => (
-                            <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                          .map((item, index) => (
+                            <SelectItem key={`add-standalone-${item?.id}-${index}`} value={item?.id || ''}>{item?.name || 'Unknown'}</SelectItem>
                           ))}
                         {getStandaloneInventoryItems().filter(item => 
-                          item.name.toLowerCase().includes(inventoryItemSearch.toLowerCase())
+                          item?.name?.toLowerCase().includes(inventoryItemSearch.toLowerCase())
                         ).length === 0 && (
                           <SelectItem value="no-results" disabled>
                             {currentLanguage === 'th' ? 'ไม่พบรายการที่ค้นหา' : currentLanguage === 'lo' ? 'ບໍ່ພົບລາຍການທີ່ຄົ້ນຫາ' : 'No results found'}
@@ -1119,7 +1374,7 @@ export default function ItemsPage() {
                   {hasPortions && (
                     <div className="space-y-3 p-4 rounded-xl border border-zinc-100 bg-zinc-50/50">
                       {portionRows.map((row, index) => (
-                        <div key={index} className="grid grid-cols-12 gap-2">
+                        <div key={`add-portion-${index}`} className="grid grid-cols-12 gap-2">
                           <Input className="col-span-5 h-10 rounded-lg" placeholder={t.portionName} value={row.name} onChange={(e) => setPortionRows(prev => prev.map((p, i) => i === index ? { ...p, name: e.target.value } : p))} />
                           <Input className="col-span-3 h-10 rounded-lg" type="number" placeholder={t.portionPrice} value={row.price} onChange={(e) => setPortionRows(prev => prev.map((p, i) => i === index ? { ...p, price: e.target.value } : p))} />
                           <Input className="col-span-2 h-10 rounded-lg" type="number" placeholder={t.portionStock} value={row.stock} onChange={(e) => setPortionRows(prev => prev.map((p, i) => i === index ? { ...p, stock: e.target.value } : p))} />
@@ -1148,10 +1403,10 @@ export default function ItemsPage() {
                         recipeIngredients.map((ingredient, index) => {
                           const ingredientItem = getAvailableIngredients().find(i => i.id === ingredient.ingredient_id);
                           return (
-                            <div key={index} className="flex gap-2 items-center bg-white p-3 rounded-lg border border-zinc-200">
+                            <div key={`add-recipe-ing-${index}`} className="flex gap-2 items-center bg-white p-3 rounded-lg border border-zinc-200">
                               <Select value={ingredient.ingredient_id} onValueChange={(v) => updateRecipeIngredient(index, 'ingredient_id', v)}>
                                 <SelectTrigger className="h-10 rounded-lg grow"><SelectValue placeholder={t.selectIngredient} /></SelectTrigger>
-                                <SelectContent>{getAvailableIngredients().map(item => (<SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>))}</SelectContent>
+                                <SelectContent>{getAvailableIngredients().map((item, idx) => (<SelectItem key={`add-ing-opt-${item.id}-${idx}`} value={item.id}>{item.name}</SelectItem>))}</SelectContent>
                               </Select>
                               <Input type="number" step="0.01" className="w-24 h-10 rounded-lg" placeholder="จำนวน" value={ingredient.quantity_needed} onChange={(e) => updateRecipeIngredient(index, 'quantity_needed', parseFloat(e.target.value) || 0)} />
                               <Input className="w-20 h-10 rounded-lg" placeholder="หน่วย" value={ingredient.unit} onChange={(e) => updateRecipeIngredient(index, 'unit', e.target.value)} />
@@ -1255,7 +1510,7 @@ export default function ItemsPage() {
                               </div>
                               {getStandaloneInventoryItems()
                                 .filter(item => 
-                                  item.name.toLowerCase().includes(editInventoryItemSearch.toLowerCase())
+                                  item?.name?.toLowerCase().includes(editInventoryItemSearch.toLowerCase())
                                 )
                                 .length === 0 ? (
                                 <SelectItem value="no-items" disabled>
@@ -1267,10 +1522,10 @@ export default function ItemsPage() {
                               ) : (
                                 getStandaloneInventoryItems()
                                   .filter(item => 
-                                    item.name.toLowerCase().includes(editInventoryItemSearch.toLowerCase())
+                                    item?.name?.toLowerCase().includes(editInventoryItemSearch.toLowerCase())
                                   )
-                                  .map((item) => (
-                                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                                  .map((item, index) => (
+                                    <SelectItem key={`edit-standalone-${item?.id}-${index}`} value={item?.id || ''}>{item?.name || 'Unknown'}</SelectItem>
                                   ))
                               )}
                             </SelectContent>
@@ -1280,6 +1535,19 @@ export default function ItemsPage() {
                           ) : (
                             <p className="text-xs text-emerald-700">{t.standaloneLinkHelp}</p>
                           )}
+                          {/* Display current stock from linked inventory item */}
+                          {editStandaloneInventoryItemId && (() => {
+                            const linkedInvItem = items.find(invItem => invItem.id === editStandaloneInventoryItemId);
+                            const stock = (linkedInvItem as any)?.stock ?? 0;
+                            return (
+                              <div className="mt-2 flex items-center gap-2">
+                                <span className="text-xs font-semibold text-zinc-600">Current Stock:</span>
+                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${stock <= 0 ? 'bg-red-100 text-red-700' : stock < 10 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                                  {stock} {stock <= 0 ? '(Out of Stock)' : stock < 10 ? '(Low)' : '(In Stock)'}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                       
@@ -1292,15 +1560,49 @@ export default function ItemsPage() {
                         </label>
                         {editHasPortions && (
                           <div className="space-y-3 p-4 rounded-xl border border-zinc-100 bg-zinc-50/50">
+                            {editItemType === 'standalone' && (
+                              <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded-lg border border-blue-200 mb-2">
+                                ℹ️ Portions สำหรับ Standalone items: แก้ไขได้เฉพาะ<strong>ราคาขาย</strong>เท่านั้น (ชื่อและสต็อกจะดึงมาจาก Inventory)
+                              </div>
+                            )}
                             {editPortionRows.map((row, index) => (
-                              <div key={index} className="grid grid-cols-12 gap-2">
-                                <Input className="col-span-5 h-10 rounded-lg" placeholder={t.portionName} value={row.name} onChange={(e) => setEditPortionRows(prev => prev.map((p, i) => i === index ? { ...p, name: e.target.value } : p))} />
-                                <Input className="col-span-3 h-10 rounded-lg" type="number" placeholder={t.portionPrice} value={row.price} onChange={(e) => setEditPortionRows(prev => prev.map((p, i) => i === index ? { ...p, price: e.target.value } : p))} />
-                                <Input className="col-span-2 h-10 rounded-lg" type="number" placeholder={t.portionStock} value={row.stock} onChange={(e) => setEditPortionRows(prev => prev.map((p, i) => i === index ? { ...p, stock: e.target.value } : p))} />
-                                <Button variant="ghost" size="icon" className="col-span-2 text-red-500" onClick={() => setEditPortionRows(prev => prev.length > 1 ? prev.filter((_, i) => i !== index) : prev)}><Trash2 className="h-4 w-4" /></Button>
+                              <div key={`edit-portion-${index}`} className="grid grid-cols-12 gap-2">
+                                <Input 
+                                  className="col-span-5 h-10 rounded-lg" 
+                                  placeholder={t.portionName} 
+                                  value={row.name} 
+                                  onChange={(e) => setEditPortionRows(prev => prev.map((p, i) => i === index ? { ...p, name: e.target.value } : p))} 
+                                  disabled={editItemType === 'standalone'}
+                                />
+                                <Input 
+                                  className="col-span-3 h-10 rounded-lg" 
+                                  type="number" 
+                                  placeholder={t.portionPrice} 
+                                  value={row.price} 
+                                  onChange={(e) => setEditPortionRows(prev => prev.map((p, i) => i === index ? { ...p, price: e.target.value } : p))} 
+                                />
+                                <Input 
+                                  className="col-span-2 h-10 rounded-lg" 
+                                  type="number" 
+                                  placeholder={t.portionStock} 
+                                  value={row.stock} 
+                                  onChange={(e) => setEditPortionRows(prev => prev.map((p, i) => i === index ? { ...p, stock: e.target.value } : p))} 
+                                  disabled={editItemType === 'standalone'}
+                                />
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="col-span-2 text-red-500" 
+                                  onClick={() => setEditPortionRows(prev => prev.length > 1 ? prev.filter((_, i) => i !== index) : prev)}
+                                  disabled={editItemType === 'standalone'}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             ))}
-                            <Button variant="outline" size="sm" className="w-full rounded-lg" onClick={() => setEditPortionRows(prev => [...prev, { name: '', price: '', stock: '0', costPrice: '0' }])}><Plus className="mr-2 h-4 w-4" /> {t.addPortion}</Button>
+                            {editItemType !== 'standalone' && (
+                              <Button variant="outline" size="sm" className="w-full rounded-lg" onClick={() => setEditPortionRows(prev => [...prev, { name: '', price: '', stock: '0', costPrice: '0' }])}><Plus className="mr-2 h-4 w-4" /> {t.addPortion}</Button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1323,10 +1625,10 @@ export default function ItemsPage() {
                               editRecipeIngredients.map((ingredient, index) => {
                                 const ingredientItem = getAvailableIngredients().find(i => i.id === ingredient.ingredient_id);
                                 return (
-                                  <div key={index} className="flex gap-2 items-center bg-white p-3 rounded-lg border border-zinc-200">
+                                  <div key={`edit-recipe-ing-${index}`} className="flex gap-2 items-center bg-white p-3 rounded-lg border border-zinc-200">
                                     <Select value={ingredient.ingredient_id} onValueChange={(v) => updateEditRecipeIngredient(index, 'ingredient_id', v)}>
                                       <SelectTrigger className="h-10 rounded-lg grow"><SelectValue placeholder={t.selectIngredient} /></SelectTrigger>
-                                      <SelectContent>{getAvailableIngredients().map(item => (<SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>))}</SelectContent>
+                                      <SelectContent>{getAvailableIngredients().map((item, idx) => (<SelectItem key={`edit-ing-opt-${item.id}-${idx}`} value={item.id}>{item.name}</SelectItem>))}</SelectContent>
                                     </Select>
                                     <Input type="number" step="0.01" className="w-24 h-10 rounded-lg" placeholder="จำนวน" value={ingredient.quantity_needed} onChange={(e) => updateEditRecipeIngredient(index, 'quantity_needed', parseFloat(e.target.value) || 0)} />
                                     <Input className="w-20 h-10 rounded-lg" placeholder="หน่วย" value={ingredient.unit} onChange={(e) => updateEditRecipeIngredient(index, 'unit', e.target.value)} />
@@ -1443,17 +1745,41 @@ export default function ItemsPage() {
                         const category = displayCategories.find(c => c.id === item.category_id);
                         const isRecipeEntity = (item as any).itemSource === 'recipe';
                         const hasIngredients = isRecipeEntity && recipeHasIngredients[item.id];
-                        const itemTypeLabel = isRecipeEntity ? (hasIngredients ? t.ingredientsType : t.saleOnly) : t.standalone;
+                        
+                        // Determine item type label based on actual type field
+                        let itemTypeLabel;
+                        if (isRecipeEntity) {
+                          // Recipe entity from recipes table
+                          itemTypeLabel = hasIngredients ? t.ingredientsType : t.saleOnly;
+                        } else {
+                          // Item from items table - check type field
+                          const itemType = (item as any).type;
+                          if (itemType === 'saleonly') {
+                            itemTypeLabel = t.saleOnly;
+                          } else if (itemType === 'standalone') {
+                            itemTypeLabel = t.standalone;
+                          } else {
+                            // Legacy items without type
+                            itemTypeLabel = t.standalone;
+                          }
+                        }
                         
                         const hasPortionStock = Object.prototype.hasOwnProperty.call(portionStockByProduct, item.id);
-                        let stock = hasIngredients ? (recipeStocks[item.id] || 0) : (hasPortionStock ? portionStockByProduct[item.id] : (item.stock ?? 0));
+                        // Stock display removed - managed in inventory_items table
+                        // let stock = hasIngredients ? (recipeStocks[item.id] || 0) : (hasPortionStock ? portionStockByProduct[item.id] : 0);
                         return (
-                          <tr key={item.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
+                          <tr key={(item as any).uniqueKey} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
                             <td className="p-4 font-bold text-zinc-800">{item.name}</td>
                             <td className="p-4 text-zinc-500 font-medium">{category?.name || 'Unknown'}</td>
                             <td className="p-4 font-bold text-zinc-900">{formatCurrency(item.price, currencySettings)}</td>
                             <td className="p-4">
-                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${isRecipeEntity ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                                itemTypeLabel === t.saleOnly 
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                                  : itemTypeLabel === t.standalone
+                                  ? 'bg-green-50 text-green-700 border border-green-100'
+                                  : 'bg-purple-50 text-purple-700 border border-purple-100'
+                              }`}>
                                 {itemTypeLabel}
                               </span>
                             </td>
@@ -1470,13 +1796,30 @@ export default function ItemsPage() {
                                   setEditItemName(item.name);
                                   setEditItemPrice(item.price.toString());
                                   setEditItemCategory(item.category_id || '');
-                                  setEditItemStock(String((item as any).stock ?? 0));
+                                  // stock removed - managed in inventory_items table
                                   setIsEditingRecipe(isRecipeEntity);
                                   setEditInventoryItemSearch('');
-                                  const nextEditType = isRecipeEntity ? (recipeHasIngredients[item.id] ? 'recipe' : 'saleOnly') : 'standalone';
+                                  
+                                  // Determine correct edit type based on actual type field
+                                  let nextEditType: 'standalone' | 'recipe' | 'saleOnly';
+                                  if (isRecipeEntity) {
+                                    // Item from recipes table
+                                    nextEditType = recipeHasIngredients[item.id] ? 'recipe' : 'saleOnly';
+                                  } else {
+                                    // Item from items table - check type field
+                                    const itemType = (item as any).type;
+                                    if (itemType === 'saleonly') {
+                                      nextEditType = 'saleOnly';
+                                    } else if (itemType === 'standalone') {
+                                      nextEditType = 'standalone';
+                                    } else {
+                                      // Legacy items without type
+                                      nextEditType = 'standalone';
+                                    }
+                                  }
                                   setEditItemType(nextEditType);
-                                  setEditStandaloneInventoryItemId(isRecipeEntity ? '' : item.id);
                                   if (isRecipeEntity) { 
+                                    setEditStandaloneInventoryItemId('');
                                     await loadRecipeIngredients(item.id);
                                     await loadPortionsForEdit(item.id, true);
                                     if (nextEditType === 'saleOnly') {
@@ -1484,10 +1827,11 @@ export default function ItemsPage() {
                                       setEditPortionRows([{ name: '', price: '', stock: '0', costPrice: '0' }]);
                                     }
                                   } else {
-                                    setEditStandaloneInventoryItemId(item.id);
+                                    // For standalone items, load the inventory_item_id
+                                    setEditStandaloneInventoryItemId((item as any).inventory_item_id || '');
                                     setEditHasIngredients(false);
                                     setEditRecipeIngredients([]);
-                                    await loadPortionsForEdit(item.id, false);
+                                    await loadPortionsForEdit(item.id, false, (item as any).inventory_item_id || undefined);
                                   }
                                   setIsEditItemOpen(true);
                                 }} className="h-8 w-8 rounded-lg hover:bg-zinc-100"><Edit className="h-4 w-4" /></Button>

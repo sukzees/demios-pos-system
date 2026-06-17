@@ -364,12 +364,10 @@ export default function OrderHistoryPage() {
       }
     };
     fetchOrders();
-    const intervalId = setInterval(fetchOrders, 10000);
     const handleFocus = () => fetchOrders();
     window.addEventListener('focus', handleFocus);
     return () => {
       mounted = false;
-      clearInterval(intervalId);
       window.removeEventListener('focus', handleFocus);
     };
   }, [isSupabaseConfigured]);

@@ -407,13 +407,13 @@ const MOCK_CATEGORIES = [
 ];
 
 const MOCK_ITEMS: Item[] = [
-  { id: 'i1', name: 'Classic Burger', price: 8.99, category_id: 'c1', stock: 50, created_at: '', is_recipe: true },
-  { id: 'i2', name: 'Cheese Burger', price: 9.99, category_id: 'c1', stock: 45, created_at: '', is_recipe: true },
-  { id: 'i3', name: 'Double Burger', price: 12.99, category_id: 'c1', stock: 30, created_at: '', is_recipe: true },
-  { id: 'i4', name: 'Cola', price: 2.50, category_id: 'c2', stock: 100, created_at: '', is_recipe: true },
-  { id: 'i5', name: 'Lemonade', price: 3.00, category_id: 'c2', stock: 80, created_at: '', is_recipe: true },
-  { id: 'i6', name: 'Fries', price: 3.99, category_id: 'c3', stock: 60, created_at: '', is_recipe: true },
-  { id: 'i7', name: 'Onion Rings', price: 4.99, category_id: 'c3', stock: 25, created_at: '', is_recipe: true },
+  { id: 'i1', name: 'Classic Burger', price: 8.99, category_id: 'c1', created_at: '', is_recipe: true },
+  { id: 'i2', name: 'Cheese Burger', price: 9.99, category_id: 'c1', created_at: '', is_recipe: true },
+  { id: 'i3', name: 'Double Burger', price: 12.99, category_id: 'c1', created_at: '', is_recipe: true },
+  { id: 'i4', name: 'Cola', price: 2.50, category_id: 'c2', created_at: '', is_recipe: true },
+  { id: 'i5', name: 'Lemonade', price: 3.00, category_id: 'c2', created_at: '', is_recipe: true },
+  { id: 'i6', name: 'Fries', price: 3.99, category_id: 'c3', created_at: '', is_recipe: true },
+  { id: 'i7', name: 'Onion Rings', price: 4.99, category_id: 'c3', created_at: '', is_recipe: true },
 ];
 
 export default function PosPage() {
@@ -577,14 +577,14 @@ export default function PosPage() {
     try {
       const { data, error } = await supabase
         .from('item_portions')
-        .select('id, item_id, recipe_id, portion_name, portion_price, portion_stock')
+        .select('id, item_id, recipe_id, inventory_item_id, portion_name, portion_price, portion_stock')
         .order('created_at', { ascending: true });
 
       if (error) throw error;
 
       const grouped: Record<string, ItemPortion[]> = {};
       for (const row of data || []) {
-        const productId = row.item_id || row.recipe_id;
+        const productId = row.item_id || row.recipe_id || row.inventory_item_id;
         if (!productId) continue;
         if (!grouped[productId]) grouped[productId] = [];
         grouped[productId].push({
@@ -625,7 +625,18 @@ export default function PosPage() {
         const ingredientItem = items.find(item => item.id === ingredient.ingredient_id);
         if (!ingredientItem) return 0;
 
-        const availableStock = ingredientItem.stock || 0;
+        // Get stock from inventory_items for standalone ingredients
+        const itemType = (ingredientItem as any).type;
+        let availableStock = 0;
+        
+        if (itemType === 'standalone' && (ingredientItem as any).inventory_item_id) {
+          const linkedInvItem = items.find(invItem => invItem.id === (ingredientItem as any).inventory_item_id);
+          availableStock = (linkedInvItem as any)?.stock ?? 0;
+        } else {
+          // For non-standalone items in inventory_items table
+          availableStock = (ingredientItem as any)?.stock ?? 0;
+        }
+        
         const neededPerRecipe = ingredient.quantity_needed || 1;
 
         return Math.floor(availableStock / neededPerRecipe);
@@ -706,9 +717,17 @@ export default function PosPage() {
   useEffect(() => {
     if (portionSelectionItem) {
       const initial: Record<string, number> = {};
+      // Initialize from item's own portions
       (portionsByProduct[portionSelectionItem.id] || []).forEach(p => {
         initial[p.id] = 0;
       });
+      // Also initialize from linked inventory item's portions
+      const linkedInventoryItemId = (portionSelectionItem as any).inventory_item_id;
+      if (linkedInventoryItemId) {
+        (portionsByProduct[linkedInventoryItemId] || []).forEach(p => {
+          initial[p.id] = 0;
+        });
+      }
       setPortionQuantities(initial);
     }
   }, [portionSelectionItem, portionsByProduct]);
@@ -903,11 +922,8 @@ export default function PosPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, scheduleRefresh)
       .subscribe();
 
-    const pollingId = window.setInterval(refreshRealtimePosData, 10000);
-
     return () => {
       if (refreshTimer) clearTimeout(refreshTimer);
-      window.clearInterval(pollingId);
       supabase.removeChannel(channel);
     };
   }, [isSupabaseConfigured, refreshRealtimePosData]);
@@ -915,15 +931,47 @@ export default function PosPage() {
   const displayCategories = categories.length > 0 ? categories : (isSupabaseConfigured ? [] : MOCK_CATEGORIES);
 
   // Combine items and recipes for display (same logic as Items & Categories)
-  const menuItems = items.length > 0 ? items.filter(item => item.is_recipe !== false) : (isSupabaseConfigured ? [] : MOCK_ITEMS);
+  // Filter items: only show items from 'items' table (has category_id)
+  const menuItems = items.length > 0 
+    ? items
+        .filter(item => 
+          item.category_id !== undefined && 
+          item.category_id !== null
+        )
+        .map(item => ({ ...item, uniqueKey: `item-${item.id}` }))
+    : (isSupabaseConfigured ? [] : MOCK_ITEMS.map(item => ({ ...item, uniqueKey: `mock-${item.id}` })));
+  
   const recipeItems = recipes.length > 0 ? recipes.map(recipe => ({
     ...recipe,
-    is_recipe: false // Mark recipes as is_recipe = false for display logic
+    is_recipe: true, // Mark recipes as is_recipe = true for display logic
+    uniqueKey: `recipe-${recipe.id}`
   })) : [];
 
   const displayItems = [...menuItems, ...recipeItems];
 
-  const filteredItems = displayItems.filter(item => {
+  // Remove duplicates by uniqueKey to prevent React key warnings
+  const uniqueDisplayItems = displayItems.reduce((acc, current) => {
+    const key = (current as any).uniqueKey;
+    const exists = acc.find(item => (item as any).uniqueKey === key);
+    if (!exists) {
+      acc.push(current);
+    }
+    return acc;
+  }, [] as typeof displayItems);
+
+  // Debug: Check for duplicate uniqueKeys
+  if (process.env.NODE_ENV === 'development') {
+    const uniqueKeys = displayItems.map(item => (item as any).uniqueKey);
+    const duplicates = uniqueKeys.filter((key, index) => uniqueKeys.indexOf(key) !== index);
+    if (duplicates.length > 0) {
+      console.warn('[POS] Duplicate uniqueKeys found:', duplicates);
+      console.warn('[POS] menuItems count:', menuItems.length);
+      console.warn('[POS] recipeItems count:', recipeItems.length);
+      console.warn('[POS] After deduplication:', uniqueDisplayItems.length);
+    }
+  }
+
+  const filteredItems = uniqueDisplayItems.filter(item => {
     const matchesCategory = activeCategory === 'all' || item.category_id === activeCategory;
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
@@ -2891,28 +2939,76 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
             <div className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 {filteredItems.map(item => {
-                  // Check if this is a Sale Only item (recipe without ingredients)
-                  const isRecipe = item.is_recipe === false;
-                  const isSaleOnly = isRecipe && !recipeHasIngredients[item.id];
+                  // Classify item type based on 'type' field
+                  const itemType = (item as any).type;
+                  const isStandalone = itemType === 'standalone';
+                  const isSaleOnly = itemType === 'saleonly'; // Sale Only items from items table with type='saleonly'
+                  const isRecipe = item.is_recipe === true; // Recipes from items table with is_recipe=true
                   
                   // Calculate stock based on item type
                   let stock;
+                  let linkedInventoryItem = null;
+                  
                   if (isSaleOnly) {
-                    // Sale Only items have unlimited stock (don't check inventory)
-                    stock = 999999;
+                    // Sale Only items: if linked to inventory, use real stock; otherwise unlimited
+                    const itemWithLink = item as any;
+                    if (itemWithLink.inventory_item_id) {
+                      const linkedInvItem = items.find(invItem => invItem.id === itemWithLink.inventory_item_id);
+                      stock = (linkedInvItem as any)?.stock ?? 0;
+                    } else {
+                      stock = 999999; // Unlimited
+                    }
                   } else if (isRecipe) {
-                    stock = recipeStocks[item.id] || 0;
+                    // Recipe items: calculate from recipe stocks
+                    const hasIngredients = recipeHasIngredients[item.id];
+                    if (!hasIngredients) {
+                      // Recipe without ingredients: if linked to inventory, use real stock; otherwise unlimited
+                      const itemWithLink = item as any;
+                      if (itemWithLink.inventory_item_id) {
+                        const linkedInvItem = items.find(invItem => invItem.id === itemWithLink.inventory_item_id);
+                        stock = (linkedInvItem as any)?.stock ?? 0;
+                      } else {
+                        stock = 999999; // Unlimited
+                      }
+                    } else {
+                      stock = recipeStocks[item.id] || 0;
+                    }
+                  } else if (isStandalone) {
+                    // Standalone items: Get stock from linked inventory item
+                    const itemWithLink = item as any;
+                    if (itemWithLink.inventory_item_id) {
+                      const linkedInvItem = items.find(invItem => invItem.id === itemWithLink.inventory_item_id);
+                      stock = (linkedInvItem as any)?.stock ?? 0;
+                    } else {
+                      stock = 0; // No link = no stock
+                    }
                   } else {
-                    stock = item.stock ?? 0;
+                    // Items from inventory_items table have stock directly
+                    stock = (item as any)?.stock ?? 0;
                   }
 
                   const itemPortions = portionsByProduct[item.id] || [];
-                  const hasPortions = itemPortions.length > 0;
+                  const linkedInventoryItemId = (item as any).inventory_item_id;
+                  const linkedInventoryPortions = linkedInventoryItemId ? (portionsByProduct[linkedInventoryItemId] || []) : [];
+                  
+                  // Merge portions: item's own portions take precedence, fallback to inventory item's portions
+                  const mergedPortionsMap = new Map<string, ItemPortion>();
+                  for (const p of linkedInventoryPortions) {
+                    const key = (p.name || '').trim().toLowerCase();
+                    if (key) mergedPortionsMap.set(key, p);
+                  }
+                  for (const p of itemPortions) {
+                    const key = (p.name || '').trim().toLowerCase();
+                    if (key) mergedPortionsMap.set(key, p);
+                  }
+                  const allPortions = Array.from(mergedPortionsMap.values());
+                  const hasPortions = allPortions.length > 0;
                   
                   // Don't deduct cart quantity from stock display because stock is already deducted when adding to cart
-                  const adjustedPortions = itemPortions.map((portion) => {
-                    if (isSaleOnly) {
-                      // Sale Only items always show as available
+                  const adjustedPortions = allPortions.map((portion) => {
+                    const itemWithLink = item as any;
+                    if (isSaleOnly && !itemWithLink.inventory_item_id) {
+                      // Sale Only items without inventory link always show as available
                       return { ...portion, available: 999999 };
                     }
                     const maxByRecipe = isRecipe ? stock : Number.MAX_SAFE_INTEGER;
@@ -2928,31 +3024,35 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
 
                   return (
                     <Card
-                      key={item.id}
-                      className={`cursor-pointer transition-all hover:border-blue-400 hover:shadow-lg relative overflow-hidden group ${isOutOfStock ? 'opacity-60 grayscale' : 'hover:bg-blue-50/10'}`}
+                      key={(item as any).uniqueKey}
+                      className={`transition-all relative overflow-hidden group ${isOutOfStock ? 'opacity-70 grayscale cursor-not-allowed border-red-200' : 'cursor-pointer hover:border-blue-400 hover:shadow-lg hover:bg-blue-50/10'}`}
                       onClick={() => {
                         if (isOutOfStock) return;
                         
+                        // If item has portions, show portion selection modal first
+                        if (hasPortions) {
+                          setPortionSelectionItem(item);
+                          return;
+                        }
+                        
                         // Check if price is 0, show price input dialog
                         if (item.price === 0) {
-                          setPriceInputItem({ item: { ...item, stock }, stock, hasPortions });
+                          setPriceInputItem({ item: { ...item, stock }, stock, hasPortions: false });
                           setCustomPrice('');
                           return;
                         }
                         
-                        if (hasPortions) {
-                          setPortionSelectionItem(item);
-                        } else {
-                          addToCart({ ...item, stock });
-                        }
+                        // Otherwise, add to cart directly
+                        addToCart({ ...item, stock } as any);
                       }}
                     >
                       {/* Accent Stripe */}
-                      <div className={`absolute top-0 left-0 right-0 h-1 ${isOutOfStock ? 'bg-zinc-300' : 'bg-blue-500 group-hover:h-1.5 transition-all'}`} />
+                      <div className={`absolute top-0 left-0 right-0 h-1 ${isOutOfStock ? 'bg-red-400' : 'bg-blue-500 group-hover:h-1.5 transition-all'}`} />
 
                       {isOutOfStock && (
-                        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/10 font-bold text-red-600 backdrop-blur-[1px]">
-                          {t.outOfStock}
+                        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/20 font-bold text-red-700 backdrop-blur-[2px]">
+                          <AlertTriangle className="h-8 w-8 mb-1 text-red-600" />
+                          <span className="text-sm uppercase tracking-wider">{t.outOfStock}</span>
                         </div>
                       )}
                       {isLowStock && (
@@ -2971,7 +3071,7 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
                         <div className="mt-2 text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">{formatCurrency(item.price)}</div>
                         {hasPortions && (
                           <div className="mt-2 text-[10px] text-zinc-500 font-medium bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">
-                            {itemPortions.length} {t.portionsAvailable}
+                            {allPortions.length} {t.portionsAvailable}
                           </div>
                         )}
                       </CardContent>
@@ -3102,7 +3202,7 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
                       </div>
                       <div className="space-y-1 mb-3">
                         {order.cart.slice(0, 3).map((item, idx) => (
-                          <div key={idx} className="text-xs text-zinc-600 flex justify-between">
+                          <div key={`held-${order.id}-item-${idx}`} className="text-xs text-zinc-600 flex justify-between">
                             <span>{item.quantity}x {item.item.name}</span>
                             <span>{formatCurrency(item.item.price * item.quantity)}</span>
                           </div>
@@ -3162,9 +3262,10 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
                 const isSentToKitchen = cartItem.sentToKitchen || false;
                 const isCompleted = cartItem.completedInKitchen || false;
                 const showSentBadge = isSentToKitchen || isCompleted;
+                const itemKey = `cart-${cartItem.clientLineId || cartItem.orderItemId || `${cartItem.item.id}-${cartItem.portionId || 'no-portion'}-${index}`}`;
                 
                 return (
-                  <div key={`${cartItem.item.id}-${cartItem.portionId || 'no-portion'}-${index}`} className={`flex items-center justify-between gap-2 ${showSentBadge ? 'opacity-60 bg-zinc-50' : ''} p-2 rounded-lg border ${showSentBadge ? 'border-zinc-200' : 'border-transparent'}`}>
+                  <div key={itemKey} className={`flex items-center justify-between gap-2 ${showSentBadge ? 'opacity-60 bg-zinc-50' : ''} p-2 rounded-lg border ${showSentBadge ? 'border-zinc-200' : 'border-transparent'}`}>
                     <div className="flex-1">
                       <div className={`font-medium ${showSentBadge ? 'text-zinc-500' : ''}`}>
                         {cartItem.cancelled ? (
@@ -3697,12 +3798,82 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
             </DialogHeader>
 
             <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto bg-white/50 backdrop-blur-sm">
-              {portionSelectionItem && (portionsByProduct[portionSelectionItem.id] || []).map((portion) => {
-                const isRecipe = portionSelectionItem.is_recipe === false;
-                const stock = isRecipe ? (recipeStocks[portionSelectionItem.id] || 0) : (portionSelectionItem.stock || 0);
-                // Don't deduct cart quantity from stock display because stock is already deducted when adding to cart
-                const maxByRecipe = isRecipe ? stock : Number.MAX_SAFE_INTEGER;
-                const available = Math.max(0, Math.min(portion.stock, maxByRecipe));
+              {(() => {
+                // Merge portions from item.id and linked inventory_item_id
+                const itemPortions = portionSelectionItem ? (portionsByProduct[portionSelectionItem.id] || []) : [];
+                const linkedInventoryItemId = portionSelectionItem ? (portionSelectionItem as any).inventory_item_id : null;
+                const linkedInventoryPortions = linkedInventoryItemId ? (portionsByProduct[linkedInventoryItemId] || []) : [];
+                
+                const mergedMap = new Map<string, ItemPortion>();
+                for (const p of linkedInventoryPortions) {
+                  const key = (p.name || '').trim().toLowerCase();
+                  if (key) mergedMap.set(key, p);
+                }
+                for (const p of itemPortions) {
+                  const key = (p.name || '').trim().toLowerCase();
+                  if (key) mergedMap.set(key, p);
+                }
+                const allPortions = Array.from(mergedMap.values());
+                
+                return allPortions.map((portion) => {
+                // Determine item type
+                const itemType = (portionSelectionItem as any).type;
+                const isStandalone = itemType === 'standalone';
+                const isSaleOnly = itemType === 'saleonly';
+                const isRecipe = portionSelectionItem.is_recipe === true;
+                
+                // Calculate stock based on item type (same logic as main display)
+                let stock;
+                if (isSaleOnly) {
+                  // Sale Only items: if linked to inventory, use real stock; otherwise unlimited
+                  const itemWithLink = portionSelectionItem as any;
+                  if (itemWithLink.inventory_item_id) {
+                    const linkedInvItem = items.find(invItem => invItem.id === itemWithLink.inventory_item_id);
+                    stock = (linkedInvItem as any)?.stock ?? 0;
+                  } else {
+                    stock = 999999; // Unlimited
+                  }
+                } else if (isRecipe) {
+                  const hasIngredients = recipeHasIngredients[portionSelectionItem.id];
+                  if (!hasIngredients) {
+                    // Recipe without ingredients: if linked to inventory, use real stock; otherwise unlimited
+                    const itemWithLink = portionSelectionItem as any;
+                    if (itemWithLink.inventory_item_id) {
+                      const linkedInvItem = items.find(invItem => invItem.id === itemWithLink.inventory_item_id);
+                      stock = (linkedInvItem as any)?.stock ?? 0;
+                    } else {
+                      stock = 999999; // Unlimited
+                    }
+                  } else {
+                    stock = recipeStocks[portionSelectionItem.id] || 0;
+                  }
+                } else if (isStandalone) {
+                  // Standalone items: Get stock from linked inventory item
+                  const itemWithLink = portionSelectionItem as any;
+                  if (itemWithLink.inventory_item_id) {
+                    const linkedInvItem = items.find(invItem => invItem.id === itemWithLink.inventory_item_id);
+                    stock = (linkedInvItem as any)?.stock ?? 0;
+                  } else {
+                    stock = 0;
+                  }
+                } else {
+                  // Items from inventory_items table have stock directly
+                  stock = (portionSelectionItem as any)?.stock || 0;
+                }
+                
+                // Calculate available stock for this portion
+                let available;
+                const itemWithLink = portionSelectionItem as any;
+                if (isSaleOnly && itemWithLink.inventory_item_id) {
+                  // Sale Only with inventory link: use real stock from inventory
+                  available = Math.max(0, stock);
+                } else if (isSaleOnly && !itemWithLink.inventory_item_id) {
+                  // Sale Only without inventory link: unlimited
+                  available = 999999;
+                } else {
+                  const maxByRecipe = isRecipe ? stock : Number.MAX_SAFE_INTEGER;
+                  available = Math.max(0, Math.min(portion.stock, maxByRecipe));
+                }
                 const isOutOfStock = available <= 0;
                 const currentQty = portionQuantities[portion.id] || 0;
 
@@ -3710,16 +3881,16 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
                   <div
                     key={portion.id}
                     className={`w-full group flex items-center justify-between p-4 rounded-xl border-2 transition-all duration-200 ${isOutOfStock
-                      ? 'border-zinc-100 bg-zinc-50 opacity-60'
+                      ? 'border-red-100 bg-red-50/50 opacity-70'
                       : 'border-zinc-200 hover:border-indigo-400 hover:bg-indigo-50/50 hover:shadow-sm'
                       }`}
                   >
                     <div className="flex flex-col items-start gap-1 flex-1">
-                      <span className={`font-bold text-lg ${isOutOfStock ? 'text-zinc-500' : 'text-zinc-800'}`}>
+                      <span className={`font-bold text-lg ${isOutOfStock ? 'text-red-600' : 'text-zinc-800'}`}>
                         {portion.name}
                       </span>
                       <div className="flex items-center gap-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isOutOfStock ? 'bg-zinc-200 text-zinc-500' : 'bg-indigo-100 text-indigo-700'}`}>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isOutOfStock ? 'bg-red-100 text-red-700' : 'bg-indigo-100 text-indigo-700'}`}>
                           {isOutOfStock ? 'Out of Stock' : `Available: ${available}`}
                         </span>
                         {!isOutOfStock && (
@@ -3736,7 +3907,7 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
                           size="icon"
                           variant="ghost"
                           className="h-8 w-8 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
-                          onClick={() => setPortionQuantities(prev => ({ ...prev, [portion.id]: Math.max(0, prev[portion.id] - 1) }))}
+                          onClick={() => setPortionQuantities(prev => ({ ...prev, [portion.id]: Math.max(0, (prev[portion.id] || 0) - 1) }))}
                           disabled={currentQty <= 0}
                         >
                           <Minus className="h-4 w-4" />
@@ -3756,7 +3927,7 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
                           size="icon"
                           variant="ghost"
                           className="h-8 w-8 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
-                          onClick={() => setPortionQuantities(prev => ({ ...prev, [portion.id]: Math.min(available, prev[portion.id] + 1) }))}
+                          onClick={() => setPortionQuantities(prev => ({ ...prev, [portion.id]: Math.min(available, (prev[portion.id] || 0) + 1) }))}
                           disabled={currentQty >= available}
                         >
                           <Plus className="h-4 w-4" />
@@ -3765,7 +3936,8 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
                     )}
                   </div>
                 );
-              })}
+                });
+              })()}
             </div>
 
             <DialogFooter className="p-4 bg-zinc-50 border-t border-zinc-100 flex-row gap-2">
@@ -3779,13 +3951,71 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
               <Button
                 className="flex-1 bg-indigo-600 hover:bg-indigo-700 h-11 rounded-lg text-base font-bold shadow-lg shadow-indigo-200"
                 onClick={async () => {
-                  const portions = portionsByProduct[portionSelectionItem.id] || [];
+                  // Get merged portions (same as display)
+                  const itemPortions = portionsByProduct[portionSelectionItem.id] || [];
+                  const linkedInventoryItemId = (portionSelectionItem as any).inventory_item_id;
+                  const linkedInventoryPortions = linkedInventoryItemId ? (portionsByProduct[linkedInventoryItemId] || []) : [];
+                  
+                  const mergedMap = new Map<string, ItemPortion>();
+                  for (const p of linkedInventoryPortions) {
+                    const key = (p.name || '').trim().toLowerCase();
+                    if (key) mergedMap.set(key, p);
+                  }
+                  for (const p of itemPortions) {
+                    const key = (p.name || '').trim().toLowerCase();
+                    if (key) mergedMap.set(key, p);
+                  }
+                  const portions = Array.from(mergedMap.values());
+                  
+                  // Determine item type (same logic as display)
+                  const itemType = (portionSelectionItem as any).type;
+                  const isStandalone = itemType === 'standalone';
+                  const isSaleOnly = itemType === 'saleonly';
+                  const isRecipe = portionSelectionItem.is_recipe === true;
+                  
+                  // Calculate stock based on item type
+                  let itemStock;
+                  if (isSaleOnly) {
+                    // Sale Only items: if linked to inventory, use real stock; otherwise unlimited
+                    const itemWithLink = portionSelectionItem as any;
+                    if (itemWithLink.inventory_item_id) {
+                      const linkedInvItem = items.find(invItem => invItem.id === itemWithLink.inventory_item_id);
+                      itemStock = (linkedInvItem as any)?.stock ?? 0;
+                    } else {
+                      itemStock = 999999; // Unlimited
+                    }
+                  } else if (isRecipe) {
+                    const hasIngredients = recipeHasIngredients[portionSelectionItem.id];
+                    if (!hasIngredients) {
+                      // Recipe without ingredients: if linked to inventory, use real stock; otherwise unlimited
+                      const itemWithLink = portionSelectionItem as any;
+                      if (itemWithLink.inventory_item_id) {
+                        const linkedInvItem = items.find(invItem => invItem.id === itemWithLink.inventory_item_id);
+                        itemStock = (linkedInvItem as any)?.stock ?? 0;
+                      } else {
+                        itemStock = 999999; // Unlimited
+                      }
+                    } else {
+                      itemStock = recipeStocks[portionSelectionItem.id] || 0;
+                    }
+                  } else if (isStandalone) {
+                    // Standalone items: Get stock from linked inventory item
+                    const itemWithLink = portionSelectionItem as any;
+                    if (itemWithLink.inventory_item_id) {
+                      const linkedInvItem = items.find(invItem => invItem.id === itemWithLink.inventory_item_id);
+                      itemStock = (linkedInvItem as any)?.stock ?? 0;
+                    } else {
+                      itemStock = 0;
+                    }
+                  } else {
+                    itemStock = (portionSelectionItem as any)?.stock || 0;
+                  }
+                  
                   portions.forEach(portion => {
                     const qty = portionQuantities[portion.id] || 0;
                     if (qty > 0) {
-                      const isRecipe = portionSelectionItem.is_recipe === false;
-                      const stock = isRecipe ? (recipeStocks[portionSelectionItem.id] || 0) : (portionSelectionItem.stock || 0);
-                      const totalCapacity = Math.min(portion.stock, isRecipe ? stock : Number.MAX_SAFE_INTEGER);
+                      const maxByRecipe = isRecipe ? itemStock : Number.MAX_SAFE_INTEGER;
+                      const totalCapacity = Math.min(portion.stock, maxByRecipe);
                       addToCart(
                         {
                           ...portionSelectionItem,

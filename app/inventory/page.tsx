@@ -96,6 +96,8 @@ const TRANSLATIONS: Record<'en' | 'lo' | 'th', TranslationMap> = {
     totalInventoryValue: 'Total Inventory Value',
     lowStockAlerts: 'Low Stock Alerts',
     itemsWithLowStock: 'Items with low stock level',
+    outOfStockAlerts: 'Out of Stock Alerts',
+    itemsOutOfStock: 'Items out of stock',
     addInventoryCategory: 'Add Inventory Category',
     createCategoryDesc: 'Create a category for Inventory Management.',
     manageCategoriesDesc: 'Edit or delete inventory categories.',
@@ -245,6 +247,8 @@ const TRANSLATIONS: Record<'en' | 'lo' | 'th', TranslationMap> = {
     totalInventoryValue: 'ມູນຄ່າສິນຄ້າທັງໝົດ',
     lowStockAlerts: 'ແຈ້ງເຕືອນສິນຄ້າໃກ້ໝົດ',
     itemsWithLowStock: 'ສິນຄ້າທີ່ມີລະດັບຕ່ຳ',
+    outOfStockAlerts: 'ແຈ້ງເຕືອນສິນຄ້າໝົດ',
+    itemsOutOfStock: 'ສິນຄ້າທີ່ບໍ່ມີໃນສາງ',
     addInventoryCategory: 'ເພີ່ມໝວດໝູ່ສິນຄ້າ',
     createCategoryDesc: 'ສ້າງໝວດໝູ່ສຳລັບການຈັດການສິນຄ້າໃສ່ສາງ',
     manageCategoriesDesc: 'ແກ້ໄຂ ຫຼື ລຶບໝວດໝູ່ສິນຄ້າ',
@@ -387,6 +391,8 @@ const TRANSLATIONS: Record<'en' | 'lo' | 'th', TranslationMap> = {
     totalInventoryValue: 'มูลค่าสินค้าทั้งหมด',
     lowStockAlerts: 'แจ้งเตือนสินค้าใกล้หมด',
     itemsWithLowStock: 'สินค้าที่มีระดับต่ำ',
+    outOfStockAlerts: 'แจ้งเตือนสินค้าหมด',
+    itemsOutOfStock: 'สินค้าที่ไม่มีในคลัง',
     addInventoryCategory: 'เพิ่มหมวดหมู่สินค้า',
     createCategoryDesc: 'สร้างหมวดหมู่สำหรับการจัดการคลังสินค้า',
     manageCategoriesDesc: 'แก้ไข หรือ ลบหมวดหมู่สินค้า',
@@ -481,7 +487,8 @@ const MOCK_INVENTORY_CATEGORIES: Category[] = [
   { id: 'c3', name: 'Sides', created_at: '' },
 ];
 
-const MOCK_ITEMS: Item[] = [
+// MOCK_ITEMS for inventory - these represent inventory_items which still have stock
+const MOCK_ITEMS: any[] = [
   { id: 'i1', name: 'Classic Burger', price: 8.99, category_id: 'c1', stock: 50, created_at: '' },
   { id: 'i2', name: 'Cheese Burger', price: 9.99, category_id: 'c1', stock: 45, created_at: '' },
   { id: 'i3', name: 'Double Burger', price: 12.99, category_id: 'c1', stock: 30, created_at: '' },
@@ -556,7 +563,7 @@ function InventoryContent() {
         const [itemsRes, categoriesRes, portionsRes] = await Promise.all([
           supabase.from('inventory_items').select('*').order('created_at', { ascending: false }),
           supabase.from('inventory_categories').select('*').order('name'),
-          supabase.from('item_portions').select('item_id, portion_name, portion_stock, portion_cost_price, portion_price')
+          supabase.from('item_portions').select('inventory_item_id, portion_name, portion_stock, portion_cost_price, portion_price')  // Changed to select inventory_item_id
         ]);
 
         if (itemsRes.data) setItems(itemsRes.data);
@@ -567,16 +574,17 @@ function InventoryContent() {
           const valueTotals: Record<string, number> = {};
           const portionsMap: Record<string, {name: string, stock: number}[]> = {};
           for (const row of portionsRes.data as any[]) {
-            if (!row.item_id) continue;
+            const itemId = row.inventory_item_id;  // Changed from item_id to inventory_item_id
+            if (!itemId) continue;
             const stock = Number(row.portion_stock || 0);
             const cost = Number(row.portion_cost_price ?? row.portion_price ?? 0);
 
-            totals[row.item_id] = (totals[row.item_id] || 0) + stock;
-            costTotals[row.item_id] = (costTotals[row.item_id] || 0) + cost;
-            valueTotals[row.item_id] = (valueTotals[row.item_id] || 0) + (stock * cost);
+            totals[itemId] = (totals[itemId] || 0) + stock;
+            costTotals[itemId] = (costTotals[itemId] || 0) + cost;
+            valueTotals[itemId] = (valueTotals[itemId] || 0) + (stock * cost);
             
-            if (!portionsMap[row.item_id]) portionsMap[row.item_id] = [];
-            portionsMap[row.item_id].push({ name: row.portion_name, stock });
+            if (!portionsMap[itemId]) portionsMap[itemId] = [];
+            portionsMap[itemId].push({ name: row.portion_name, stock });
           }
           setPortionStockByItemId(totals);
           setPortionsByItemId(portionsMap);
@@ -728,10 +736,13 @@ function InventoryContent() {
   }, 0);
 
   const lowStockCount = displayItems.reduce((count, item) => {
-    const hasPortionStock = Object.prototype.hasOwnProperty.call(portionStockByItemId, item.id);
-    const stock = hasPortionStock ? portionStockByItemId[item.id] : (item.stock || 0);
-    const minStockAlert = Math.max(0, Number((item as any).min_stock ?? 10));
-    return (stock > 0 || hasPortionStock) && stock <= minStockAlert ? count + 1 : count;
+    const meta = getItemInventoryMeta(item);
+    return meta.isLowStock ? count + 1 : count;
+  }, 0);
+
+  const outOfStockCount = displayItems.reduce((count, item) => {
+    const meta = getItemInventoryMeta(item);
+    return meta.isOutOfStock ? count + 1 : count;
   }, 0);
 
   const handleUpdateStock = async (item: any, change: number, notes?: string) => {
@@ -779,7 +790,7 @@ function InventoryContent() {
 
       // Add filtered transactions data
       filteredTransactions.forEach((transaction) => {
-        const item = items.find(i => i.id === transaction.item_id);
+        const item = items.find(i => i.id === transaction.item_id || i.id === transaction.inventory_item_id);
         const date = new Date(transaction.created_at).toLocaleString();
         const itemName = item?.name || 'Unknown Item';
         const type = transaction.transaction_type === 'adjustment' ? 'Manual Adj' :
@@ -1028,7 +1039,7 @@ function InventoryContent() {
       const { data, error } = await supabase
         .from('item_portions')
         .select('portion_name, portion_cost_price, portion_price, portion_stock')
-        .eq('item_id', itemId)
+        .eq('inventory_item_id', itemId)  // Changed from item_id to inventory_item_id
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -1055,13 +1066,13 @@ function InventoryContent() {
     if (!isSupabaseConfigured) return;
 
     try {
-      await supabase.from('item_portions').delete().eq('item_id', itemId);
+      await supabase.from('item_portions').delete().eq('inventory_item_id', itemId);  // Changed from item_id to inventory_item_id
       if (hasPortions && validPortions.length > 0) {
         const { error } = await supabase
           .from('item_portions')
           .insert(
             validPortions.map((portion) => ({
-              item_id: itemId,
+              inventory_item_id: itemId,  // Changed from item_id to inventory_item_id
               portion_name: portion.name.trim(),
               portion_cost_price: parseFloat(portion.price),
               portion_price: parseFloat(portion.sellingPrice) || 0,
@@ -1139,6 +1150,7 @@ function InventoryContent() {
           if (stock > 0) {
             await supabase.from('inventory_transactions').insert({
               item_id: data.id,
+              inventory_item_id: data.id,
               quantity_change: stock,
               transaction_type: 'restock',
               notes: 'Initial stock'
@@ -1689,9 +1701,8 @@ function InventoryContent() {
           </Dialog>
         </div>
       </div>
-
       <Tabs defaultValue="inventory" className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
           <Card className="border-emerald-200 bg-emerald-50/50 shadow-sm overflow-hidden text-emerald-900">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">{t.totalInventoryValue}</CardTitle>
@@ -1728,13 +1739,32 @@ function InventoryContent() {
               <p className="text-xs italic opacity-70">{t.unitSumWorth}</p>
             </CardContent>
           </Card>
-          <Card className="border-rose-200 bg-rose-50/50 shadow-sm overflow-hidden text-rose-900">
+          <Card 
+            className={`border-rose-200 bg-rose-50/50 shadow-sm overflow-hidden text-rose-900 cursor-pointer hover:bg-rose-100/50 transition-colors ${
+              smartStockFilter === 'low_stock' ? 'ring-2 ring-rose-500 ring-offset-2' : ''
+            }`}
+            onClick={() => setSmartStockFilter(smartStockFilter === 'low_stock' ? 'all' : 'low_stock')}
+          >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">{t.lowStockAlerts}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{lowStockCount}</div>
               <p className="text-xs italic opacity-70">{t.itemsNeedingAttention}</p>
+            </CardContent>
+          </Card>
+          <Card 
+            className={`border-red-200 bg-red-50/50 shadow-sm overflow-hidden text-red-900 cursor-pointer hover:bg-red-100/50 transition-colors ${
+              smartStockFilter === 'out_of_stock' ? 'ring-2 ring-red-500 ring-offset-2' : ''
+            }`}
+            onClick={() => setSmartStockFilter(smartStockFilter === 'out_of_stock' ? 'all' : 'out_of_stock')}
+          >
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">{t.outOfStockAlerts}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{outOfStockCount}</div>
+              <p className="text-xs italic opacity-70">{t.itemsOutOfStock}</p>
             </CardContent>
           </Card>
         </div>
@@ -2179,7 +2209,7 @@ function InventoryContent() {
                       </tr>
                     ) : (
                       paginatedTransactions.map((transaction) => {
-                        const item = items.find(i => i.id === transaction.item_id);
+                        const item = items.find(i => i.id === transaction.item_id || i.id === transaction.inventory_item_id);
                         const isPositive = transaction.quantity_change > 0;
 
                         return (
