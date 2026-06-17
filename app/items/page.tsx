@@ -322,11 +322,12 @@ export default function ItemsPage() {
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemCategory, setNewItemCategory] = useState('');
   // stock removed - managed in inventory_items table
-  const [newItemType, setNewItemType] = useState<'standalone' | 'recipe' | 'saleOnly'>('standalone');
+  const [newItemType, setNewItemType] = useState<'standalone' | 'recipe' | 'saleOnly'>('saleOnly');
   const [selectedStandaloneInventoryItemId, setSelectedStandaloneInventoryItemId] = useState('');
   const [newItemDescription, setNewItemDescription] = useState('');
   const [newItemUnit, setNewItemUnit] = useState('pcs');
   const [newItemMinStock, setNewItemMinStock] = useState('0');
+  const [showLinkedItems, setShowLinkedItems] = useState(false);
   const [recipeIngredients, setRecipeIngredients] = useState<{ ingredient_id: string; quantity_needed: number; unit: string }[]>([]);
   const [hasPortions, setHasPortions] = useState(false);
   const [portionRows, setPortionRows] = useState<{ name: string; price: string; stock: string; costPrice: string }[]>([{ name: '', price: '', stock: '0', costPrice: '0' }]);
@@ -487,7 +488,7 @@ export default function ItemsPage() {
       }
 
       if (newItemType === 'standalone') {
-        const selectedInventoryItem = getStandaloneInventoryItems().find(item => item.id === selectedStandaloneInventoryItemId);
+        const selectedInventoryItem = getStandaloneInventoryItems(showLinkedItems).find(item => item.id === selectedStandaloneInventoryItemId);
         if (!selectedInventoryItem) {
           alert(t.selectStandaloneInventory);
           return;
@@ -941,12 +942,35 @@ export default function ItemsPage() {
     }
   };
 
-  const getStandaloneInventoryItems = () => {
-    // Standalone Inventory Items come from inventory_items table
-    // They have type = 'standalone'
+  const getStandaloneInventoryItems = (includeLinked: boolean = false) => {
+    // Standalone Inventory Items come from inventory_items table only
+    // They have type = 'standalone' and must have cost_price (only exists in inventory_items table)
     const standaloneItems = items.filter(item => 
-      item.type === 'standalone'
+      item.type === 'standalone' && (item as any).cost_price !== undefined
     );
+    
+    // Exclude inventory items already linked to another item (except current editing item)
+    // unless includeLinked is true (user wants to see all items)
+    if (!includeLinked) {
+      const linkedInventoryIds = new Set(
+        items
+          .filter(item => (item as any).inventory_item_id && (!editingItem || item.id !== editingItem.id))
+          .map(item => (item as any).inventory_item_id)
+      );
+      
+      const availableItems = standaloneItems.filter(item => !linkedInventoryIds.has(item.id));
+      
+      // Remove duplicates by ID to prevent duplicate key warnings
+      const uniqueItems = availableItems.reduce((acc, current) => {
+        const exists = acc.find(item => item.id === current.id);
+        if (!exists) {
+          acc.push(current);
+        }
+        return acc;
+      }, [] as typeof availableItems);
+      
+      return uniqueItems;
+    }
     
     // Remove duplicates by ID to prevent duplicate key warnings
     const uniqueItems = standaloneItems.reduce((acc, current) => {
@@ -957,8 +981,6 @@ export default function ItemsPage() {
       return acc;
     }, [] as typeof standaloneItems);
     
-    // console.log('All items from inventory_items:', items); 
-    // console.log('Standalone inventory items (type === standalone):', uniqueItems);
     return uniqueItems;
   };
 
@@ -1315,11 +1337,25 @@ export default function ItemsPage() {
                 </div>
                 {newItemType === 'standalone' && (
                   <div className="grid gap-2 rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
-                    <Label>{t.linkInventoryItem}</Label>
+                    <div className="flex items-center justify-between">
+                      <Label>{t.linkInventoryItem}</Label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="showLinkedItems"
+                          checked={showLinkedItems}
+                          onChange={(e) => setShowLinkedItems(e.target.checked)}
+                          className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <label htmlFor="showLinkedItems" className="text-xs text-zinc-500 cursor-pointer select-none">
+                          {currentLanguage === 'th' ? 'แสดงสินค้าที่ลิงก์แล้วด้วย' : currentLanguage === 'lo' ? 'ສະແດງສິນຄ້າທີ່ເຊື່ອມໂຍງແລ້ວ' : 'Show linked items too'}
+                        </label>
+                      </div>
+                    </div>
                     <Select
                       value={selectedStandaloneInventoryItemId}
                       onValueChange={async (value) => {
-                        const selectedItem = getStandaloneInventoryItems().find(item => item.id === value);
+                        const selectedItem = getStandaloneInventoryItems(showLinkedItems).find(item => item.id === value);
                         setSelectedStandaloneInventoryItemId(value);
                         if (selectedItem) {
                           setNewItemName(selectedItem.name);
@@ -1342,14 +1378,14 @@ export default function ItemsPage() {
                             onKeyDown={(e) => e.stopPropagation()}
                           />
                         </div>
-                        {getStandaloneInventoryItems()
+                        {getStandaloneInventoryItems(showLinkedItems)
                           .filter(item => 
                             item?.name?.toLowerCase().includes(inventoryItemSearch.toLowerCase())
                           )
                           .map((item, index) => (
                             <SelectItem key={`add-standalone-${item?.id}-${index}`} value={item?.id || ''}>{item?.name || 'Unknown'}</SelectItem>
                           ))}
-                        {getStandaloneInventoryItems().filter(item => 
+                        {getStandaloneInventoryItems(showLinkedItems).filter(item => 
                           item?.name?.toLowerCase().includes(inventoryItemSearch.toLowerCase())
                         ).length === 0 && (
                           <SelectItem value="no-results" disabled>
@@ -1358,7 +1394,7 @@ export default function ItemsPage() {
                         )}
                       </SelectContent>
                     </Select>
-                    {getStandaloneInventoryItems().length === 0 ? (
+                    {getStandaloneInventoryItems(showLinkedItems).length === 0 ? (
                       <p className="text-xs text-red-600">{t.noStandaloneInventoryItems}</p>
                     ) : (
                       <p className="text-xs text-emerald-700">{t.standaloneLinkHelp}</p>
@@ -1490,7 +1526,21 @@ export default function ItemsPage() {
                       </div>
                       {editItemType === 'standalone' && (
                         <div className="grid gap-2 rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
-                          <Label>{t.linkInventoryItem}</Label>
+                          <div className="flex items-center justify-between">
+                            <Label>{t.linkInventoryItem}</Label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id="showEditLinkedItems"
+                                checked={showLinkedItems}
+                                onChange={(e) => setShowLinkedItems(e.target.checked)}
+                                className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <label htmlFor="showEditLinkedItems" className="text-xs text-zinc-500 cursor-pointer select-none">
+                                {currentLanguage === 'th' ? 'แสดงสินค้าที่ลิงก์แล้วด้วย' : currentLanguage === 'lo' ? 'ສະແດງສິນຄ້າທີ່ເຊື່ອມໂຍງແລ້ວ' : 'Show linked items too'}
+                              </label>
+                            </div>
+                          </div>
                           <Select 
                             value={editStandaloneInventoryItemId} 
                             onValueChange={setEditStandaloneInventoryItemId}
@@ -1508,7 +1558,7 @@ export default function ItemsPage() {
                                   onKeyDown={(e) => e.stopPropagation()}
                                 />
                               </div>
-                              {getStandaloneInventoryItems()
+                              {getStandaloneInventoryItems(showLinkedItems)
                                 .filter(item => 
                                   item?.name?.toLowerCase().includes(editInventoryItemSearch.toLowerCase())
                                 )
@@ -1520,7 +1570,7 @@ export default function ItemsPage() {
                                   }
                                 </SelectItem>
                               ) : (
-                                getStandaloneInventoryItems()
+                                getStandaloneInventoryItems(showLinkedItems)
                                   .filter(item => 
                                     item?.name?.toLowerCase().includes(editInventoryItemSearch.toLowerCase())
                                   )
@@ -1530,7 +1580,7 @@ export default function ItemsPage() {
                               )}
                             </SelectContent>
                           </Select>
-                          {getStandaloneInventoryItems().length === 0 ? (
+                          {getStandaloneInventoryItems(showLinkedItems).length === 0 ? (
                             <p className="text-xs text-red-600">{t.noStandaloneInventoryItems}</p>
                           ) : (
                             <p className="text-xs text-emerald-700">{t.standaloneLinkHelp}</p>
