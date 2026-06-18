@@ -9,6 +9,7 @@ import { usePosStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { formatCurrency, formatCurrencyTick } from '@/lib/currency';
+import { calculateOrderItemsCost } from '@/lib/sales-profit';
 
 const TRANSLATIONS = {
   en: {
@@ -145,6 +146,15 @@ const MOCK_CATEGORY_DATA = [
   { name: 'Drinks', value: 1200 },
   { name: 'Sides', value: 800 },
 ];
+
+const getOrderItemNoteValue = (notes: string | null | undefined, label: string) => {
+  const part = String(notes || '')
+    .split('|')
+    .map((value) => value.trim())
+    .find((value) => value.toLowerCase().startsWith(`${label.toLowerCase()}:`));
+
+  return part ? part.slice(part.indexOf(':') + 1).trim() : '';
+};
 
 export default function ReportsPage() {
   const { isSupabaseConfigured, currencySettings, generalSettings } = usePosStore();
@@ -364,11 +374,25 @@ export default function ReportsPage() {
 
       if (isSupabaseConfigured) {
         try {
-          const [{ data: orders }, { data: orderItems }, { data: categories }, { data: items }, { data: expenses }] = await Promise.all([
+          const [
+            { data: orders },
+            { data: orderItems },
+            { data: categories },
+            { data: items },
+            { data: inventoryItems },
+            { data: recipes },
+            { data: recipeIngredients },
+            { data: portions },
+            { data: expenses },
+          ] = await Promise.all([
             supabase.from('orders').select('id, total_amount, created_at, status'),
-            supabase.from('order_items').select('order_id, quantity, price_at_time, item:items(name, category_id)'),
+            supabase.from('order_items').select('order_id, item_id, quantity, price_at_time, notes, item:items(name, category_id)'),
             supabase.from('categories').select('id, name'),
-            supabase.from('items').select('id, cost_price'),
+            supabase.from('items').select('id, name, cost_price, inventory_item_id, is_recipe, type'),
+            supabase.from('inventory_items').select('id, name, cost_price'),
+            supabase.from('recipes').select('id, name'),
+            supabase.from('recipe_ingredients').select('recipe_id, ingredient_id, quantity_needed'),
+            supabase.from('item_portions').select('item_id, recipe_id, inventory_item_id, portion_name, portion_cost_price'),
             supabase.from('expenses').select('amount, created_at'),
           ]);
 
@@ -383,22 +407,16 @@ export default function ReportsPage() {
           const averageOrder = totalOrders > 0 ? grossSales / totalOrders : 0;
           const netSales = grossSales * 0.92;
 
-          // Calculate profit
-          let totalCost = 0;
-          if (orderItems && items) {
-            const itemCostMap: Record<string, number> = {};
-            items.forEach((item: any) => {
-              itemCostMap[item.id] = Number(item.cost_price || 0);
-            });
-
-            const completedOrderIds = new Set(completedOrders.map((o: any) => String(o.id)));
-            orderItems.forEach((orderItem: any) => {
-              if (completedOrderIds.has(String(orderItem.order_id))) {
-                const cost = itemCostMap[orderItem.item_id] || 0;
-                totalCost += cost * Number(orderItem.quantity || 0);
-              }
-            });
-          }
+          const completedOrderIds = new Set(completedOrders.map((o: any) => String(o.id)));
+          const totalCost = calculateOrderItemsCost({
+            orderItems: orderItems || [],
+            items: items || [],
+            inventoryItems: inventoryItems || [],
+            recipes: recipes || [],
+            recipeIngredients: recipeIngredients || [],
+            portions: portions || [],
+            completedOrderIds,
+          });
 
           // Calculate expenses
           let totalExpenses = 0;
@@ -431,7 +449,6 @@ export default function ReportsPage() {
 
           setSalesData(makeSalesTrendData(completedOrders, start, end));
 
-          const completedOrderIds = new Set(completedOrders.map((o: any) => String(o.id)));
           const categoryNameById = (categories || []).reduce((acc: Record<string, string>, c: any) => {
             acc[String(c.id)] = String(c.name);
             return acc;
@@ -442,7 +459,12 @@ export default function ReportsPage() {
           for (const line of orderItems || []) {
             if (!completedOrderIds.has(String(line.order_id))) continue;
             const categoryId = (line as any).item?.category_id;
-            const itemName = String((line as any).item?.name || 'Unknown Item');
+            const itemName = String(
+              (line as any).item?.name ||
+              getOrderItemNoteValue(line.notes, 'Item') ||
+              getOrderItemNoteValue(line.notes, 'Recipe') ||
+              'Unknown Item'
+            );
             const quantity = Number(line.quantity || 0);
             const lineSales = Number((line.price_at_time || 0) * quantity);
             const categoryName = categoryId ? (categoryNameById[String(categoryId)] || 'Other') : 'Other';
@@ -474,9 +496,9 @@ export default function ReportsPage() {
         const averageOrder = totalOrders > 0 ? grossSales / totalOrders : 0;
         const netSales = grossSales * 0.92;
         const totalCost = grossSales * 0.35; // Mock: assume 35% cost
+        const totalExpenses = grossSales * 0.08; // Mock: assume 8% expenses
         const totalProfit = grossSales - totalCost;
         const profitMargin = grossSales > 0 ? (totalProfit / grossSales) * 100 : 0;
-        const totalExpenses = grossSales * 0.08; // Mock: assume 8% expenses
         const netProfit = totalProfit - totalExpenses;
         const netProfitMargin = grossSales > 0 ? (netProfit / grossSales) * 100 : 0;
 

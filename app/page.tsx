@@ -4,11 +4,12 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { DollarSign, ShoppingBag, TrendingUp, Users, AlertTriangle, Package, Receipt } from 'lucide-react';
+import { DollarSign, ShoppingBag, TrendingUp, Users, AlertTriangle, Package, Receipt, Info } from 'lucide-react';
 import { usePosStore } from '@/lib/store';
 import { supabase, Item } from '@/lib/supabase';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatCurrency, formatCurrencyTick } from '@/lib/currency';
+import { calculateOrderItemsCost } from '@/lib/sales-profit';
 
 const TRANSLATIONS = {
   en: {
@@ -121,16 +122,73 @@ const TRANSLATIONS = {
   }
 };
 
+function FormulaInfo({ formula }: { formula: string }) {
+  return (
+    <span className="group relative inline-flex" tabIndex={0} aria-label={formula}>
+      <Info className="h-4 w-4 cursor-help opacity-70 transition-opacity group-hover:opacity-100" />
+      <span className="pointer-events-none absolute right-0 top-6 z-20 hidden w-72 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium leading-relaxed text-zinc-700 shadow-lg group-hover:block group-focus:block">
+        {formula}
+      </span>
+    </span>
+  );
+}
+
+const finiteNumber = (value: number) => (Number.isFinite(value) ? value : 0);
+
+const DASHBOARD_FORMULAS = {
+  en: {
+    totalCost: 'Total Cost',
+    totalRevenue: 'Total Revenue = Sum of total_amount from completed orders in the selected date range.',
+    transferRevenue: 'Transfer Revenue = Sum of total_amount from completed transfer orders in the selected date range.',
+    cashRevenue: 'Cash Revenue = Sum of total_amount from completed cash orders in the selected date range. Old orders without payment_method count as cash.',
+    netProfit: 'Dashboard Net Profit = Total Revenue - Total Expenses.',
+    totalCostFormula: 'Total Cost = Sum of cost_price x quantity for all items sold in completed orders. Portion items use portion_cost_price when available.',
+    orders: 'Orders = Count of completed orders in the selected date range.',
+    averageOrderValue: 'Average Order Value = Total Revenue / completed order count.',
+    activeItems: 'Active Items = Count of rows in the items table.',
+    totalExpenses: 'Total Expenses = Sum of expense amount values in the selected date range.',
+    totalProfit: 'Total Profit = Total Revenue - Total Cost.',
+  },
+  lo: {
+    totalCost: 'ຕົ້ນທຶນລວມ',
+    totalRevenue: 'ລາຍຮັບລວມ = ຜົນລວມ total_amount ຈາກອໍເດີທີ່ສໍາເລັດໃນຊ່ວງວັນທີທີ່ເລືອກ.',
+    transferRevenue: 'ລາຍຮັບໂອນ = ຜົນລວມ total_amount ຈາກອໍເດີໂອນເງິນທີ່ສໍາເລັດໃນຊ່ວງວັນທີທີ່ເລືອກ.',
+    cashRevenue: 'ລາຍຮັບເງິນສົດ = ຜົນລວມ total_amount ຈາກອໍເດີເງິນສົດທີ່ສໍາເລັດໃນຊ່ວງວັນທີທີ່ເລືອກ. ອໍເດີເກົ່າທີ່ບໍ່ມີ payment_method ຈະນັບເປັນເງິນສົດ.',
+    netProfit: 'ກໍາໄລສຸດທິໃນແດຊບອດ = ລາຍຮັບລວມ - ຄ່າໃຊ້ຈ່າຍລວມ.',
+    totalCostFormula: 'ຕົ້ນທຶນລວມ = ຜົນລວມ cost_price x ຈໍານວນ ຂອງສິນຄ້າທີ່ຂາຍໃນອໍເດີທີ່ສໍາເລັດ. ສິນຄ້າແບບ portion ຈະໃຊ້ portion_cost_price ຖ້າມີ.',
+    orders: 'ອໍເດີ = ຈໍານວນອໍເດີທີ່ສໍາເລັດໃນຊ່ວງວັນທີທີ່ເລືອກ.',
+    averageOrderValue: 'ມູນຄ່າອໍເດີສະເລ່ຍ = ລາຍຮັບລວມ / ຈໍານວນອໍເດີທີ່ສໍາເລັດ.',
+    activeItems: 'ສິນຄ້າທີ່ໃຊ້ງານ = ຈໍານວນລາຍການໃນຕາຕະລາງ items.',
+    totalExpenses: 'ຄ່າໃຊ້ຈ່າຍລວມ = ຜົນລວມ amount ຂອງຄ່າໃຊ້ຈ່າຍໃນຊ່ວງວັນທີທີ່ເລືອກ.',
+    totalProfit: 'ກໍາໄລລວມ = ລາຍຮັບລວມ - ຕົ້ນທຶນລວມ.',
+  },
+  th: {
+    totalCost: 'ต้นทุนรวม',
+    totalRevenue: 'รายรับรวม = ผลรวม total_amount จากออเดอร์ที่เสร็จสมบูรณ์ในช่วงวันที่ที่เลือก',
+    transferRevenue: 'รายรับเงินโอน = ผลรวม total_amount จากออเดอร์เงินโอนที่เสร็จสมบูรณ์ในช่วงวันที่ที่เลือก',
+    cashRevenue: 'รายรับเงินสด = ผลรวม total_amount จากออเดอร์เงินสดที่เสร็จสมบูรณ์ในช่วงวันที่ที่เลือก ออเดอร์เก่าที่ไม่มี payment_method จะนับเป็นเงินสด',
+    netProfit: 'กำไรสุทธิบนแดชบอร์ด = รายรับรวม - ค่าใช้จ่ายรวม',
+    totalCostFormula: 'ต้นทุนรวม = ผลรวม cost_price x จำนวน ของสินค้าทั้งหมดที่ขายในออเดอร์ที่เสร็จสมบูรณ์ สินค้าแบบ portion จะใช้ portion_cost_price หากมี',
+    orders: 'ออเดอร์ = จำนวนออเดอร์ที่เสร็จสมบูรณ์ในช่วงวันที่ที่เลือก',
+    averageOrderValue: 'มูลค่าออเดอร์เฉลี่ย = รายรับรวม / จำนวนออเดอร์ที่เสร็จสมบูรณ์',
+    activeItems: 'สินค้าที่ใช้งานอยู่ = จำนวนรายการในตาราง items',
+    totalExpenses: 'ค่าใช้จ่ายรวม = ผลรวม amount ของค่าใช้จ่ายในช่วงวันที่ที่เลือก',
+    totalProfit: 'กำไรรวม = รายรับรวม - ต้นทุนรวม',
+  },
+};
+
 export default function DashboardPage() {
   const { isSupabaseConfigured, checkSupabaseConfig, isCheckingConfig, currencySettings, generalSettings } = usePosStore();
   const currentLanguage = (generalSettings?.language || 'en') as 'en' | 'lo' | 'th';
   const t = TRANSLATIONS[currentLanguage];
+  const formulas = DASHBOARD_FORMULAS[currentLanguage] || DASHBOARD_FORMULAS.en;
   const [dateRange, setDateRange] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('weekly');
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
   const [stats, setStats] = useState({
     totalRevenue: 0,
     totalOrders: 0,
+    totalCost: 0,
     averageOrderValue: 0,
     activeItems: 0,
     totalProfit: 0,
@@ -250,7 +308,7 @@ export default function DashboardPage() {
         try {
           const { data: orders } = await supabase
             .from('orders')
-            .select('total_amount, created_at, status, payment_method');
+            .select('id, total_amount, created_at, status, payment_method');
           const { data: recentOrders } = await supabase
             .from('orders')
             .select('id, total_amount, created_at, status')
@@ -259,10 +317,12 @@ export default function DashboardPage() {
             .limit(5);
           const { count: itemsCount } = await supabase.from('items').select('*', { count: 'exact', head: true });
           const { data: items } = await supabase.from('items').select('*');
-          const { data: portions } = await supabase.from('item_portions').select('item_id, portion_stock');
+          const { data: recipes } = await supabase.from('recipes').select('id, name');
+          const { data: costPortions } = await supabase.from('item_portions').select('item_id, recipe_id, inventory_item_id, portion_name, portion_cost_price');
           const { data: inventoryItems } = await supabase.from('inventory_items').select('*');
           const { data: inventoryPortions } = await supabase.from('item_portions').select('inventory_item_id, portion_stock');
-          const { data: orderItems } = await supabase.from('order_items').select('item_id, quantity, price_at_time');
+          const { data: recipeIngredients } = await supabase.from('recipe_ingredients').select('recipe_id, ingredient_id, quantity_needed');
+          const { data: orderItems } = await supabase.from('order_items').select('order_id, item_id, quantity, price_at_time, notes');
           const { data: expenses } = await supabase.from('expenses').select('amount, created_at');
 
           if (isMounted) {
@@ -283,19 +343,16 @@ export default function DashboardPage() {
                 .filter((order: any) => order.payment_method === 'transfer')
                 .reduce((sum, order: any) => sum + Number(order.total_amount || 0), 0);
               
-              // Calculate profit
-              let totalCost = 0;
-              if (orderItems && items) {
-                const itemCostMap: Record<string, number> = {};
-                items.forEach((item: any) => {
-                  itemCostMap[item.id] = Number(item.cost_price || 0);
-                });
-                
-                orderItems.forEach((orderItem: any) => {
-                  const cost = itemCostMap[orderItem.item_id] || 0;
-                  totalCost += cost * Number(orderItem.quantity || 0);
-                });
-              }
+              const completedOrderIds = new Set(completedOrders.map((order: any) => String(order.id)));
+              const totalCost = finiteNumber(calculateOrderItemsCost({
+                orderItems: orderItems || [],
+                items: items || [],
+                inventoryItems: inventoryItems || [],
+                recipes: recipes || [],
+                recipeIngredients: recipeIngredients || [],
+                portions: costPortions || [],
+                completedOrderIds,
+              }));
               
               // Calculate expenses
               let totalExpenses = 0;
@@ -317,6 +374,7 @@ export default function DashboardPage() {
               setStats({
                 totalRevenue: totalRev,
                 totalOrders: completedOrders.length,
+                totalCost,
                 averageOrderValue: completedOrders.length > 0 ? totalRev / completedOrders.length : 0,
                 activeItems: itemsCount || 0,
                 totalProfit,
@@ -386,16 +444,17 @@ export default function DashboardPage() {
           const totalRev = completedInRange.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
           const cashRev = totalRev * 0.6; // Mock: assume 60% cash
           const transferRev = totalRev * 0.4; // Mock: assume 40% transfer
-          const totalCost = totalRev * 0.35; // Mock: assume 35% cost
+          const totalCost = finiteNumber(totalRev * 0.35); // Mock: assume 35% cost
+          const totalExpenses = totalRev * 0.08; // Mock: assume 8% expenses
           const totalProfit = totalRev - totalCost;
           const profitMargin = totalRev > 0 ? (totalProfit / totalRev) * 100 : 0;
-          const totalExpenses = totalRev * 0.08; // Mock: assume 8% expenses
           const netProfit = totalRev - totalExpenses;
           const netProfitMargin = totalRev > 0 ? (netProfit / totalRev) * 100 : 0;
           
           setStats({
             totalRevenue: totalRev,
             totalOrders: completedInRange.length,
+            totalCost,
             averageOrderValue: completedInRange.length > 0 ? totalRev / completedInRange.length : 0,
             activeItems: 124,
             totalProfit,
@@ -532,7 +591,10 @@ export default function DashboardPage() {
         <Card className="border-blue-200 bg-blue-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-blue-900">{t.totalRevenue}</CardTitle>
-            <DollarSign className="h-4 w-4 text-blue-600" />
+            <div className="flex items-center gap-2 text-blue-600">
+              <FormulaInfo formula={formulas.totalRevenue} />
+              <DollarSign className="h-4 w-4" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-700">{formatCurrency(stats.totalRevenue, currencySettings)}</div>
@@ -544,7 +606,10 @@ export default function DashboardPage() {
         <Card className="border-indigo-200 bg-indigo-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-indigo-900">{t.transferRevenue}</CardTitle>
-            <DollarSign className="h-4 w-4 text-indigo-600" />
+            <div className="flex items-center gap-2 text-indigo-600">
+              <FormulaInfo formula={formulas.transferRevenue} />
+              <DollarSign className="h-4 w-4" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-indigo-700">{formatCurrency(stats.transferRevenue, currencySettings)}</div>
@@ -556,7 +621,10 @@ export default function DashboardPage() {
         <Card className="border-cyan-200 bg-cyan-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-cyan-900">{t.cashRevenue}</CardTitle>
-            <DollarSign className="h-4 w-4 text-cyan-600" />
+            <div className="flex items-center gap-2 text-cyan-600">
+              <FormulaInfo formula={formulas.cashRevenue} />
+              <DollarSign className="h-4 w-4" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-cyan-700">{formatCurrency(stats.cashRevenue, currencySettings)}</div>
@@ -568,7 +636,10 @@ export default function DashboardPage() {
         <Card className="border-teal-200 bg-teal-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-teal-900">{t.netProfit}</CardTitle>
-            <TrendingUp className="h-4 w-4 text-teal-600" />
+            <div className="flex items-center gap-2 text-teal-600">
+              <FormulaInfo formula={formulas.netProfit} />
+              <TrendingUp className="h-4 w-4" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-teal-700">{formatCurrency(stats.netProfit, currencySettings)}</div>
@@ -577,13 +648,31 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Row 2: Orders, Average Order Value, Active Items */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {/* Row 2: Total Cost, Orders, Average Order Value, Active Items */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Total Cost */}
+        <Card className="border-orange-200 bg-orange-50/50 shadow-sm overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-semibold text-orange-900">{formulas.totalCost}</CardTitle>
+            <div className="flex items-center gap-2 text-orange-600">
+              <FormulaInfo formula={formulas.totalCostFormula} />
+              <Package className="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-700">{formatCurrency(finiteNumber(stats.totalCost), currencySettings)}</div>
+            <p className="text-xs text-orange-600/70 italic">&nbsp;</p>
+          </CardContent>
+        </Card>
+
         {/* Orders */}
         <Card className="border-emerald-200 bg-emerald-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-emerald-900">{t.orders}</CardTitle>
-            <ShoppingBag className="h-4 w-4 text-emerald-600" />
+            <div className="flex items-center gap-2 text-emerald-600">
+              <FormulaInfo formula={formulas.orders} />
+              <ShoppingBag className="h-4 w-4" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-emerald-700">+{stats.totalOrders}</div>
@@ -595,7 +684,10 @@ export default function DashboardPage() {
         <Card className="border-violet-200 bg-violet-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-violet-900">{t.averageOrderValue}</CardTitle>
-            <TrendingUp className="h-4 w-4 text-violet-600" />
+            <div className="flex items-center gap-2 text-violet-600">
+              <FormulaInfo formula={formulas.averageOrderValue} />
+              <TrendingUp className="h-4 w-4" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-violet-700">{formatCurrency(stats.averageOrderValue, currencySettings)}</div>
@@ -607,7 +699,10 @@ export default function DashboardPage() {
         <Card className="border-amber-200 bg-amber-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-amber-900">{t.activeItems}</CardTitle>
-            <Users className="h-4 w-4 text-amber-600" />
+            <div className="flex items-center gap-2 text-amber-600">
+              <FormulaInfo formula={formulas.activeItems} />
+              <Users className="h-4 w-4" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-700">{stats.activeItems}</div>
@@ -622,7 +717,10 @@ export default function DashboardPage() {
         <Card className="border-rose-200 bg-rose-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-rose-900">{t.totalExpenses}</CardTitle>
-            <Receipt className="h-4 w-4 text-rose-600" />
+            <div className="flex items-center gap-2 text-rose-600">
+              <FormulaInfo formula={formulas.totalExpenses} />
+              <Receipt className="h-4 w-4" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-rose-700">{formatCurrency(stats.totalExpenses, currencySettings)}</div>
@@ -634,7 +732,10 @@ export default function DashboardPage() {
         <Card className="border-green-200 bg-green-50/50 shadow-sm overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-semibold text-green-900">{t.totalProfit}</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
+            <div className="flex items-center gap-2 text-green-600">
+              <FormulaInfo formula={formulas.totalProfit} />
+              <TrendingUp className="h-4 w-4" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-700">{formatCurrency(stats.totalProfit, currencySettings)}</div>

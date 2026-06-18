@@ -26,6 +26,129 @@ const MOCK_ORDERS: Order[] = [
   { id: 'ORD-004', total_amount: 24.50, status: 'cancelled', payment_method: 'cash', created_at: new Date(Date.now() - 86400000).toISOString() },
 ];
 
+const getLegacyLineName = (line: any) =>
+  String(line?.name || line?.item?.name || line?.item_name || line?.title || 'Legacy order total');
+
+const getLegacyLineQuantity = (line: any) => {
+  const quantity = Number(line?.quantity ?? line?.qty ?? 1);
+  return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+};
+
+const getLegacyLinePrice = (line: any) => {
+  const quantity = getLegacyLineQuantity(line);
+  const directPrice = Number(line?.price_at_time ?? line?.price ?? line?.unit_price);
+  if (Number.isFinite(directPrice)) return directPrice;
+
+  const total = Number(line?.total ?? line?.total_amount ?? line?.amount);
+  return Number.isFinite(total) ? total / quantity : 0;
+};
+
+const escapeHtml = (value: unknown) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const getNoteField = (notes: unknown, label: string) => {
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = String(notes || '').match(new RegExp(`(?:^|\\s*\\|\\s*)${escapedLabel}:\\s*([^|]+)`, 'i'));
+  return match?.[1]?.trim() || '';
+};
+
+const appendPortionToName = (name: string, portionName: string) => {
+  const trimmedName = name.trim();
+  const trimmedPortion = portionName.trim();
+  if (!trimmedName || !trimmedPortion) return trimmedName || trimmedPortion;
+
+  const normalizedName = trimmedName.toLowerCase();
+  const normalizedPortion = trimmedPortion.toLowerCase();
+  if (
+    normalizedName.endsWith(`(${normalizedPortion})`) ||
+    normalizedName.endsWith(`- ${normalizedPortion}`) ||
+    normalizedName.endsWith(` ${normalizedPortion}`)
+  ) {
+    return trimmedName;
+  }
+
+  return `${trimmedName} (${trimmedPortion})`;
+};
+
+const getOrderLineDisplayName = (line: any) => {
+  const notesText = String(line?.notes || '');
+  const portionName = getNoteField(notesText, 'Portion');
+  const noteItemName = getNoteField(notesText, 'Item');
+  const noteRecipeName = getNoteField(notesText, 'Recipe');
+  const baseName = String(line?.item?.name || noteItemName || noteRecipeName || 'Unknown Item');
+
+  return appendPortionToName(baseName, portionName);
+};
+
+const parseLegacyOrderItems = (order: Order) => {
+  const notes = String((order as any).notes || '').trim();
+  const candidates: any[] = [];
+
+  if (notes) {
+    try {
+      const parsed = JSON.parse(notes);
+      if (Array.isArray(parsed)) {
+        candidates.push(...parsed);
+      } else if (Array.isArray(parsed?.items)) {
+        candidates.push(...parsed.items);
+      } else if (Array.isArray(parsed?.cart)) {
+        candidates.push(...parsed.cart);
+      } else if (Array.isArray(parsed?.order_items)) {
+        candidates.push(...parsed.order_items);
+      }
+    } catch {
+      const legacyLines = notes
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => /(?:^|\s)(?:item|recipe)\s*:/i.test(line));
+
+      for (const line of legacyLines) {
+        const itemMatch = line.match(/(?:item|recipe)\s*:\s*([^|]+)/i);
+        const quantityMatch = line.match(/(?:qty|quantity)\s*:\s*([^|]+)/i);
+        const priceMatch = line.match(/(?:price|unit)\s*:\s*([^|]+)/i);
+        if (itemMatch?.[1]) {
+          candidates.push({
+            name: itemMatch[1].trim(),
+            quantity: quantityMatch?.[1] ? Number(quantityMatch[1]) : 1,
+            price: priceMatch?.[1] ? Number(priceMatch[1]) : 0,
+          });
+        }
+      }
+    }
+  }
+
+  const parsedItems = candidates
+    .map((line) => {
+      const quantity = getLegacyLineQuantity(line);
+      const price = getLegacyLinePrice(line);
+      return {
+        quantity,
+        price_at_time: price,
+        notes: `Item: ${getLegacyLineName(line)}`,
+        item: { name: getLegacyLineName(line) },
+        created_at: order.created_at,
+        isLegacyFallback: true,
+      };
+    })
+    .filter((line) => line.item.name && Number.isFinite(line.price_at_time));
+
+  if (parsedItems.length > 0) return parsedItems;
+
+  return [{
+    quantity: 1,
+    price_at_time: Number(order.total_amount || 0),
+    notes: 'Item: Legacy order total',
+    item: { name: 'Legacy order total' },
+    created_at: order.created_at,
+    isLegacyFallback: true,
+  }];
+};
+
 const TRANSLATIONS = {
   en: {
     orderHistory: 'Order History',
@@ -372,24 +495,35 @@ export default function OrderHistoryPage() {
     };
   }, [isSupabaseConfigured]);
 
-  const fetchOrderDetails = async (orderId: string) => {
+  const fetchOrderDetails = async (order: Order) => {
     if (!isSupabaseConfigured) return;
 
     setIsLoadingDetails(true);
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('order_items')
         .select(`
           *,
           item:items(*)
         `)
-        .eq('order_id', orderId)
+        .eq('order_id', order.id)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
-      if (data) setOrderItems(data);
+      if (error) {
+        const fallback = await supabase
+          .from('order_items')
+          .select('*')
+          .eq('order_id', order.id)
+          .order('created_at', { ascending: true });
+
+        if (fallback.error) throw fallback.error;
+        data = fallback.data;
+      }
+
+      setOrderItems(data && data.length > 0 ? data : parseLegacyOrderItems(order));
     } catch (error) {
       console.error('Error fetching order details:', error);
+      setOrderItems(parseLegacyOrderItems(order));
     } finally {
       setIsLoadingDetails(false);
     }
@@ -399,7 +533,7 @@ export default function OrderHistoryPage() {
     setSelectedOrder(order);
     setOrderItems([]);
     setIsDetailsOpen(true);
-    fetchOrderDetails(order.id);
+    fetchOrderDetails(order);
   };
 
   const toggleOrderSelection = (orderId: string) => {
@@ -450,16 +584,25 @@ export default function OrderHistoryPage() {
 
     if (isSupabaseConfigured) {
       try {
-        const { data } = await supabase
+        let { data, error } = await supabase
           .from('order_items')
           .select('*, item:items(*)')
           .eq('order_id', order.id)
           .order('created_at', { ascending: true });
-        itemsToPrint = data || [];
+        if (error) {
+          const fallback = await supabase
+            .from('order_items')
+            .select('*')
+            .eq('order_id', order.id)
+            .order('created_at', { ascending: true });
+
+          if (fallback.error) throw fallback.error;
+          data = fallback.data;
+        }
+        itemsToPrint = data && data.length > 0 ? data : parseLegacyOrderItems(order);
       } catch (error) {
         console.error('Error fetching items for print:', error);
-        alert('Failed to load items for printing.');
-        return;
+        itemsToPrint = parseLegacyOrderItems(order);
       }
     } else {
       // Mock items for demo
@@ -469,121 +612,164 @@ export default function OrderHistoryPage() {
       ];
     }
 
-    const getItemName = (line: any) => {
-      if (line.item?.name) return line.item.name;
-      const notesText = String(line.notes || '');
-      const itemMatch = notesText.match(/Item:\s*([^|]+)/i);
-      if (itemMatch?.[1]) return itemMatch[1].trim();
-      const recipeMatch = notesText.match(/Recipe:\s*([^|]+)/i);
-      if (recipeMatch?.[1]) return recipeMatch[1].trim();
-      return 'Unknown Item';
-    };
+    const subtotal = itemsToPrint.reduce((sum, item: any) => sum + (Number(item.price_at_time || 0) * Number(item.quantity || 0)), 0);
+    const totalAmount = Number(order.total_amount || 0);
+    const tax = Math.max(0, totalAmount - subtotal);
+    const paymentMethodLabel = formatPaymentMethodLabel(order.payment_method);
+    const meta = orderMetaById[order.id];
+    let bank = meta?.selectedBank;
+    let cashTendered = Number.isFinite(meta?.cashTendered) ? Number(meta?.cashTendered) : null;
 
-    const receiptHtml = `
-      <html>
-        <head>
-          <title>Receipt - ${order.id}</title>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;500;700&display=swap');
-            body { font-family: 'Noto Sans Lao', sans-serif; padding: 20px; max-width: 360px; margin: 0 auto; color: #000; }
-            .text-center { text-align: center; }
-            .mb-4 { margin-bottom: 1rem; }
-            .text-xs { font-size: 12px; }
-            .text-sm { font-size: 14px; }
-            .font-bold { font-weight: bold; }
-            .flex { display: flex; justify-content: space-between; }
-            .border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 10px 0; }
-            .item-row { margin-bottom: 4px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { font-size: 12px; }
-          </style>
-        </head>
-        <body>
-          <div class="text-center mb-4">
-            <h3 class="font-bold text-sm" style="margin:0 0 2px 0;">My Awesome Store</h3>
-            <div class="text-xs" style="margin-bottom:2px;">${receiptSettings.storeAddress}</div>
-            <div class="text-xs" style="margin-bottom:2px;">${receiptSettings.phoneNumber}</div>
-            <div class="text-xs mt-2">${receiptSettings.headerText}</div>
-          </div>
-          <div class="text-xs mb-4">
-            Order: ${order.id.substring(0, 8).toUpperCase()}<br>
-            Date: ${format(new Date(order.created_at), 'MMM dd, yyyy HH:mm')}
-            ${receiptSettings.showTableNumber !== false && (order as any).table ? '<br>Table: ' + (order as any).table.table_number : ''}
-          </div>
-          <div class="border-y text-xs">
-            <table>
-              <thead>
-                <tr>
-                  <th style="text-align:left; padding-bottom: 4px;">Item</th>
-                  <th style="text-align:right; padding-bottom: 4px;">Unit</th>
-                  <th style="text-align:right; padding-bottom: 4px;">Price</th>
-                  <th style="text-align:right; padding-bottom: 4px;">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${itemsToPrint.map((item: any) => `
-                  <tr>
-                    <td style="padding: 2px 0; text-align:left;">${getItemName(item)}</td>
-                    <td style="padding: 2px 0; text-align:right;">${item.quantity}</td>
-                    <td style="padding: 2px 0; text-align:right;">${formatCurrency(item.price_at_time, currencySettings)}</td>
-                    <td style="padding: 2px 0; text-align:right;">${formatCurrency((item.price_at_time * item.quantity), currencySettings)}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-          <div class="flex font-bold text-sm">
-            <span>TOTAL</span>
-            <span>${formatCurrency(order.total_amount, currencySettings)}</span>
-          </div>
-          ${(order.payment_method === 'online' && receiptSettings.showBankDetail) ? (() => {
-        const meta = orderMetaById[order.id];
-        let bank = meta?.selectedBank;
-        if (!bank) {
-          for (const line of itemsToPrint) {
-            const text = String(line?.notes || '');
-            const match = text.match(/Order Meta >>>([^<]+)<{3}/);
-            if (match?.[1]) {
-              try {
-                const parsed = JSON.parse(decodeURIComponent(match[1]));
-                bank = parsed.selectedBank;
-                if (bank) break;
-              } catch { }
-            }
-          }
-        }
-        if (!bank) return '';
-        const bankQrCodeImage = bankConfigs.find((configuredBank: any) => configuredBank.id === bank?.id)?.qrCodeImage || bank.qrCodeImage || '';
-        return `
-              <div style="margin-top: 8px; border-top: 1px dotted #000; padding-top: 6px;">
-                <div class="font-bold" style="margin-bottom: 4px; font-size: 12px;">Bank</div>
-                <div class="text-xs">Bank: ${bank.bankName || '-'}</div>
-                <div class="text-xs">Account Name: ${bank.accountName || '-'}</div>
-                <div class="text-xs">Account No: ${bank.accountNumber || '-'}</div>
-                ${bankQrCodeImage ? `
-                  <div style="text-align:center; margin-top: 10px; padding-top: 8px; border-top: 1px dotted #000;">
-                    <div class="font-bold" style="font-size: 12px; margin-bottom: 6px;">Bank QR Code</div>
-                    <img src="${bankQrCodeImage}" alt="Bank QR Code" style="width: 130px; height: 130px; object-fit: contain; display: block; margin: 0 auto;" />
-                  </div>
-                ` : ''}
-              </div>
-            `;
-      })() : ''}
-          ${order.notes ? `
-          <div class="text-xs" style="margin-top: 10px; border-top: 1px dotted #000; padding-top: 5px;">
-            <span class="font-bold">Notes:</span><br>
-            <span>${order.notes}</span>
-          </div>
-          ` : ''}
-          <div class="text-center mt-6 text-xs">
-            ${receiptSettings.footerText}
-          </div>
-          <script>
-            window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 500); }
-          </script>
-        </body>
-      </html>
-    `;
+    for (const line of itemsToPrint) {
+      const text = String(line?.notes || '');
+      const match = text.match(/Order Meta >>>([^<]+)<{3}/);
+      if (!match?.[1]) continue;
+      try {
+        const parsed = JSON.parse(decodeURIComponent(match[1]));
+        bank = bank || parsed.selectedBank;
+        cashTendered = cashTendered ?? (Number.isFinite(parsed.cashTendered) ? Number(parsed.cashTendered) : null);
+      } catch { }
+    }
+
+    const bankForDisplay = bank || bankConfigs.find((configuredBank: any) => configuredBank.enabledForTransfer);
+    const bankQrCodeImage = bankForDisplay
+      ? (bankConfigs.find((configuredBank: any) => configuredBank.id === bankForDisplay?.id)?.qrCodeImage || bankForDisplay.qrCodeImage || '')
+      : '';
+    const showTransferInfo = receiptSettings.showBankDetail && bankForDisplay;
+    const isCash = order.payment_method === 'cash';
+    const change = cashTendered !== null ? Math.max(0, cashTendered - totalAmount) : 0;
+
+    const cartItemsHtml = itemsToPrint.map((item: any) =>
+      '<tr>' +
+      '<td style="padding: 2px 0; text-align: left;">' + escapeHtml(getOrderLineDisplayName(item)) + '</td>' +
+      '<td style="padding: 2px 0; text-align: right;">' + escapeHtml(item.quantity || 0) + '</td>' +
+      '<td style="padding: 2px 0; text-align: right;">' + formatCurrency(Number(item.price_at_time || 0), currencySettings) + '</td>' +
+      '<td style="padding: 2px 0; text-align: right;">' + formatCurrency(Number(item.price_at_time || 0) * Number(item.quantity || 0), currencySettings) + '</td>' +
+      '</tr>'
+    ).join('');
+    const noteHtml = order.notes
+      ? '<div style="margin-top: 10px; border-top: 1px dotted #000; padding-top: 5px;">' +
+      '<span class="font-bold">Notes:</span><br>' +
+      '<span>' + escapeHtml(order.notes) + '</span>' +
+      '</div>'
+      : '';
+    const paymentMethodHtml =
+      '<div class="flex justify-between">' +
+      '<span>Payment Method</span>' +
+      '<span>' + escapeHtml(paymentMethodLabel) + '</span>' +
+      '</div>';
+    const cashDetailsHtml = isCash
+      ? '<div class="flex justify-between">' +
+      '<span>Cash Tendered</span>' +
+      '<span>' + formatCurrency(cashTendered ?? totalAmount, currencySettings) + '</span>' +
+      '</div>' +
+      '<div class="flex justify-between">' +
+      '<span>Change</span>' +
+      '<span>' + formatCurrency(change, currencySettings) + '</span>' +
+      '</div>'
+      : '';
+    const transferDetailsHtml = showTransferInfo
+      ? '<div style="margin-top: 8px; border-top: 1px dotted #000; padding-top: 6px;">' +
+      '<div class="font-bold" style="margin-bottom: 4px;">Bank Transfer Details</div>' +
+      '<div>Bank: ' + escapeHtml(bankForDisplay?.bankName || '-') + '</div>' +
+      '<div>Account Name: ' + escapeHtml(bankForDisplay?.accountName || '-') + '</div>' +
+      '<div>Account Number: ' + escapeHtml(bankForDisplay?.accountNumber || '-') + '</div>' +
+      '</div>'
+      : '';
+    const transferQrHtml = showTransferInfo && bankQrCodeImage
+      ? '<div style="text-align:center; margin-top: 12px; padding-top: 10px; border-top: 1px dotted #000;">' +
+      '<div class="font-bold" style="font-size: 14px; margin-bottom: 8px;">Scan to Pay</div>' +
+      '<div style="background: white; padding: 10px; display: inline-block; border: 2px solid #000;">' +
+      '<img src="' + escapeHtml(bankQrCodeImage) + '" alt="Bank QR Code" style="width: 220px; height: 220px; object-fit: contain; display: block; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; image-rendering: pixelated;" />' +
+      '</div>' +
+      '</div>'
+      : '';
+
+    const receiptHtml =
+      '<html>' +
+      '<head>' +
+      '<title>Bill Preview</title>' +
+      '<meta charset="UTF-8">' +
+      '<style>' +
+      "@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;500;700&display=swap');" +
+      "* { font-family: 'Noto Sans Lao', sans-serif; }" +
+      "body { font-family: 'Noto Sans Lao', sans-serif; padding: 20px; max-width: 300px; margin: 0 auto; color: #000; }" +
+      '.text-center { text-align: center; }' +
+      '.mb-4 { margin-bottom: 1rem; }' +
+      '.mt-6 { margin-top: 1.5rem; }' +
+      '.text-xs { font-size: 12px; }' +
+      '.text-sm { font-size: 14px; }' +
+      '.font-bold { font-weight: bold; }' +
+      '.flex { display: flex; justify-content: space-between; }' +
+      '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 10px 0; }' +
+      '.space-y-1 > div { margin-bottom: 4px; }' +
+      'table { width: 100%; border-collapse: collapse; font-family: \'Noto Sans Lao\', sans-serif; }' +
+      'th, td { font-size: 12px; font-family: \'Noto Sans Lao\', sans-serif; }' +
+      'h1, h2, h3, h4, h5, h6, p, div, span { font-family: \'Noto Sans Lao\', sans-serif; }' +
+      '</style>' +
+      '</head>' +
+      '<body>' +
+      '<div class="text-center mb-4">' +
+      '<h3 class="font-bold text-lg" style="margin:0 0 2px 0;">' + escapeHtml(generalSettings.storeName || '') + '</h3>' +
+      (receiptSettings.storeAddress ? '<div class="text-xs" style="margin-bottom:2px;">' + escapeHtml(receiptSettings.storeAddress) + '</div>' : '') +
+      (receiptSettings.phoneNumber ? '<div class="text-xs" style="margin-bottom:2px;">' + escapeHtml(receiptSettings.phoneNumber) + '</div>' : '') +
+      (receiptSettings.headerText ? '<div class="text-xs mt-2">' + escapeHtml(receiptSettings.headerText) + '</div>' : '') +
+      '</div>' +
+      '<div class="text-xs mb-4">' +
+      'Date: ' + escapeHtml(format(new Date(order.created_at), 'MMM dd, yyyy HH:mm')) +
+      (receiptSettings.showTableNumber !== false && (order as any).table ? '<br/>Table: ' + escapeHtml((order as any).table.table_number) : '') +
+      '</div>' +
+      '<div class="border-y text-xs">' +
+      '<table>' +
+      '<thead>' +
+      '<tr>' +
+      '<th style="text-align:left; padding-bottom: 4px;">Item</th>' +
+      '<th style="text-align:right; padding-bottom: 4px;">Unit</th>' +
+      '<th style="text-align:right; padding-bottom: 4px;">Price</th>' +
+      '<th style="text-align:right; padding-bottom: 4px;">Total</th>' +
+      '</tr>' +
+      '</thead>' +
+      '<tbody>' +
+      cartItemsHtml +
+      '</tbody>' +
+      '</table>' +
+      '</div>' +
+      '<div class="space-y-1 text-xs mb-4">' +
+      '<div class="flex justify-between">' +
+      '<span>Subtotal</span>' +
+      '<span>' + formatCurrency(subtotal, currencySettings) + '</span>' +
+      '</div>' +
+      '<div class="flex justify-between">' +
+      '<span>Tax</span>' +
+      '<span>' + formatCurrency(tax, currencySettings) + '</span>' +
+      '</div>' +
+      paymentMethodHtml +
+      cashDetailsHtml +
+      transferDetailsHtml +
+      noteHtml +
+      '</div>' +
+      '<div style="text-align: center; margin-top: 10px; border-top: 1px dashed #000; padding-top: 10px;">' +
+      '<div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 12px;">' +
+      '<div style="font-weight: bold; font-size: 14px;">TOTAL</div>' +
+      '<div style="font-weight: bold; font-size: 18px;">' + formatCurrency(totalAmount, currencySettings) + '</div>' +
+      '</div>' +
+      '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center;">' +
+      '<div>' +
+      '<div style="font-size: 11px; color: #666;">THB</div>' +
+      '<div style="font-weight: bold; font-size: 16px;">฿' + (totalAmount / ((currencySettings as any).thbRate || 36.5)).toFixed(2) + '</div>' +
+      '</div>' +
+      '<div>' +
+      '<div style="font-size: 11px; color: #666;">USD</div>' +
+      '<div style="font-weight: bold; font-size: 16px;">$' + (totalAmount / ((currencySettings as any).currencyRate || 1)).toFixed(2) + '</div>' +
+      '</div>' +
+      '</div>' +
+      '</div>' +
+      transferQrHtml +
+      '<div class="text-center mt-6 text-xs">' +
+      escapeHtml(receiptSettings.footerText || '') +
+      '</div>' +
+      '</body>' +
+      '</html>';
 
     const printerId = receiptSettings.receiptPrinter;
     let targetPrinter = null;
@@ -712,15 +898,7 @@ export default function OrderHistoryPage() {
     if (!method) return '-';
     return method === 'online' ? 'Transfer' : method.charAt(0).toUpperCase() + method.slice(1);
   };
-  const getOrderItemName = (line: any) => {
-    if (line.item?.name) return line.item.name;
-    const notesText = String(line.notes || '');
-    const itemMatch = notesText.match(/Item:\s*([^|]+)/i);
-    if (itemMatch?.[1]) return itemMatch[1].trim();
-    const recipeMatch = notesText.match(/Recipe:\s*([^|]+)/i);
-    if (recipeMatch?.[1]) return recipeMatch[1].trim();
-    return 'Unknown Item';
-  };
+  const getOrderItemName = getOrderLineDisplayName;
 
   return (
     <div className="flex-1 space-y-4 p-4 sm:p-8 sm:pt-6">
