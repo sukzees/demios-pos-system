@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS public.items (
   stock INTEGER DEFAULT 0,
   is_recipe BOOLEAN DEFAULT false,
   show_in_menu BOOLEAN DEFAULT true,
-  type TEXT CHECK (type IN ('standalone', 'recipe', 'saleOnly')) DEFAULT 'recipe',
+  type TEXT CHECK (type IN ('standalone', 'recipe', 'saleonly')) DEFAULT 'recipe',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS public.recipes (
 CREATE TABLE IF NOT EXISTS public.recipe_ingredients (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   recipe_id UUID REFERENCES public.items(id) ON DELETE CASCADE,
-  ingredient_id UUID REFERENCES public.items(id) ON DELETE CASCADE,
+  ingredient_id UUID REFERENCES public.inventory_items(id) ON DELETE CASCADE,
   quantity_needed NUMERIC NOT NULL,
   unit TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -491,7 +491,7 @@ COMMENT ON COLUMN public.orders.table_id IS 'Reference to table if order is dine
 COMMENT ON COLUMN public.orders.order_type IS 'Type of order: dine-in, takeout, or delivery';
 COMMENT ON COLUMN public.employees.permissions IS 'JSON object containing menu access and action permissions';
 COMMENT ON COLUMN public.items.is_recipe IS 'True if item is made from other ingredients';
-COMMENT ON COLUMN public.items.type IS 'Menu item type: standalone, recipe, or saleOnly';
+COMMENT ON COLUMN public.items.type IS 'Menu item type: standalone, recipe, or saleonly';
 COMMENT ON COLUMN public.inventory_items.type IS 'Inventory item type: standalone (finished product) or ingredient (raw material)';
 COMMENT ON COLUMN public.tables.status IS 'Table availability: available, occupied, reserved, inactive';
 

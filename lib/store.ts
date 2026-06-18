@@ -728,14 +728,16 @@ export const usePosStore = create<PosState>()(
         if (!get().isSupabaseConfigured || !get().isOnline) return;
 
         try {
-          const [itemsRes, inventoryItemsRes, categoriesRes] = await Promise.all([
+          const [itemsRes, inventoryItemsRes, recipesRes, categoriesRes] = await Promise.all([
             supabase.from('items').select('*'),  // Menu items (with inventory_item_id for standalone items)
             supabase.from('inventory_items').select('*'),  // Inventory items
+            supabase.from('recipes').select('*'),  // Recipes
             supabase.from('categories').select('*')
           ]);
 
           console.log('[FETCH] Items from items table:', itemsRes.data?.length || 0);
           console.log('[FETCH] Items from inventory_items table:', inventoryItemsRes.data?.length || 0);
+          console.log('[FETCH] Items from recipes table:', recipesRes.data?.length || 0);
           
           // Sample log for debugging
           if (itemsRes.data && itemsRes.data.length > 0) {
@@ -744,11 +746,16 @@ export const usePosStore = create<PosState>()(
           if (inventoryItemsRes.data && inventoryItemsRes.data.length > 0) {
             console.log('[FETCH] Sample item from inventory_items table:', inventoryItemsRes.data[0]);
           }
+          if (recipesRes.data && recipesRes.data.length > 0) {
+            console.log('[FETCH] Sample item from recipes table:', recipesRes.data[0]);
+          }
 
-          // Combine items and inventory_items for Items & Categories page
+          // Combine items, inventory_items, and recipes for Items & Categories page
+          // Add is_recipe flag to items (since items table no longer has is_recipe column)
           const allItems = [
-            ...(itemsRes.data || []),
-            ...(inventoryItemsRes.data || [])
+            ...(itemsRes.data || []).map(item => ({ ...item, is_recipe: false, itemSource: 'item' })),
+            ...(inventoryItemsRes.data || []).map(item => ({ ...item, is_recipe: false, itemSource: 'inventory' })),
+            ...(recipesRes.data || []).map(recipe => ({ ...recipe, is_recipe: true, itemSource: 'recipe' }))
           ];
 
           console.log('[FETCH] Total combined items:', allItems.length);
@@ -1042,51 +1049,24 @@ export const usePosStore = create<PosState>()(
                       .eq('id', ingredient.ingredient_id)
                       .single();
 
-                    if (ingredientItem) {
-                      const itemType = (ingredientItem as any).type;
-                      
-                      // Determine where to deduct stock from
-                      if (itemType === 'standalone' && (ingredientItem as any).inventory_item_id) {
-                        // Standalone items: deduct from inventory_items
-                        const inventoryItemId = (ingredientItem as any).inventory_item_id;
-                        const { data: invItem } = await supabase
-                          .from('inventory_items')
-                          .select('stock')
-                          .eq('id', inventoryItemId)
-                          .single();
-                        
-                        if (invItem) {
-                          const newStock = Math.max(0, ((invItem as any).stock || 0) - deduction);
-                          await supabase.from('inventory_items').update({ stock: newStock }).eq('id', inventoryItemId);
-                        }
-                        
-                        transactions.push({
-                          inventory_item_id: inventoryItemId,
-                          quantity_change: -deduction,
-                          transaction_type: 'sale',
-                          notes: `Recipe sale: ${cartItem.item.name} (Order #${order.id.slice(0, 8)})`
-                        });
-                      } else {
-                        // Items from inventory_items table: deduct directly
-                        const { data: invItem } = await supabase
-                          .from('inventory_items')
-                          .select('stock')
-                          .eq('id', ingredient.ingredient_id)
-                          .single();
-                        
-                        if (invItem) {
-                          const newStock = Math.max(0, ((invItem as any).stock || 0) - deduction);
-                          await supabase.from('inventory_items').update({ stock: newStock }).eq('id', ingredient.ingredient_id);
-                        }
-                        
-                        transactions.push({
-                          inventory_item_id: ingredient.ingredient_id,
-                          quantity_change: -deduction,
-                          transaction_type: 'sale',
-                          notes: `Recipe sale: ${cartItem.item.name} (Order #${order.id.slice(0, 8)})`
-                        });
-                      }
+                    const inventoryItemId = (ingredientItem as any)?.inventory_item_id || ingredient.ingredient_id;
+                    const { data: invItem } = await supabase
+                      .from('inventory_items')
+                      .select('stock')
+                      .eq('id', inventoryItemId)
+                      .single();
+                    
+                    if (invItem) {
+                      const newStock = Math.max(0, ((invItem as any).stock || 0) - deduction);
+                      await supabase.from('inventory_items').update({ stock: newStock }).eq('id', inventoryItemId);
                     }
+                    
+                    transactions.push({
+                      inventory_item_id: inventoryItemId,
+                      quantity_change: -deduction,
+                      transaction_type: 'sale',
+                      notes: `Recipe sale: ${cartItem.item.name} (Order #${order.id.slice(0, 8)})`
+                    });
                   }
                 }
               }
@@ -1201,6 +1181,7 @@ export const usePosStore = create<PosState>()(
             // Error editing item
             // Revert on failure
             set({ items });
+            throw error;
           }
         }
       },
@@ -1956,11 +1937,18 @@ export const usePosStore = create<PosState>()(
               }));
             }
 
-            const inventoryItemIds = new Set(items.map(i => i.id));
+            const menuItemIds = new Set(
+              items
+                .filter(i => {
+                  const source = (i as any).itemSource;
+                  return source === 'item' || (!source && i.category_id !== undefined && i.category_id !== null);
+                })
+                .map(i => i.id)
+            );
             // Use activeCart instead of cart for order items
             const orderItems = activeCart.map((c, index) => {
               const sourceId = c.sourceItemId || c.item.id;
-              const isInventoryItem = inventoryItemIds.has(sourceId);
+              const isMenuItem = menuItemIds.has(sourceId);
               const orderMeta = index === 0
                 ? `Order Meta >>>${encodeURIComponent(JSON.stringify({
                   orderNote: notes || '',
@@ -1970,10 +1958,10 @@ export const usePosStore = create<PosState>()(
                 : undefined;
               return {
                 order_id: order.id,
-                item_id: isInventoryItem ? sourceId : null,
+                item_id: isMenuItem ? sourceId : null,
                 quantity: c.quantity,
                 price_at_time: c.item.price,
-                notes: isInventoryItem
+                notes: isMenuItem
                   ? [`Item: ${c.item.name}`, c.notes, c.portionName ? `Portion: ${c.portionName}` : undefined, orderMeta].filter(Boolean).join(' | ') || undefined
                   : [`Item: ${c.item.name}`, `Recipe: ${c.item.name}`, c.notes, c.portionName ? `Portion: ${c.portionName}` : undefined, orderMeta].filter(Boolean).join(' | ') || undefined
               };
@@ -2021,8 +2009,8 @@ export const usePosStore = create<PosState>()(
               if (cartItem.portionId) {
                 portionDeductions[cartItem.portionId] = (portionDeductions[cartItem.portionId] || 0) + cartItem.quantity;
               }
-              const isInventoryItem = items.some(i => i.id === sourceId);
-              if (isInventoryItem) {
+              const isMenuItem = menuItemIds.has(sourceId);
+              if (isMenuItem) {
                 inventoryDeductions[sourceId] = (inventoryDeductions[sourceId] || 0) + cartItem.quantity;
               } else {
                 recipeOrderQty[sourceId] = (recipeOrderQty[sourceId] || 0) + cartItem.quantity;

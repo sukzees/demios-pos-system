@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Plus, Search, Edit, Trash2, ChefHat, Package } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Recipe, RecipeIngredient, Item, Category } from '@/lib/supabase';
+import { Recipe, Item, Category } from '@/lib/supabase';
 import { format } from 'date-fns';
 import {
   Dialog,
@@ -64,9 +64,9 @@ export default function RecipesPage() {
   const fetchIngredients = async () => {
     try {
       const { data, error } = await supabase
-        .from('items')
+        .from('inventory_items')
         .select('*')
-        .eq('is_recipe', false)
+        .eq('type', 'ingredient')
         .order('name');
 
       if (data) setIngredients(data);
@@ -133,9 +133,10 @@ export default function RecipesPage() {
             unit: ing.unit
           }));
 
-          await supabase
+          const { error: ingredientError } = await supabase
             .from('recipe_ingredients')
             .insert(ingredientsToInsert);
+          if (ingredientError) throw ingredientError;
         }
       } else {
         // Create new recipe
@@ -160,9 +161,10 @@ export default function RecipesPage() {
             unit: ing.unit
           }));
 
-          await supabase
+          const { error: ingredientError } = await supabase
             .from('recipe_ingredients')
             .insert(ingredientsToInsert);
+          if (ingredientError) throw ingredientError;
         }
       }
 

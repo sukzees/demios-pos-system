@@ -936,7 +936,8 @@ export default function PosPage() {
     ? items
         .filter(item => 
           item.category_id !== undefined && 
-          item.category_id !== null
+          item.category_id !== null &&
+          (item as any).itemSource !== 'recipe'
         )
         .map(item => ({ ...item, uniqueKey: `item-${item.id}` }))
     : (isSupabaseConfigured ? [] : MOCK_ITEMS.map(item => ({ ...item, uniqueKey: `mock-${item.id}` })));
@@ -949,10 +950,16 @@ export default function PosPage() {
 
   const displayItems = [...menuItems, ...recipeItems];
 
-  // Remove duplicates by uniqueKey to prevent React key warnings
+  // Remove duplicates by product identity, not only React key.
+  // The store may already include recipes, while this page also fetches recipes separately.
   const uniqueDisplayItems = displayItems.reduce((acc, current) => {
-    const key = (current as any).uniqueKey;
-    const exists = acc.find(item => (item as any).uniqueKey === key);
+    const source = (current as any).itemSource || (current.is_recipe ? 'recipe' : 'item');
+    const key = source === 'recipe' ? `recipe-${current.id}` : `item-${current.id}`;
+    const exists = acc.find(item => {
+      const existingSource = (item as any).itemSource || (item.is_recipe ? 'recipe' : 'item');
+      const existingKey = existingSource === 'recipe' ? `recipe-${item.id}` : `item-${item.id}`;
+      return existingKey === key;
+    });
     if (!exists) {
       acc.push(current);
     }
@@ -961,10 +968,13 @@ export default function PosPage() {
 
   // Debug: Check for duplicate uniqueKeys
   if (process.env.NODE_ENV === 'development') {
-    const uniqueKeys = displayItems.map(item => (item as any).uniqueKey);
-    const duplicates = uniqueKeys.filter((key, index) => uniqueKeys.indexOf(key) !== index);
+    const productKeys = displayItems.map(item => {
+      const source = (item as any).itemSource || (item.is_recipe ? 'recipe' : 'item');
+      return source === 'recipe' ? `recipe-${item.id}` : `item-${item.id}`;
+    });
+    const duplicates = productKeys.filter((key, index) => productKeys.indexOf(key) !== index);
     if (duplicates.length > 0) {
-      console.warn('[POS] Duplicate uniqueKeys found:', duplicates);
+      console.warn('[POS] Duplicate product keys found:', duplicates);
       console.warn('[POS] menuItems count:', menuItems.length);
       console.warn('[POS] recipeItems count:', recipeItems.length);
       console.warn('[POS] After deduplication:', uniqueDisplayItems.length);
@@ -2250,7 +2260,10 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
 
     const rows: Record<string, any>[] = sentCart.map((cartItem: any) => {
       const sourceId = cartItem.sourceItemId || cartItem.item.id;
-      const sourceExistsInItems = items.some(item => item.id === sourceId);
+      const sourceExistsInItems = items.some(item => {
+        const source = (item as any).itemSource;
+        return item.id === sourceId && (source === 'item' || (!source && item.category_id !== undefined && item.category_id !== null));
+      });
       return {
         order_id: orderId,
         item_id: sourceExistsInItems ? sourceId : null,
@@ -3097,8 +3110,8 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
         )}
 
       {/* Cart Sidebar */}
-      <div className={`${mobilePosView === 'order' ? 'flex' : 'hidden'} w-full flex-col border-l border-zinc-200 bg-white lg:flex lg:w-[30rem]`}>
-        <div className="flex items-center justify-between border-b border-zinc-200 p-4">
+      <div className={`${mobilePosView === 'order' ? 'flex' : 'hidden'} w-full flex-col border-l border-zinc-200 bg-white lg:flex lg:w-[30rem] h-full overflow-y-auto lg:overflow-visible`}>
+        <div className="flex items-center justify-between border-b border-zinc-200 p-4 sticky top-0 bg-white z-10">
           <div className="flex items-center gap-2">
             {/* Back button - only show in PWA mode */}
             <Button 
@@ -3249,9 +3262,9 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-none lg:flex-1 overflow-visible lg:overflow-y-auto p-4">
           {cart.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center text-zinc-500">
+            <div className="flex flex-1 lg:h-full flex-col items-center justify-center text-zinc-500 py-12">
               <ShoppingBag className="mb-4 h-12 w-12 opacity-20" />
               <p>{t.emptyCart}</p>
             </div>

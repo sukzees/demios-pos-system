@@ -93,7 +93,7 @@ export type Item = {
   image_url?: string;
   // stock removed - use inventory_items table instead
   is_recipe?: boolean;
-  type?: 'standalone' | 'ingredient' | 'recipe' | 'saleOnly';
+  type?: 'standalone' | 'ingredient' | 'recipe' | 'saleOnly' | 'saleonly';
   created_at: string;
 };
 

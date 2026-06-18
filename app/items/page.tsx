@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -318,6 +318,8 @@ export default function ItemsPage() {
 
   // Add Item Form State
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false);
   const [newItemName, setNewItemName] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemCategory, setNewItemCategory] = useState('');
@@ -472,10 +474,15 @@ export default function ItemsPage() {
   };
 
   const handleAddItem = async () => {
+    if (isSavingRef.current) return; // Prevent double submit
     if (!newItemCategory || ((newItemType === 'recipe' || newItemType === 'saleOnly') && !newItemName.trim()) || (newItemType === 'recipe' && !hasPortions && !newItemPrice) || (newItemType === 'saleOnly' && !newItemPrice)) {
       alert(t.fillAllFields);
       return;
     }
+
+    let createdRecord: { table: 'items' | 'recipes'; id: string } | null = null;
+    isSavingRef.current = true;
+    setIsSaving(true);
 
     try {
       const validPortions = hasPortions
@@ -515,6 +522,7 @@ export default function ItemsPage() {
         if (itemError) throw itemError;
         
         if (newItem) {
+          createdRecord = { table: 'items', id: newItem.id };
           await syncStandalonePortions(newItem.id, validPortions);
         }
       } else if (newItemType === 'saleOnly') {
@@ -536,10 +544,11 @@ export default function ItemsPage() {
 
         if (error) throw error;
         if (!data) throw new Error('Sale-only item was not created');
+        createdRecord = { table: 'items', id: data.id };
         
         // Save portions if any
         if (hasPortions && validPortions.length > 0) {
-          await supabase
+          const { error: portionError } = await supabase
             .from('item_portions')
             .insert(
               validPortions.map((portion) => ({
@@ -550,8 +559,9 @@ export default function ItemsPage() {
                 portion_stock: parseInt(portion.stock) || 0
               }))
             );
+          if (portionError) throw portionError;
         }
-      } else if (recipeIngredients.length > 0) {
+      } else if (newItemType === 'recipe') {
         if (!newItemName.trim()) {
           alert(t.fillAllFields);
           return;
@@ -570,20 +580,20 @@ export default function ItemsPage() {
           .single();
 
         if (error) throw error;
-        if (data) {
-          const ingredientsToInsert = recipeIngredients.map(ing => ({
-            recipe_id: data.id,
-            ingredient_id: ing.ingredient_id,
-            quantity_needed: ing.quantity_needed,
-            unit: ing.unit
-          }));
-
-          await supabase
-            .from('recipe_ingredients')
-            .insert(ingredientsToInsert);
+        if (data && data.id) {
+          createdRecord = { table: 'recipes', id: data.id };
+          const ingredientsToInsert = buildRecipeIngredientsToInsert(data.id, recipeIngredients);
+          
+          if (ingredientsToInsert.length > 0) {
+            const { error: ingError } = await supabase
+              .from('recipe_ingredients')
+              .insert(ingredientsToInsert);
+            
+            if (ingError) throw ingError;
+          }
 
           if (hasPortions && validPortions.length > 0) {
-            await supabase
+            const { error: portionError } = await supabase
               .from('item_portions')
               .insert(
                 validPortions.map((portion) => ({
@@ -594,6 +604,8 @@ export default function ItemsPage() {
                   portion_stock: parseInt(portion.stock) || 0
                 }))
               );
+            
+            if (portionError) throw portionError;
           }
         }
       } else {
@@ -620,8 +632,13 @@ export default function ItemsPage() {
       fetchRecipes();
       fetchPortionStocks();
     } catch (error: any) {
-      console.error('Error adding item:', error);
+      if (createdRecord) {
+        await supabase.from(createdRecord.table).delete().eq('id', createdRecord.id);
+      }
       alert(`${t.errorAdding}: ${error.message}`);
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
     }
   };
 
@@ -1000,6 +1017,40 @@ export default function ItemsPage() {
     return uniqueIngredients;
   };
 
+  const buildRecipeIngredientsToInsert = (
+    recipeId: string,
+    sourceIngredients: { ingredient_id: string; quantity_needed: number; unit: string }[]
+  ) => {
+    const ingredientMap = new Map<string, { ingredient_id: string; quantity_needed: number; unit: string }>();
+
+    for (const ingredient of sourceIngredients) {
+      const selectedIngredientId = ingredient.ingredient_id?.trim();
+      if (!selectedIngredientId || selectedIngredientId === 'null' || selectedIngredientId === 'undefined') {
+        continue;
+      }
+
+      const quantityNeeded = Number(ingredient.quantity_needed) || 1;
+      const existing = ingredientMap.get(selectedIngredientId);
+
+      if (existing) {
+        existing.quantity_needed += quantityNeeded;
+      } else {
+        ingredientMap.set(selectedIngredientId, {
+          ingredient_id: selectedIngredientId,
+          quantity_needed: quantityNeeded,
+          unit: ingredient.unit || 'pcs'
+        });
+      }
+    }
+
+    return Array.from(ingredientMap.values()).map(ingredient => ({
+      recipe_id: recipeId,
+      ingredient_id: ingredient.ingredient_id,
+      quantity_needed: ingredient.quantity_needed,
+      unit: ingredient.unit
+    }));
+  };
+
   const loadRecipeIngredients = async (recipeId: string) => {
     try {
       const { data, error } = await supabase
@@ -1071,10 +1122,14 @@ export default function ItemsPage() {
   };
 
   const handleEditItem = async () => {
+    if (isSavingRef.current) return; // Prevent double submit
     if (!editingItem || !editItemName || !editItemPrice || !editItemCategory) {
       alert('Please fill in all required fields');
       return;
     }
+
+    isSavingRef.current = true;
+    setIsSaving(true);
 
     try {
       const validEditPortions = editHasPortions
@@ -1086,11 +1141,76 @@ export default function ItemsPage() {
         return;
       }
 
+      const targetInventoryItemId = editStandaloneInventoryItemId || (editingItem as any).inventory_item_id || '';
+      if (editItemType === 'standalone' && !targetInventoryItemId) {
+        alert(t.selectStandaloneInventory);
+        return;
+      }
+
       const wasRecipe = isEditingRecipe;
 
-      // แก้ไขข้อมูลในตารางที่มันอยู่เดิม - ไม่ย้ายระหว่างตาราง
-      if (wasRecipe) {
-        // อยู่ใน recipes table - แก้ไขที่นี่
+      // Handle type conversion when changing between recipe and non-recipe
+      if (wasRecipe && editItemType !== 'recipe') {
+        // Convert from recipe to items table
+        const priceToSave = editHasPortions ? parseFloat(validEditPortions[0].price) : parseFloat(editItemPrice);
+        
+        // Delete from recipes
+        await supabase.from('recipes').delete().eq('id', editingItem.id);
+        
+        // Create in items table
+        const { data: newItem, error: itemError } = await supabase
+          .from('items')
+          .insert({
+            name: editItemName,
+            price: priceToSave,
+            category_id: editItemCategory,
+            inventory_item_id: editItemType === 'standalone' ? targetInventoryItemId : null,
+            type: editItemType === 'saleOnly' ? 'saleonly' : 'standalone',
+            is_recipe: false,
+            show_in_menu: true
+          })
+          .select()
+          .single();
+
+        if (itemError) throw itemError;
+        
+        if (newItem) {
+          await syncPortionsForEdit(newItem.id, false, validEditPortions);
+        }
+      } else if (!wasRecipe && editItemType === 'recipe') {
+        // Convert from items to recipes table
+        const priceToSave = editHasPortions ? parseFloat(validEditPortions[0].price) : parseFloat(editItemPrice);
+        
+        // Delete from items
+        await supabase.from('items').delete().eq('id', editingItem.id);
+        
+        // Create in recipes table
+        const { data: newRecipe } = await supabase
+          .from('recipes')
+          .insert({
+            name: editItemName,
+            category_id: editItemCategory,
+            price: priceToSave,
+            is_recipe: true
+          })
+          .select()
+          .single();
+        
+        if (newRecipe && newRecipe.id) {
+          const ingredientsToInsert = buildRecipeIngredientsToInsert(newRecipe.id, editRecipeIngredients);
+          
+          if (ingredientsToInsert.length > 0) {
+            const { error: ingError } = await supabase.from('recipe_ingredients').insert(
+              ingredientsToInsert
+            );
+            
+            if (ingError) throw ingError;
+          }
+          
+          await syncPortionsForEdit(newRecipe.id, true, validEditPortions);
+        }
+      } else if (wasRecipe) {
+        // Was recipe and still recipe - update in recipes table
         const priceToSave = editHasPortions ? parseFloat(validEditPortions[0].price) : parseFloat(editItemPrice);
         await supabase.from('recipes').update({ 
           name: editItemName, 
@@ -1098,33 +1218,35 @@ export default function ItemsPage() {
           price: priceToSave 
         }).eq('id', editingItem.id);
         
-        // อัพเดท recipe ingredients
+        // Update recipe ingredients
         await supabase.from('recipe_ingredients').delete().eq('recipe_id', editingItem.id);
-        if (editItemType === 'recipe' && editRecipeIngredients.length > 0) {
-          await supabase.from('recipe_ingredients').insert(editRecipeIngredients.map(ing => ({
-            recipe_id: editingItem.id, 
-            ingredient_id: ing.ingredient_id, 
-            quantity_needed: ing.quantity_needed, 
-            unit: ing.unit
-          })));
+        const ingredientsToInsert = buildRecipeIngredientsToInsert(editingItem.id, editRecipeIngredients);
+        
+        if (ingredientsToInsert.length > 0) {
+          const { error: ingError } = await supabase.from('recipe_ingredients').insert(
+            ingredientsToInsert
+          );
+          
+          if (ingError) throw ingError;
         }
         
-        // อัพเดท portions
+        // Update portions
         await syncPortionsForEdit(editingItem.id, true, validEditPortions);
       } else {
-        // อยู่ใน items table - แก้ไขที่นี่ (ไม่ย้ายไป recipes)
+        // Was items and still items - update in items table
         const priceToSave = editHasPortions ? parseFloat(validEditPortions[0].price) : parseFloat(editItemPrice);
         
-        // อัพเดทข้อมูลใน items table
         await editItem(editingItem.id, { 
           name: editItemName, 
           price: priceToSave, 
           category_id: editItemCategory,
-          inventory_item_id: editStandaloneInventoryItemId || (editingItem as any).inventory_item_id,
-          type: editItemType === 'saleOnly' ? 'saleOnly' : 'standalone' // อัพเดท type แต่ยังอยู่ใน items table
+          inventory_item_id: editItemType === 'saleOnly'
+            ? null
+            : targetInventoryItemId,
+          type: editItemType === 'saleOnly' ? 'saleonly' : 'standalone'
         });
         
-        // อัพเดท portions (UPDATE ข้อมูลเดิม ไม่ลบแล้วสร้างใหม่)
+        // Update portions
         await syncPortionsForEdit(editingItem.id, false, validEditPortions);
       }
 
@@ -1136,6 +1258,9 @@ export default function ItemsPage() {
     } catch (error: any) {
       console.error('Error editing item:', error);
       alert(`Error editing item: ${error.message}`);
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
     }
   };
 
@@ -1188,7 +1313,7 @@ export default function ItemsPage() {
         .filter(item => 
           // Only show items from 'items' table (not inventory_items)
           // Items table has category_id, inventory_items has inventory_category_id
-          item.category_id !== undefined && item.category_id !== null
+          item.category_id !== undefined && item.category_id !== null && (item as any).itemSource !== 'recipe'
         )
         .map(item => ({ ...item, itemSource: 'standalone' as const, uniqueKey: `item-${item.id}` }))
     : (isSupabaseConfigured ? [] : MOCK_ITEMS.map(item => ({ ...item, itemSource: 'standalone' as const, uniqueKey: `mock-${item.id}` })));
@@ -1457,7 +1582,7 @@ export default function ItemsPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddItemOpen(false)} className="rounded-xl h-11 px-6">{t.cancel}</Button>
-                <Button onClick={handleAddItem} className="bg-blue-600 hover:bg-blue-700 rounded-xl h-11 px-6">{t.saveItem}</Button>
+                <Button disabled={isSaving} onClick={handleAddItem} className="bg-blue-600 hover:bg-blue-700 rounded-xl h-11 px-6">{t.saveItem}</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -1693,7 +1818,7 @@ export default function ItemsPage() {
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setIsEditItemOpen(false)} className="rounded-xl h-11 px-6">{t.cancel}</Button>
-                      <Button onClick={handleEditItem} className="bg-blue-600 hover:bg-blue-700 rounded-xl h-11 px-6">{t.save}</Button>
+                      <Button disabled={isSaving} onClick={handleEditItem} className="bg-blue-600 hover:bg-blue-700 rounded-xl h-11 px-6">{t.save}</Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
@@ -1793,21 +1918,23 @@ export default function ItemsPage() {
                     ) : (
                       paginatedItems.map((item) => {
                         const category = displayCategories.find(c => c.id === item.category_id);
-                        const isRecipeEntity = (item as any).itemSource === 'recipe';
+                        const isRecipeEntity = item.is_recipe === true;
                         const hasIngredients = isRecipeEntity && recipeHasIngredients[item.id];
                         
                         // Determine item type label based on actual type field
                         let itemTypeLabel;
-                        if (isRecipeEntity) {
+                        if (item.is_recipe) {
                           // Recipe entity from recipes table
-                          itemTypeLabel = hasIngredients ? t.ingredientsType : t.saleOnly;
+                          itemTypeLabel = hasIngredients ? t.ingredientsType : t.ingredientsType;
                         } else {
                           // Item from items table - check type field
                           const itemType = (item as any).type;
-                          if (itemType === 'saleonly') {
+                          if (itemType === 'saleonly' || itemType === 'saleOnly') {
                             itemTypeLabel = t.saleOnly;
                           } else if (itemType === 'standalone') {
                             itemTypeLabel = t.standalone;
+                          } else if (itemType === 'recipe') {
+                            itemTypeLabel = t.ingredientsType;
                           } else {
                             // Legacy items without type
                             itemTypeLabel = t.standalone;
