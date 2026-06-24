@@ -394,49 +394,86 @@ export default function OrderHistoryPage() {
     try {
       const { canUseOfflineNetworkPrint } = getPrintRuntime();
       const isLocalIP = printerIp.startsWith('192.168.') || printerIp.startsWith('10.') || printerIp.startsWith('172.');
-      
+
       if (!canUseOfflineNetworkPrint && isLocalIP) {
         console.warn('[PRINT] Online runtime detected. Using browser print fallback instead of LAN API printing.');
         printWithIframe(html);
         return true;
       }
-      
+
       console.log('[PRINT] Offline/local runtime detected. Printing via local API route to:', printerIp);
-      
-      // Create a temporary container for the HTML
-      const container = document.createElement('div');
-      container.style.position = 'fixed';
-      container.style.left = '-9999px';
-      container.style.top = '0';
-      container.style.backgroundColor = '#ffffff';
-      container.style.color = '#000000';
-      container.innerHTML = html;
-      document.body.appendChild(container);
 
-      // Wait for rendering
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Get the actual rendered size
+      // Pixel width matching the ESC/POS printer resolution
       const width = paperWidth === '80mm' ? 576 : 384;
 
-      // Convert HTML to canvas with optimized settings
-      const canvas = await html2canvas(container, {
+      // Create a temporary iframe to render the HTML in isolation.
+      // Using an iframe (instead of a div) guarantees the body width is honored
+      // exactly, independent of the parent app's layout/viewport.
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.left = '-9999px';
+      iframe.style.top = '0';
+      iframe.style.width = width + 'px';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+
+      const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (!iframeDoc) {
+        document.body.removeChild(iframe);
+        throw new Error('Could not access iframe document');
+      }
+      iframeDoc.open();
+      iframeDoc.write(html);
+      iframeDoc.close();
+
+      // Wait for fonts & layout to settle before measuring
+      await new Promise(resolve => setTimeout(resolve, 800));
+      try { await (iframe.contentWindow as any).document.fonts?.ready; } catch (e) {}
+
+      const renderRoot = iframeDoc.body;
+
+      // Wait for all images (including QR base64 data URLs) to fully decode
+      const images = renderRoot.querySelectorAll('img');
+      if (images.length > 0) {
+        await Promise.allSettled(Array.from(images).map(async (img) => {
+          try {
+            if (typeof (img as HTMLImageElement).decode === 'function') {
+              await (img as HTMLImageElement).decode();
+            } else {
+              await new Promise<void>((resolve) => {
+                if (img.complete && (img as HTMLImageElement).naturalWidth > 0) { resolve(); return; }
+                const onLoad = () => resolve();
+                const onError = () => resolve();
+                img.addEventListener('load', onLoad, { once: true });
+                img.addEventListener('error', onError, { once: true });
+              });
+            }
+          } catch (e) {
+            // Image decode failed, continue anyway
+          }
+        }));
+        // Extra settle time after images load
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      // Convert HTML to canvas with the exact printer pixel width
+      const canvas = await html2canvas(renderRoot, {
         backgroundColor: '#ffffff',
         scale: 1, // Keep at 1 to avoid duplicate characters
         logging: false,
         width: width,
-        height: container.offsetHeight,
+        height: renderRoot.scrollHeight,
         windowWidth: width,
-        windowHeight: container.offsetHeight,
-        useCORS: false,
-        allowTaint: false,
+        windowHeight: renderRoot.scrollHeight,
+        useCORS: true,
+        allowTaint: true,
         foreignObjectRendering: false,
-        imageTimeout: 0,
-        removeContainer: true,
+        imageTimeout: 15000,
       });
 
-      // Remove temporary container
-      document.body.removeChild(container);
+      // Remove temporary iframe
+      document.body.removeChild(iframe);
 
       // Convert canvas to base64 image
       const imageData = canvas.toDataURL('image/png', 1.0);
@@ -676,11 +713,17 @@ export default function OrderHistoryPage() {
       '<div>Account Number: ' + escapeHtml(bankForDisplay?.accountNumber || '-') + '</div>' +
       '</div>'
       : '';
-    const transferQrHtml = showTransferInfo && bankQrCodeImage
-      ? '<div style="text-align:center; margin-top: 12px; padding-top: 10px; border-top: 1px dotted #000;">' +
-      '<div class="font-bold" style="font-size: 14px; margin-bottom: 8px;">Scan to Pay</div>' +
-      '<div style="background: white; padding: 10px; display: inline-block; border: 2px solid #000;">' +
-      '<img src="' + escapeHtml(bankQrCodeImage) + '" alt="Bank QR Code" style="width: 220px; height: 220px; object-fit: contain; display: block; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; image-rendering: pixelated;" />' +
+    const receiptPaperSize = receiptSettings.receiptSize || '80mm';
+    const receiptPageWidth = receiptPaperSize === '80mm' ? '80mm' : '58mm';
+    const receiptBodyWidth = receiptPaperSize === '80mm' ? 576 : 384;
+    const fs = receiptPaperSize === '80mm' ? 1.5 : 1.0;
+    const fz = (n: number) => Math.round(n * fs) + 2; // font-size helper: scale + 2px
+
+    const transferQrHtml = showTransferInfo && (receiptSettings.showQrCode !== false) && bankQrCodeImage
+      ? '<div style="text-align:center; margin-top: ' + Math.round(12*fs) + 'px; padding-top: ' + Math.round(10*fs) + 'px; border-top: 1px dotted #000;">' +
+      '<div class="font-bold" style="font-size: ' + fz(14) + 'px; margin-bottom: ' + Math.round(8*fs) + 'px;">Scan to Pay</div>' +
+      '<div style="background: white; padding: ' + Math.round(10*fs) + 'px; display: inline-block; border: 2px solid #000;">' +
+      '<img src="' + bankQrCodeImage + '" alt="Bank QR Code" style="width: ' + Math.round(220*fs) + 'px; height: ' + Math.round(220*fs) + 'px; object-fit: contain; display: block; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; image-rendering: pixelated;" />' +
       '</div>' +
       '</div>'
       : '';
@@ -692,27 +735,28 @@ export default function OrderHistoryPage() {
       '<meta charset="UTF-8">' +
       '<style>' +
       "@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;500;700&display=swap');" +
+      `@page { size: ${receiptPageWidth} auto; margin: 0; }` +
       "* { font-family: 'Noto Sans Lao', sans-serif; }" +
-      "body { font-family: 'Noto Sans Lao', sans-serif; padding: 20px; max-width: 300px; margin: 0 auto; color: #000; }" +
+      "body { font-family: 'Noto Sans Lao', sans-serif; padding: " + Math.round(8*fs) + "px; width: " + receiptBodyWidth + "px; margin: 0 auto; color: #000; box-sizing: border-box; }" +
       '.text-center { text-align: center; }' +
-      '.mb-4 { margin-bottom: 1rem; }' +
-      '.mt-6 { margin-top: 1.5rem; }' +
-      '.text-xs { font-size: 12px; }' +
-      '.text-sm { font-size: 14px; }' +
+      '.mb-4 { margin-bottom: ' + Math.round(16*fs) + 'px; }' +
+      '.mt-6 { margin-top: ' + Math.round(24*fs) + 'px; }' +
+      '.text-xs { font-size: ' + fz(12) + 'px; }' +
+      '.text-sm { font-size: ' + fz(14) + 'px; }' +
       '.font-bold { font-weight: bold; }' +
       '.flex { display: flex; justify-content: space-between; }' +
-      '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 10px 0; }' +
-      '.space-y-1 > div { margin-bottom: 4px; }' +
+      '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: ' + Math.round(10*fs) + 'px 0; margin: ' + Math.round(10*fs) + 'px 0; }' +
+      '.space-y-1 > div { margin-bottom: ' + Math.round(4*fs) + 'px; }' +
       'table { width: 100%; border-collapse: collapse; font-family: \'Noto Sans Lao\', sans-serif; }' +
-      'th, td { font-size: 12px; font-family: \'Noto Sans Lao\', sans-serif; }' +
+      'th, td { font-size: ' + fz(12) + 'px; font-family: \'Noto Sans Lao\', sans-serif; }' +
       'h1, h2, h3, h4, h5, h6, p, div, span { font-family: \'Noto Sans Lao\', sans-serif; }' +
       '</style>' +
       '</head>' +
       '<body>' +
       '<div class="text-center mb-4">' +
-      '<h3 class="font-bold text-lg" style="margin:0 0 2px 0;">' + escapeHtml(generalSettings.storeName || '') + '</h3>' +
-      (receiptSettings.storeAddress ? '<div class="text-xs" style="margin-bottom:2px;">' + escapeHtml(receiptSettings.storeAddress) + '</div>' : '') +
-      (receiptSettings.phoneNumber ? '<div class="text-xs" style="margin-bottom:2px;">' + escapeHtml(receiptSettings.phoneNumber) + '</div>' : '') +
+      '<h3 class="font-bold" style="margin:0 0 ' + Math.round(2*fs) + 'px 0; font-size: ' + fz(18) + 'px;">' + escapeHtml(generalSettings.storeName || '') + '</h3>' +
+      (receiptSettings.storeAddress ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px;">' + escapeHtml(receiptSettings.storeAddress) + '</div>' : '') +
+      (receiptSettings.phoneNumber ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px;">' + escapeHtml(receiptSettings.phoneNumber) + '</div>' : '') +
       (receiptSettings.headerText ? '<div class="text-xs mt-2">' + escapeHtml(receiptSettings.headerText) + '</div>' : '') +
       '</div>' +
       '<div class="text-xs mb-4">' +
@@ -723,10 +767,10 @@ export default function OrderHistoryPage() {
       '<table>' +
       '<thead>' +
       '<tr>' +
-      '<th style="text-align:left; padding-bottom: 4px;">Item</th>' +
-      '<th style="text-align:right; padding-bottom: 4px;">Unit</th>' +
-      '<th style="text-align:right; padding-bottom: 4px;">Price</th>' +
-      '<th style="text-align:right; padding-bottom: 4px;">Total</th>' +
+      '<th style="text-align:left; padding-bottom: ' + Math.round(4*fs) + 'px;">Item</th>' +
+      '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">Unit</th>' +
+      '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">Price</th>' +
+      '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">Total</th>' +
       '</tr>' +
       '</thead>' +
       '<tbody>' +
@@ -748,19 +792,19 @@ export default function OrderHistoryPage() {
       transferDetailsHtml +
       noteHtml +
       '</div>' +
-      '<div style="text-align: center; margin-top: 10px; border-top: 1px dashed #000; padding-top: 10px;">' +
-      '<div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 12px;">' +
-      '<div style="font-weight: bold; font-size: 14px;">TOTAL</div>' +
-      '<div style="font-weight: bold; font-size: 18px;">' + formatCurrency(totalAmount, currencySettings) + '</div>' +
+      '<div style="text-align: center; margin-top: ' + Math.round(10*fs) + 'px; border-top: 1px dashed #000; padding-top: ' + Math.round(10*fs) + 'px;">' +
+      '<div style="display: flex; justify-content: center; align-items: center; gap: ' + Math.round(10*fs) + 'px; margin-bottom: ' + Math.round(12*fs) + 'px;">' +
+      '<div style="font-weight: bold; font-size: ' + fz(16) + 'px;">TOTAL</div>' +
+      '<div style="font-weight: bold; font-size: ' + fz(24) + 'px;">' + formatCurrency(totalAmount, currencySettings) + '</div>' +
       '</div>' +
-      '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center;">' +
+      '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: ' + Math.round(10*fs) + 'px; text-align: center;">' +
       '<div>' +
-      '<div style="font-size: 11px; color: #666;">THB</div>' +
-      '<div style="font-weight: bold; font-size: 16px;">฿' + (totalAmount / ((currencySettings as any).thbRate || 36.5)).toFixed(2) + '</div>' +
+      '<div style="font-size: ' + fz(13) + 'px; color: #666;">THB</div>' +
+      '<div style="font-weight: bold; font-size: ' + fz(20) + 'px;">฿' + (totalAmount / ((currencySettings as any).thbRate || 36.5)).toFixed(2) + '</div>' +
       '</div>' +
       '<div>' +
-      '<div style="font-size: 11px; color: #666;">USD</div>' +
-      '<div style="font-weight: bold; font-size: 16px;">$' + (totalAmount / ((currencySettings as any).currencyRate || 1)).toFixed(2) + '</div>' +
+      '<div style="font-size: ' + fz(13) + 'px; color: #666;">USD</div>' +
+      '<div style="font-weight: bold; font-size: ' + fz(20) + 'px;">$' + (totalAmount / ((currencySettings as any).currencyRate || 1)).toFixed(2) + '</div>' +
       '</div>' +
       '</div>' +
       '</div>' +

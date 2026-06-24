@@ -65,6 +65,11 @@ export type Database = {
         Insert: Omit<InventoryTransaction, 'id' | 'created_at'>;
         Update: Partial<Omit<InventoryTransaction, 'id' | 'created_at'>>;
       };
+      app_settings: {
+        Row: { id: string; settings: Record<string, any>; updated_at: string };
+        Insert: { id?: string; settings: Record<string, any>; updated_at?: string };
+        Update: Partial<{ id: string; settings: Record<string, any>; updated_at: string }>;
+      };
     };
   };
 };

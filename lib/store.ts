@@ -11,6 +11,7 @@ const ENV_LICENSE_KEY = (process.env.NEXT_PUBLIC_POS_LICENSE_KEY || '').trim();
 const LICENSE_SYNC_INTERVAL_MS = Number(process.env.NEXT_PUBLIC_LICENSE_SYNC_INTERVAL_MS || 60 * 60 * 1000);
 const INACTIVE_LICENSE_STATUSES = ['inactive', 'expired', 'revoked', 'suspended', 'blocked', 'disabled'];
 const MAX_PERSISTED_QR_CODE_LENGTH = 250_000;
+let pushSettingsTimer: ReturnType<typeof setTimeout> | null = null;
 
 const isMissingColumnInSchemaCache = (error: any, table: string, column: string): boolean => {
   const message = String(error?.message || '').toLowerCase();
@@ -115,6 +116,7 @@ interface PosState {
     storeAddress: string;
     phoneNumber: string;
     showBankDetail: boolean;
+    showQrCode: boolean;
     receiptSize?: '58mm' | '80mm';
     enableVoidBill?: boolean;
     autoPrintVoidBill?: boolean;
@@ -185,10 +187,11 @@ interface PosState {
   shiftTransferAmount: number;
   currentTable: any | null;
   currentOrderType: 'dine-in' | 'takeout' | 'delivery' | null;
+  settingsUpdatedAt: string | null;
 
   login: (user: Employee) => void;
   logout: () => void;
-  updateReceiptSettings: (settings: { headerText: string; footerText: string; storeAddress: string; phoneNumber: string; showBankDetail: boolean; receiptSize?: '58mm' | '80mm'; enableVoidBill?: boolean; autoPrintVoidBill?: boolean; receiptPrinter?: string; voidBillPrinter?: string; kitchenBillSize?: '58mm' | '80mm'; voidBillSize?: '58mm' | '80mm'; showTableNumber?: boolean }) => void;
+  updateReceiptSettings: (settings: Partial<{ headerText: string; footerText: string; storeAddress: string; phoneNumber: string; showBankDetail: boolean; showQrCode: boolean; receiptSize: '58mm' | '80mm'; enableVoidBill: boolean; autoPrintVoidBill: boolean; receiptPrinter: string; voidBillPrinter: string; kitchenBillSize: '58mm' | '80mm'; voidBillSize: '58mm' | '80mm'; showTableNumber: boolean }>) => void;
   updateCurrencySettings: (settings: { defaultCurrency: string; currencySymbol: string; currencyFormat: string; currencyRate: number; currencySymbolPosition: 'left' | 'right'; thbRate?: number }) => void;
   updateGeneralSettings: (settings: { storeName: string; taxRate: number; timezone: string; language?: 'en' | 'lo' | 'th' }) => void;
   updateBankConfigs: (banks: { id: string; bankName: string; accountName: string; accountNumber: string; enabledForTransfer: boolean; qrCodeImage?: string }[]) => void;
@@ -243,6 +246,9 @@ interface PosState {
   checkSupabaseConfig: () => Promise<void>;
   setOnlineStatus: (isOnline: boolean) => void;
   syncPendingActions: () => Promise<void>;
+  fetchAppSettings: () => Promise<void>;
+  pushAppSettings: () => Promise<void>;
+  schedulePushSettings: () => void;
 }
 
 export const usePosStore = create<PosState>()(
@@ -267,6 +273,7 @@ export const usePosStore = create<PosState>()(
         storeAddress: "123 Main St, City, State",
         phoneNumber: "(555) 123-4567",
         showBankDetail: true,
+        showQrCode: true,
         receiptSize: '80mm',
         enableVoidBill: false,
         autoPrintVoidBill: false,
@@ -329,6 +336,7 @@ export const usePosStore = create<PosState>()(
         }
       ],
       stationMappings: [],
+      settingsUpdatedAt: null,
       licenseInfo: {
         key: ENV_LICENSE_KEY,
         machineId: typeof window !== 'undefined' ? (localStorage.getItem('machine_id') || `mach-${Math.random().toString(36).substring(2, 10)}`) : '',
@@ -348,13 +356,22 @@ export const usePosStore = create<PosState>()(
       currentTable: null,
       currentOrderType: null,
 
+      // Debounced push: coalesce multiple rapid settings updates into one push
+      schedulePushSettings: () => {
+        if (pushSettingsTimer) clearTimeout(pushSettingsTimer);
+        pushSettingsTimer = setTimeout(() => {
+          pushSettingsTimer = null;
+          get().pushAppSettings();
+        }, 500);
+      },
+
       login: (user) => set({ user }),
       logout: () => set({ user: null }),
-      updateReceiptSettings: (settings) => set((state) => ({ receiptSettings: { ...state.receiptSettings, ...settings } })),
-      updateCurrencySettings: (settings) => set({ currencySettings: settings }),
-      updateGeneralSettings: (settings) => set({ generalSettings: settings }),
-      updateBankConfigs: (banks) => set({ bankConfigs: banks }),
-      updateUnitConfigs: (units) => set({ unitConfigs: units }),
+      updateReceiptSettings: (settings) => { set((state) => ({ receiptSettings: { ...state.receiptSettings, ...settings } })); get().schedulePushSettings(); },
+      updateCurrencySettings: (settings) => { set({ currencySettings: settings }); get().schedulePushSettings(); },
+      updateGeneralSettings: (settings) => { set({ generalSettings: settings }); get().schedulePushSettings(); },
+      updateBankConfigs: (banks) => { set({ bankConfigs: banks }); get().schedulePushSettings(); },
+      updateUnitConfigs: (units) => { set({ unitConfigs: units }); get().schedulePushSettings(); },
       updatePrinterConfigs: (printers) => set({ printerConfigs: printers }),
       updateStationMappings: (mappings) => set({ stationMappings: mappings }),
       updateAutoPrint: (enabled) => set({ autoPrint: enabled }),
@@ -765,6 +782,69 @@ export const usePosStore = create<PosState>()(
         } catch (error) {
           console.error('[FETCH] Error fetching data:', error);
           // Error fetching data
+        }
+      },
+
+      fetchAppSettings: async () => {
+        if (!get().isSupabaseConfigured) return;
+        try {
+          const { data, error } = await supabase
+            .from('app_settings')
+            .select('settings, updated_at')
+            .eq('id', 'singleton')
+            .single();
+          if (error) {
+            console.error('[SETTINGS] Fetch error:', error.message);
+            return;
+          }
+          if (!data) return;
+          const serverUpdatedAt = data.updated_at;
+          const localUpdatedAt = get().settingsUpdatedAt;
+          if (!localUpdatedAt || serverUpdatedAt > localUpdatedAt) {
+            const s = data.settings || {};
+            console.log('[SETTINGS] Pulling from server, keys:', Object.keys(s), 'updated_at:', serverUpdatedAt);
+            if (s.receiptSettings) set({ receiptSettings: s.receiptSettings });
+            if (s.currencySettings) set({ currencySettings: s.currencySettings });
+            if (s.generalSettings) set({ generalSettings: s.generalSettings });
+            if (s.bankConfigs) set({ bankConfigs: s.bankConfigs });
+            if (s.unitConfigs) set({ unitConfigs: s.unitConfigs });
+            set({ settingsUpdatedAt: serverUpdatedAt });
+            console.log('[SETTINGS] Pulled from server, updated_at:', serverUpdatedAt);
+          }
+        } catch (error) {
+          console.error('[SETTINGS] Error fetching app settings:', error);
+        }
+      },
+
+      pushAppSettings: async () => {
+        if (!get().isSupabaseConfigured) return;
+        try {
+          const payload = {
+            receiptSettings: get().receiptSettings,
+            currencySettings: get().currencySettings,
+            generalSettings: get().generalSettings,
+            bankConfigs: get().bankConfigs,
+            unitConfigs: get().unitConfigs
+          };
+          console.log('[SETTINGS] Pushing to server, payload keys:', Object.keys(payload));
+          console.log('[SETTINGS] Payload sizes:', Object.fromEntries(
+            Object.entries(payload).map(([k, v]) => [k, JSON.stringify(v).length])
+          ));
+          const { data, error } = await supabase
+            .from('app_settings')
+            .upsert({ id: 'singleton', settings: payload, updated_at: new Date().toISOString() })
+            .select('updated_at')
+            .single();
+          if (error) {
+            console.error('[SETTINGS] Push error:', error.message, error.code);
+            return;
+          }
+          if (data) {
+            set({ settingsUpdatedAt: data.updated_at });
+            console.log('[SETTINGS] Pushed to server, updated_at:', data.updated_at);
+          }
+        } catch (error) {
+          console.error('[SETTINGS] Error pushing app settings:', error);
         }
       },
 
@@ -2396,7 +2476,8 @@ export const usePosStore = create<PosState>()(
         stationMappings: state.stationMappings,
         licenseInfo: state.licenseInfo,
         licenseApiData: state.licenseApiData,
-        licenseSyncAt: state.licenseSyncAt
+        licenseSyncAt: state.licenseSyncAt,
+        settingsUpdatedAt: state.settingsUpdatedAt
       }),
     }
   )

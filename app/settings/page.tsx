@@ -78,6 +78,7 @@ const TRANSLATIONS = {
     storeAddress: 'Store Address',
     phoneNumber: 'Phone Number',
     showBankOnReceipt: 'Show bank details on receipt',
+    showQrOnReceipt: 'Show QR code on receipt',
     receiptSize: 'Receipt Size',
     kitchenBillAndVoidBill: 'Kitchen Bill & Void Bill',
     kitchenBillSettings: 'Kitchen Bill Settings',
@@ -229,6 +230,7 @@ const TRANSLATIONS = {
     storeAddress: 'ທີ່ຢູ່ຮ້ານ',
     phoneNumber: 'ເບີໂທລະສັບ',
     showBankOnReceipt: 'ສະແດງລາຍລະອຽດທະນາຄານໃນໃບບິນ',
+    showQrOnReceipt: 'ສະແດງ QR Code ໃນໃບບິນ',
     receiptSize: 'ຂະໜາດໃບບິນ',
     stationMappingSettings: 'ການຕັ້ງຄ່າການຈັບຄູ່ສະຖານີ',
     mappingText: 'ຈັບຄູ່ໝວດໝູ່ກັບເຄື່ອງພິມສະເພາະສຳລັບໃບສັ່ງອາຫານ.',
@@ -391,6 +393,7 @@ const TRANSLATIONS = {
     storeAddress: 'ที่อยู่ร้าน',
     phoneNumber: 'เบอร์โทรศัพท์',
     showBankOnReceipt: 'แสดงรายละเอียดธนาคารในใบเสร็จ',
+    showQrOnReceipt: 'แสดง QR Code ในใบเสร็จ',
     receiptSize: 'ขนาดใบเสร็จ',
     kitchenBillAndVoidBill: 'บิลครัว และ บิลยกเลิก',
     kitchenBillSettings: 'การตั้งค่าบิลครัว',
@@ -509,6 +512,7 @@ export default function SettingsPage() {
     categories,
     items,
     fetchItemsAndCategories,
+    fetchAppSettings,
     stationMappings,
     updateStationMappings,
     isSupabaseConfigured,
@@ -557,6 +561,7 @@ export default function SettingsPage() {
   const [storeAddress, setStoreAddress] = useState(receiptSettings.storeAddress);
   const [phoneNumber, setPhoneNumber] = useState(receiptSettings.phoneNumber);
   const [showBankDetail, setShowBankDetail] = useState(receiptSettings.showBankDetail ?? true);
+  const [showQrCode, setShowQrCode] = useState(receiptSettings.showQrCode ?? true);
   const [showTableNumber, setShowTableNumber] = useState(receiptSettings.showTableNumber ?? true);
   const [receiptSize, setReceiptSize] = useState(receiptSettings.receiptSize || '80mm');
   const [enableVoidBill, setEnableVoidBill] = useState(receiptSettings.enableVoidBill ?? false);
@@ -684,6 +689,7 @@ export default function SettingsPage() {
     setStoreAddress(receiptSettings.storeAddress);
     setPhoneNumber(receiptSettings.phoneNumber);
     setShowBankDetail(receiptSettings.showBankDetail ?? true);
+    setShowQrCode(receiptSettings.showQrCode ?? true);
     setShowTableNumber(receiptSettings.showTableNumber ?? true);
     setReceiptSize(receiptSettings.receiptSize || '80mm');
     setEnableVoidBill(receiptSettings.enableVoidBill ?? false);
@@ -730,8 +736,9 @@ export default function SettingsPage() {
   useEffect(() => {
     if (isSupabaseConfigured) {
       fetchItemsAndCategories();
+      fetchAppSettings();
     }
-  }, [isSupabaseConfigured, fetchItemsAndCategories]);
+  }, [isSupabaseConfigured, fetchItemsAndCategories, fetchAppSettings]);
 
   useEffect(() => {
     const fetchPrinters = async () => {
@@ -1206,6 +1213,7 @@ export default function SettingsPage() {
       storeAddress,
       phoneNumber,
       showBankDetail,
+      showQrCode,
       showTableNumber,
       receiptSize: receiptSize as '58mm' | '80mm',
       enableVoidBill,
@@ -1385,13 +1393,8 @@ export default function SettingsPage() {
   const handleSaveBankSettings = () => {
     updateBankConfigs(localBanks);
     updateReceiptSettings({
-      headerText,
-      footerText,
-      storeAddress,
-      phoneNumber,
       showBankDetail,
-      showTableNumber,
-      receiptSize: receiptSize as '58mm' | '80mm'
+      showQrCode
     });
     alert(t.syncSuccess);
   };
@@ -2060,7 +2063,7 @@ export default function SettingsPage() {
                 </table>
               </div>
 
-              <div className="flex items-center gap-4 mt-6">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mt-6">
                 <label className="inline-flex items-center gap-2 text-sm font-medium text-zinc-600 cursor-pointer">
                   <input
                     type="checkbox"
@@ -2069,6 +2072,15 @@ export default function SettingsPage() {
                     className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
                   />
                   {t.showBankOnReceipt}
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm font-medium text-zinc-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!showQrCode}
+                    onChange={(e) => setShowQrCode(e.target.checked)}
+                    className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  {t.showQrOnReceipt}
                 </label>
               </div>
 
@@ -2405,7 +2417,7 @@ export default function SettingsPage() {
                         <div>Bank: {previewBank.bankName || '-'}</div>
                         <div>Account Name: {previewBank.accountName || '-'}</div>
                         <div>Account No: {previewBank.accountNumber || '-'}</div>
-                        {previewBank.qrCodeImage && (
+                        {showQrCode && previewBank.qrCodeImage && (
                           <div className="mt-3 border-t border-dotted border-zinc-300 pt-3 text-center">
                             <div className="mb-2 font-bold">Bank QR Code</div>
                             <div className="relative mx-auto h-[130px] w-[130px] overflow-hidden rounded-lg border border-zinc-200 bg-white">

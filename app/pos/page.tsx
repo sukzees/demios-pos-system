@@ -421,7 +421,7 @@ export default function PosPage() {
 
   const {
     items, categories, cart, isSupabaseConfigured, heldOrders, receiptSettings, savedCarts,
-    checkSupabaseConfig, fetchItemsAndCategories,
+    checkSupabaseConfig, fetchItemsAndCategories, fetchAppSettings,
     addToCart, removeFromCart: storeRemoveFromCart, removeFromCartByIndex, cancelCartItem, cancelCartItemByIndex, updateCartQuantity, updateCartQuantityByIndex, clearCart, clearUnsentItems, markCartItemsAsSent, checkout,
     holdOrder, resumeOrder, removeHeldOrder, setHeldOrders, currencySettings, generalSettings, checkoutError, bankConfigs, autoPrint, silentPrint,
     isShiftOpen, shiftStartTime, shiftCashAmount, shiftTransferAmount, openShift, closeShift,
@@ -472,30 +472,36 @@ export default function PosPage() {
 
   // Create void bill HTML
   const createVoidBillHtml = (cartItem: any) => {
+    const voidPaperSize = receiptSettings.voidBillSize || '80mm';
+    const voidPageWidth = voidPaperSize === '80mm' ? '80mm' : '58mm';
+    const voidBodyWidth = voidPaperSize === '80mm' ? 576 : 384;
+    const voidFs = voidPaperSize === '80mm' ? 1.5 : 1.0;
+    const voidFz = (n: number) => Math.round(n * voidFs) + 2; // font-size helper: scale + 2px
     const receiptHtml = `
       <html>
         <head>
           <title>VOID BILL - ${cartItem.item.name}</title>
           <style>
             @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;500;700&display=swap');
-            body { font-family: 'Noto Sans Lao', sans-serif; padding: 20px; max-width: 360px; margin: 0 auto; color: #000; }
+            @page { size: ${voidPageWidth} auto; margin: 0; }
+            body { font-family: 'Noto Sans Lao', sans-serif; padding: ${Math.round(8*voidFs)}px; width: ${voidBodyWidth}px; margin: 0 auto; color: #000; box-sizing: border-box; }
             .text-center { text-align: center; }
             .mb-4 { margin-bottom: 1rem; }
-            .text-xs { font-size: 12px; }
-            .text-sm { font-size: 14px; }
+            .text-xs { font-size: ${voidFz(12)}px; }
+            .text-sm { font-size: ${voidFz(14)}px; }
             .font-bold { font-weight: bold; }
             .flex { display: flex; justify-content: space-between; }
-            .border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 10px 0; }
+            .border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: ${Math.round(10*voidFs)}px 0; margin: ${Math.round(10*voidFs)}px 0; }
             .text-red-600 { color: #dc2626; }
             .bg-red-50 { background-color: #fef2f2; }
             .border-red-200 { border-color: #fecaca; }
             table { width: 100%; border-collapse: collapse; }
-            th, td { font-size: 12px; padding: 4px 0; }
+            th, td { font-size: ${voidFz(12)}px; padding: ${Math.round(4*voidFs)}px 0; }
           </style>
         </head>
         <body>
           <div class="text-center mb-4">
-            <div class="inline-block px-4 py-1 bg-red-50 border border-red-200 rounded text-red-600 font-bold text-lg">
+            <div class="inline-block px-4 py-1 bg-red-50 border border-red-200 rounded text-red-600 font-bold" style="font-size: ${voidFz(18)}px;">
               VOID BILL
             </div>
           </div>
@@ -507,16 +513,16 @@ export default function PosPage() {
             <table>
               <thead>
                 <tr>
-                  <th style="text-align:left; padding-bottom: 4px;">Item</th>
-                  <th style="text-align:center; padding-bottom: 4px;">Qty</th>
-                  <th style="text-align:right; padding-bottom: 4px;">Status</th>
+                  <th style="text-align:left; padding-bottom: ${Math.round(4*voidFs)}px;">Item</th>
+                  <th style="text-align:center; padding-bottom: ${Math.round(4*voidFs)}px;">Qty</th>
+                  <th style="text-align:right; padding-bottom: ${Math.round(4*voidFs)}px;">Status</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td style="padding: 2px 0; text-align:left;">${cartItem.item.name}</td>
-                  <td style="padding: 2px 0; text-align:center;">${cartItem.quantity}</td>
-                  <td style="padding: 2px 0; text-align:right; color: #dc2626; font-weight: bold;">VOIDED</td>
+                  <td style="padding: ${Math.round(2*voidFs)}px 0; text-align:left;">${cartItem.item.name}</td>
+                  <td style="padding: ${Math.round(2*voidFs)}px 0; text-align:center;">${cartItem.quantity}</td>
+                  <td style="padding: ${Math.round(2*voidFs)}px 0; text-align:right; color: #dc2626; font-weight: bold;">VOIDED</td>
                 </tr>
               </tbody>
             </table>
@@ -735,8 +741,9 @@ export default function PosPage() {
   useEffect(() => {
     checkSupabaseConfig();
     fetchItemsAndCategories();
+    fetchAppSettings();
     fetchRecipes();
-  }, [checkSupabaseConfig, fetchItemsAndCategories, fetchRecipes]);
+  }, [checkSupabaseConfig, fetchItemsAndCategories, fetchAppSettings, fetchRecipes]);
 
   useEffect(() => {
     if (isSupabaseConfigured) {
@@ -1115,49 +1122,88 @@ export default function PosPage() {
     try {
       const { canUseOfflineNetworkPrint } = getPrintRuntime();
       const isLocalIP = printerIp.startsWith('192.168.') || printerIp.startsWith('10.') || printerIp.startsWith('172.');
-      
+
       if (!canUseOfflineNetworkPrint && isLocalIP) {
         console.warn('[PRINT] Online runtime detected. Using browser print fallback instead of LAN API printing.');
         printWithIframe(html);
         return true;
       }
-      
+
       console.log('[PRINT] Offline/local runtime detected. Printing via local API route to:', printerIp);
-      
-      // Create a temporary container for the HTML
-      const container = document.createElement('div');
-      container.style.position = 'fixed';
-      container.style.left = '-9999px';
-      container.style.top = '0';
-      container.style.backgroundColor = '#ffffff';
-      container.style.color = '#000000';
-      container.innerHTML = html;
-      document.body.appendChild(container);
 
-      // Wait for rendering
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Get the actual rendered size
+      // Pixel width matching the ESC/POS printer resolution
       const width = paperWidth === '80mm' ? 576 : 384;
 
-      // Convert HTML to canvas with optimized settings
-      const canvas = await html2canvas(container, {
+      // Create a temporary iframe to render the HTML in isolation.
+      // Using an iframe (instead of a div) guarantees the body width is honored
+      // exactly, independent of the parent app's layout/viewport.
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.left = '-9999px';
+      iframe.style.top = '0';
+      iframe.style.width = width + 'px';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+
+      const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (!iframeDoc) {
+        document.body.removeChild(iframe);
+        throw new Error('Could not access iframe document');
+      }
+      iframeDoc.open();
+      iframeDoc.write(html);
+      iframeDoc.close();
+
+      // Wait for fonts & layout to settle before measuring
+      await new Promise(resolve => setTimeout(resolve, 800));
+      try { await (iframe.contentWindow as any).document.fonts?.ready; } catch (e) {}
+
+      const renderRoot = iframeDoc.body;
+
+      // Wait for all images (including QR base64 data URLs) to fully decode
+      const images = renderRoot.querySelectorAll('img');
+      if (images.length > 0) {
+        await Promise.allSettled(Array.from(images).map(async (img) => {
+          try {
+            // Use decode() for reliable image load detection (works for data URLs in iframes)
+            if (typeof (img as HTMLImageElement).decode === 'function') {
+              await (img as HTMLImageElement).decode();
+            } else {
+              // Fallback for browsers without decode()
+              await new Promise<void>((resolve) => {
+                if (img.complete && (img as HTMLImageElement).naturalWidth > 0) { resolve(); return; }
+                const onLoad = () => resolve();
+                const onError = () => resolve();
+                img.addEventListener('load', onLoad, { once: true });
+                img.addEventListener('error', onError, { once: true });
+              });
+            }
+          } catch (e) {
+            // Image decode failed, continue anyway
+          }
+        }));
+        // Extra settle time after images load
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      // Convert HTML to canvas with the exact printer pixel width
+      const canvas = await html2canvas(renderRoot, {
         backgroundColor: '#ffffff',
         scale: 1, // Keep at 1 to avoid duplicate characters
         logging: false,
         width: width,
-        height: container.offsetHeight,
+        height: renderRoot.scrollHeight,
         windowWidth: width,
-        windowHeight: container.offsetHeight,
-        useCORS: false,
-        allowTaint: false,
+        windowHeight: renderRoot.scrollHeight,
+        useCORS: true,
+        allowTaint: true,
         foreignObjectRendering: false,
-        imageTimeout: 0,
-        removeContainer: true,
+        imageTimeout: 15000,
       });
 
-      // Remove temporary container
-      document.body.removeChild(container);
+      // Remove temporary iframe
+      document.body.removeChild(iframe);
 
       // Convert canvas to base64 image
       const imageData = canvas.toDataURL('image/png', 1.0);
@@ -1235,7 +1281,7 @@ export default function PosPage() {
       await printKitchenTickets(itemsToSend);
       
       // Show success message
-      alert(`Order sent to kitchen!\n\nItems: ${itemsToSend.length}\nTotal: ${formatCurrency(newOrder.total)}\n\nNote: ${note || 'None'}`);
+      // alert(`Order sent to kitchen!\n\nItems: ${itemsToSend.length}\nTotal: ${formatCurrency(newOrder.total)}\n\nNote: ${note || 'None'}`);
     } catch (error: any) {
       console.error('[PRINT] Error printing kitchen tickets:', error);
       alert(`Failed to print kitchen tickets: ${error.message}`);
@@ -1247,17 +1293,17 @@ export default function PosPage() {
 
   // Function to print kitchen tickets based on station mapping
   const printKitchenTickets = async (itemsToSend: any[]) => {
-    console.log('[PRINT] printKitchenTickets called with items:', itemsToSend.length);
-    console.log('[PRINT] stationMappings:', stationMappings);
-    console.log('[PRINT] printerConfigs:', printerConfigs);
+    // console.log('[PRINT] printKitchenTickets called with items:', itemsToSend.length);
+    // console.log('[PRINT] stationMappings:', stationMappings);
+    // console.log('[PRINT] printerConfigs:', printerConfigs);
     
     if (!stationMappings || stationMappings.length === 0) {
-      console.error('[PRINT] No station mappings configured');
+      // console.error('[PRINT] No station mappings configured');
       throw new Error('No station mappings configured. Please configure in Settings → Station Mapping');
     }
 
     if (!printerConfigs || printerConfigs.length === 0) {
-      console.error('[PRINT] No printers configured');
+      // console.error('[PRINT] No printers configured');
       throw new Error('No printers configured. Please configure in Settings → Config Printing');
     }
 
@@ -1267,7 +1313,7 @@ export default function PosPage() {
 
     itemsToSend.forEach(cartItem => {
       const item = cartItem.item;
-      console.log('[PRINT] Processing item:', item.name, 'category:', item.category_id);
+      // console.log('[PRINT] Processing item:', item.name, 'category:', item.category_id);
       
       // Find matching station mapping
       const mapping = stationMappings.find(m => {
@@ -1279,7 +1325,7 @@ export default function PosPage() {
       });
 
       if (mapping) {
-        console.log('[PRINT] Found mapping for item:', item.name, 'printer:', mapping.printerId);
+        // console.log('[PRINT] Found mapping for item:', item.name, 'printer:', mapping.printerId);
         const printerId = mapping.printerId;
         if (!itemsByPrinter[printerId]) {
           itemsByPrinter[printerId] = [];
@@ -1288,23 +1334,23 @@ export default function PosPage() {
       } else {
         // Track unmapped items (but don't show alert)
         unmappedItems.push(cartItem);
-        console.log(`[PRINT] Item "${item.name}" has no station mapping - not sent to kitchen`);
+        // console.log(`[PRINT] Item "${item.name}" has no station mapping - not sent to kitchen`);
       }
     });
 
-    console.log('[PRINT] Items grouped by printer:', itemsByPrinter);
-    console.log('[PRINT] Unmapped items:', unmappedItems.length);
+    // console.log('[PRINT] Items grouped by printer:', itemsByPrinter);
+    // console.log('[PRINT] Unmapped items:', unmappedItems.length);
 
     // Print ticket for each printer (sequentially with await)
     const printerIds = Object.keys(itemsByPrinter);
     
     for (const printerId of printerIds) {
       const items = itemsByPrinter[printerId];
-      console.log('[PRINT] Processing printer:', printerId, 'with items:', items.length);
+      // console.log('[PRINT] Processing printer:', printerId, 'with items:', items.length);
       
       const printer = printerConfigs.find(p => p.id === printerId);
       if (!printer) {
-        console.error('[PRINT] Printer not found:', printerId);
+        // console.error('[PRINT] Printer not found:', printerId);
         continue;
       }
       
@@ -1438,7 +1484,10 @@ export default function PosPage() {
       : t.takeout;
 
     const paperSize = receiptSettings.kitchenBillSize || '80mm';
-    const paperWidth = paperSize === '80mm' ? '80mm' : '58mm';
+    const paperWidthMm = paperSize === '80mm' ? '80mm' : '58mm';
+    const paperWidthPx = paperSize === '80mm' ? 576 : 384;
+    const kitchenFs = paperSize === '80mm' ? 1.5 : 1.0;
+    const kfz = (n: number) => Math.round(n * kitchenFs) + 2; // font-size helper: scale + 2px
     
     // Simple template matching Settings preview
     const separator = paperSize === '80mm' 
@@ -1455,51 +1504,52 @@ export default function PosPage() {
 <meta charset="UTF-8">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;600;700&display=swap');
+@page { size: ${paperWidthMm} auto; margin: 0; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { 
-  font-family: 'Noto Sans Lao', 'Courier New', monospace; 
-  padding: 10px; 
-  width: ${paperWidth}; 
-  background: white; 
+body {
+  font-family: 'Noto Sans Lao', 'Courier New', monospace;
+  padding: ${Math.round(10*kitchenFs)}px;
+  width: ${paperWidthPx}px;
+  background: white;
   color: black;
-  font-size: 14px;
+  font-size: ${kfz(14)}px;
   line-height: 1.4;
 }
-.title { 
-  font-size: 16px; 
+.title {
+  font-size: ${kfz(16)}px;
   font-weight: bold;
-  text-align: center; 
-  margin: 5px 0;
+  text-align: center;
+  margin: ${Math.round(5*kitchenFs)}px 0;
 }
-.separator { 
+.separator {
   border-top: 1px dashed #000;
-  margin: 5px 0;
+  margin: ${Math.round(5*kitchenFs)}px 0;
 }
-.info { 
-  font-size: 14px; 
+.info {
+  font-size: ${kfz(14)}px;
   font-weight: 600;
-  margin: 3px 0;
+  margin: ${Math.round(3*kitchenFs)}px 0;
 }
-.item { 
-  font-size: 14px; 
-  margin: 3px 0;
+.item {
+  font-size: ${kfz(14)}px;
+  margin: ${Math.round(3*kitchenFs)}px 0;
   word-wrap: break-word;
 }
-.portion { 
-  font-size: 12px; 
-  margin: 2px 0 2px 20px;
+.portion {
+  font-size: ${kfz(12)}px;
+  margin: ${Math.round(2*kitchenFs)}px 0 ${Math.round(2*kitchenFs)}px ${Math.round(20*kitchenFs)}px;
   word-wrap: break-word;
 }
-.item-note { 
-  font-size: 12px; 
-  margin: 2px 0 2px 20px;
+.item-note {
+  font-size: ${kfz(12)}px;
+  margin: ${Math.round(2*kitchenFs)}px 0 ${Math.round(2*kitchenFs)}px ${Math.round(20*kitchenFs)}px;
   word-wrap: break-word;
   font-style: italic;
   color: #555;
 }
-.order-note { 
-  font-size: 14px; 
-  margin: 5px 0;
+.order-note {
+  font-size: ${kfz(14)}px;
+  margin: ${Math.round(5*kitchenFs)}px 0;
   word-wrap: break-word;
 }
 </style>
@@ -1523,9 +1573,14 @@ ${note ? `<div class="order-note">${t.note}: ${note}</div><div class="separator"
   // Function to create kitchen ticket HTML (kept for reference/fallback)
   const createKitchenTicketHtml = (items: any[], printer: any) => {
     const currentTime = new Date().toLocaleString();
-    const tableInfo = currentTable 
-      ? `${t.table} ${currentTable.table_number}` 
+    const tableInfo = currentTable
+      ? `${t.table} ${currentTable.table_number}`
       : t.takeout;
+    const kitchenPaperSize = receiptSettings.kitchenBillSize || '80mm';
+    const kitchenPageWidth = kitchenPaperSize === '80mm' ? '80mm' : '58mm';
+    const kitchenBodyWidth = kitchenPaperSize === '80mm' ? 576 : 384;
+    const kFs = kitchenPaperSize === '80mm' ? 1.5 : 1.0;
+    const kFz = (n: number) => Math.round(n * kFs) + 2; // font-size helper: scale + 2px
 
     const ticketHtml = `
       <html>
@@ -1533,61 +1588,63 @@ ${note ? `<div class="order-note">${t.note}: ${note}</div><div class="separator"
           <title>Kitchen Order - ${printer.name}</title>
           <style>
             @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;700&display=swap');
-            body { 
-              font-family: 'Noto Sans Lao', sans-serif; 
-              padding: 20px; 
-              max-width: 360px; 
-              margin: 0 auto; 
-              color: #000; 
+            @page { size: ${kitchenPageWidth} auto; margin: 0; }
+            body {
+              font-family: 'Noto Sans Lao', sans-serif;
+              padding: ${Math.round(8*kFs)}px;
+              width: ${kitchenBodyWidth}px;
+              margin: 0 auto;
+              color: #000;
+              box-sizing: border-box;
             }
-            .header { 
-              text-align: center; 
-              border-bottom: 2px solid #000; 
-              padding-bottom: 10px; 
-              margin-bottom: 15px; 
+            .header {
+              text-align: center;
+              border-bottom: 2px solid #000;
+              padding-bottom: ${Math.round(10*kFs)}px;
+              margin-bottom: ${Math.round(15*kFs)}px;
             }
-            .station { 
-              font-size: 24px; 
-              font-weight: bold; 
-              text-transform: uppercase; 
+            .station {
+              font-size: ${kFz(24)}px;
+              font-weight: bold;
+              text-transform: uppercase;
             }
-            .table-info { 
-              font-size: 20px; 
-              font-weight: bold; 
-              margin: 10px 0; 
+            .table-info {
+              font-size: ${kFz(20)}px;
+              font-weight: bold;
+              margin: ${Math.round(10*kFs)}px 0;
             }
-            .time { 
-              font-size: 14px; 
-              color: #666; 
+            .time {
+              font-size: ${kFz(14)}px;
+              color: #666;
             }
-            .items { 
-              margin: 20px 0; 
+            .items {
+              margin: ${Math.round(20*kFs)}px 0;
             }
-            .item { 
-              border-bottom: 1px dashed #ccc; 
-              padding: 10px 0; 
+            .item {
+              border-bottom: 1px dashed #ccc;
+              padding: ${Math.round(10*kFs)}px 0;
             }
-            .item-name { 
-              font-size: 18px; 
-              font-weight: bold; 
+            .item-name {
+              font-size: ${kFz(18)}px;
+              font-weight: bold;
             }
-            .item-qty { 
-              font-size: 24px; 
-              font-weight: bold; 
-              float: right; 
+            .item-qty {
+              font-size: ${kFz(24)}px;
+              font-weight: bold;
+              float: right;
             }
-            .item-notes { 
-              font-size: 14px; 
-              color: #666; 
-              font-style: italic; 
-              margin-top: 5px; 
+            .item-notes {
+              font-size: ${kFz(14)}px;
+              color: #666;
+              font-style: italic;
+              margin-top: ${Math.round(5*kFs)}px;
             }
-            .footer { 
-              text-align: center; 
-              border-top: 2px solid #000; 
-              padding-top: 10px; 
-              margin-top: 20px; 
-              font-size: 12px; 
+            .footer {
+              text-align: center;
+              border-top: 2px solid #000;
+              padding-top: ${Math.round(10*kFs)}px;
+              margin-top: ${Math.round(20*kFs)}px;
+              font-size: ${kFz(12)}px;
             }
           </style>
         </head>
@@ -1641,19 +1698,22 @@ ${note ? `<div class="order-note">${t.note}: ${note}</div><div class="separator"
       : t.takeout;
 
     const paperSize = receiptSettings.voidBillSize || '80mm';
-    const paperWidth = paperSize === '80mm' ? '80mm' : '58mm';
+    const paperWidthMm = paperSize === '80mm' ? '80mm' : '58mm';
+    const paperWidthPx = paperSize === '80mm' ? 576 : 384;
+    const cancelFs = paperSize === '80mm' ? 1.5 : 1.0;
+    const cfz = (n: number) => Math.round(n * cancelFs) + 2; // font-size helper: scale + 2px
 
     // Get cancel order text based on language
-    const cancelTitle = currentLanguage === 'th' ? 'ยกเลิกรายการ' : 
-                       currentLanguage === 'lo' ? 'ຍົກເລີກລາຍການ' : 
+    const cancelTitle = currentLanguage === 'th' ? 'ยกเลิกรายการ' :
+                       currentLanguage === 'lo' ? 'ຍົກເລີກລາຍການ' :
                        'CANCEL ORDER';
-    
-    const cancelledItemText = currentLanguage === 'th' ? 'รายการที่ยกเลิก:' : 
-                             currentLanguage === 'lo' ? 'ລາຍການທີ່ຖືກຍົກເລີກ:' : 
+
+    const cancelledItemText = currentLanguage === 'th' ? 'รายการที่ยกเลิก:' :
+                             currentLanguage === 'lo' ? 'ລາຍການທີ່ຖືກຍົກເລີກ:' :
                              'CANCELLED ITEM:';
-    
-    const discardMessage = currentLanguage === 'th' ? 'กรุณาทิ้งรายการนี้' : 
-                          currentLanguage === 'lo' ? 'ກະລຸນາທິ້ງລາຍການນີ້' : 
+
+    const discardMessage = currentLanguage === 'th' ? 'กรุณาทิ้งรายการนี้' :
+                          currentLanguage === 'lo' ? 'ກະລຸນາທິ້ງລາຍການນີ້' :
                           'Please discard this item';
 
     const html = `<!DOCTYPE html>
@@ -1662,53 +1722,54 @@ ${note ? `<div class="order-note">${t.note}: ${note}</div><div class="separator"
 <meta charset="UTF-8">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;600;700&display=swap');
+@page { size: ${paperWidthMm} auto; margin: 0; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { 
-  font-family: 'Noto Sans Lao', 'Courier New', monospace; 
-  padding: 10px; 
-  width: ${paperWidth}; 
-  background: white; 
+body {
+  font-family: 'Noto Sans Lao', 'Courier New', monospace;
+  padding: ${Math.round(10*cancelFs)}px;
+  width: ${paperWidthPx}px;
+  background: white;
   color: black;
-  font-size: 14px;
+  font-size: ${cfz(14)}px;
   line-height: 1.4;
 }
-.title { 
-  font-size: 16px; 
+.title {
+  font-size: ${cfz(16)}px;
   font-weight: bold;
-  text-align: center; 
-  margin: 5px 0;
+  text-align: center;
+  margin: ${Math.round(5*cancelFs)}px 0;
 }
-.separator { 
+.separator {
   border-top: 1px dashed #000;
-  margin: 5px 0;
+  margin: ${Math.round(5*cancelFs)}px 0;
 }
-.info { 
-  font-size: 14px; 
+.info {
+  font-size: ${cfz(14)}px;
   font-weight: 600;
-  margin: 3px 0;
+  margin: ${Math.round(3*cancelFs)}px 0;
 }
-.header { 
-  font-size: 14px; 
+.header {
+  font-size: ${cfz(14)}px;
   font-weight: 600;
-  margin: 5px 0;
+  margin: ${Math.round(5*cancelFs)}px 0;
 }
-.item { 
-  font-size: 14px; 
-  margin: 3px 0;
+.item {
+  font-size: ${cfz(14)}px;
+  margin: ${Math.round(3*cancelFs)}px 0;
 }
-.portion { 
-  font-size: 12px; 
-  margin: 2px 0 2px 20px;
+.portion {
+  font-size: ${cfz(12)}px;
+  margin: ${Math.round(2*cancelFs)}px 0 ${Math.round(2*cancelFs)}px ${Math.round(20*cancelFs)}px;
 }
-.item-note { 
-  font-size: 12px; 
-  margin: 2px 0 2px 20px;
+.item-note {
+  font-size: ${cfz(12)}px;
+  margin: ${Math.round(2*cancelFs)}px 0 ${Math.round(2*cancelFs)}px ${Math.round(20*cancelFs)}px;
   font-style: italic;
   color: #555;
 }
-.msg { 
-  font-size: 14px; 
-  margin: 5px 0;
+.msg {
+  font-size: ${cfz(14)}px;
+  margin: ${Math.round(5*cancelFs)}px 0;
 }
 </style>
 </head>
@@ -1736,9 +1797,14 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
   // Function to create cancel ticket HTML (kept for reference/fallback)
   const createCancelTicketHtml = (cancelledItem: any, printer: any) => {
     const currentTime = new Date().toLocaleString();
-    const tableInfo = currentTable 
-      ? `${t.table} ${currentTable.table_number}` 
+    const tableInfo = currentTable
+      ? `${t.table} ${currentTable.table_number}`
       : t.takeout;
+    const cancelPaperSize = receiptSettings.voidBillSize || '80mm';
+    const cancelPageWidth = cancelPaperSize === '80mm' ? '80mm' : '58mm';
+    const cancelBodyWidth = cancelPaperSize === '80mm' ? 576 : 384;
+    const cFs = cancelPaperSize === '80mm' ? 1.5 : 1.0;
+    const cFz = (n: number) => Math.round(n * cFs) + 2; // font-size helper: scale + 2px
 
     const ticketHtml = `
       <html>
@@ -1746,77 +1812,79 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
           <title>CANCEL ORDER - ${printer.name}</title>
           <style>
             @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;700&display=swap');
-            body { 
-              font-family: 'Noto Sans Lao', sans-serif; 
-              padding: 20px; 
-              max-width: 360px; 
-              margin: 0 auto; 
-              color: #000; 
+            @page { size: ${cancelPageWidth} auto; margin: 0; }
+            body {
+              font-family: 'Noto Sans Lao', sans-serif;
+              padding: ${Math.round(8*cFs)}px;
+              width: ${cancelBodyWidth}px;
+              margin: 0 auto;
+              color: #000;
+              box-sizing: border-box;
             }
-            .header { 
-              text-align: center; 
-              border-bottom: 2px solid #dc2626; 
-              padding-bottom: 10px; 
-              margin-bottom: 15px; 
+            .header {
+              text-align: center;
+              border-bottom: 2px solid #dc2626;
+              padding-bottom: ${Math.round(10*cFs)}px;
+              margin-bottom: ${Math.round(15*cFs)}px;
               background: #fef2f2;
-              padding: 15px;
+              padding: ${Math.round(15*cFs)}px;
               border-radius: 5px;
             }
             .cancel-badge {
-              font-size: 28px; 
-              font-weight: bold; 
-              text-transform: uppercase; 
+              font-size: ${cFz(28)}px;
+              font-weight: bold;
+              text-transform: uppercase;
               color: #dc2626;
-              margin-bottom: 10px;
+              margin-bottom: ${Math.round(10*cFs)}px;
             }
-            .station { 
-              font-size: 20px; 
-              font-weight: bold; 
-              text-transform: uppercase; 
+            .station {
+              font-size: ${cFz(20)}px;
+              font-weight: bold;
+              text-transform: uppercase;
             }
-            .table-info { 
-              font-size: 18px; 
-              font-weight: bold; 
-              margin: 10px 0; 
+            .table-info {
+              font-size: ${cFz(18)}px;
+              font-weight: bold;
+              margin: ${Math.round(10*cFs)}px 0;
             }
-            .time { 
-              font-size: 14px; 
-              color: #666; 
+            .time {
+              font-size: ${cFz(14)}px;
+              color: #666;
             }
-            .items { 
-              margin: 20px 0; 
+            .items {
+              margin: ${Math.round(20*cFs)}px 0;
               background: #fef2f2;
-              padding: 15px;
+              padding: ${Math.round(15*cFs)}px;
               border: 2px solid #dc2626;
               border-radius: 5px;
             }
-            .item { 
-              padding: 10px 0; 
+            .item {
+              padding: ${Math.round(10*cFs)}px 0;
             }
-            .item-name { 
-              font-size: 20px; 
-              font-weight: bold; 
+            .item-name {
+              font-size: ${cFz(20)}px;
+              font-weight: bold;
               color: #dc2626;
               text-decoration: line-through;
             }
-            .item-qty { 
-              font-size: 28px; 
-              font-weight: bold; 
-              float: right; 
+            .item-qty {
+              font-size: ${cFz(28)}px;
+              font-weight: bold;
+              float: right;
               color: #dc2626;
             }
-            .item-notes { 
-              font-size: 14px; 
-              color: #991b1b; 
-              font-style: italic; 
-              margin-top: 5px; 
+            .item-notes {
+              font-size: ${cFz(14)}px;
+              color: #991b1b;
+              font-style: italic;
+              margin-top: ${Math.round(5*cFs)}px;
             }
-            .footer { 
-              text-align: center; 
-              border-top: 2px solid #dc2626; 
-              padding-top: 10px; 
-              margin-top: 20px; 
-              font-size: 12px; 
+            .footer {
+              text-align: center;
+              border-top: 2px solid #dc2626;
+              padding-top: ${Math.round(10*cFs)}px;
+              margin-top: ${Math.round(20*cFs)}px;
+              font-size: ${cFz(12)}px;
             }
           </style>
         </head>
@@ -1840,7 +1908,7 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
           </div>
           
           <div style="background: #fee2e2; padding: 15px; border-radius: 5px; margin: 10px 0; border: 2px solid #dc2626; text-align: center;">
-            <strong style="color: #dc2626; font-size: 18px;">⚠️ CANCELLED - DO NOT PREPARE ⚠️</strong>
+            <strong style="color: #dc2626; font-size: ${cFz(18)}px;">⚠️ CANCELLED - DO NOT PREPARE ⚠️</strong>
           </div>
           
           <div class="footer">
@@ -2583,7 +2651,9 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
     const change = Math.max(0, tendered - total);
     const selectedTransferBank = transferBanks.find((b) => b.id === selectedTransferBankId);
 
-    const cartItemsHtml = cart.map((cartItem: any) =>
+    const cartItemsHtml = cart
+      .filter((cartItem: any) => !cartItem.cancelled)
+      .map((cartItem: any) =>
       '<tr>' +
       '<td style="padding: 2px 0; text-align: left;">' + cartItem.item.name + '</td>' +
       '<td style="padding: 2px 0; text-align: right;">' + cartItem.quantity + '</td>' +
@@ -2637,11 +2707,17 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '<div>' + t.accountNumber + ': ' + (bankForDisplay?.accountNumber || '-') + '</div>' +
       '</div>'
       : '';
-    const transferQrHtml = (receiptSettings.showBankDetail && bankForDisplay?.qrCodeImage)
-      ? '<div style="text-align:center; margin-top: 12px; padding-top: 10px; border-top: 1px dotted #000;">' +
-      '<div class="font-bold" style="font-size: 14px; margin-bottom: 8px;">' + t.scanToPay + '</div>' +
-      '<div style="background: white; padding: 10px; display: inline-block; border: 2px solid #000;">' +
-      '<img src="' + bankForDisplay.qrCodeImage + '" alt="Bank QR Code" style="width: 220px; height: 220px; object-fit: contain; display: block; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; image-rendering: pixelated;" />' +
+    const receiptPaperSize = receiptSettings.receiptSize || '80mm';
+    const receiptPageWidth = receiptPaperSize === '80mm' ? '80mm' : '58mm';
+    const receiptBodyWidth = receiptPaperSize === '80mm' ? 576 : 384;
+    const fs = receiptPaperSize === '80mm' ? 1.5 : 1.0;
+    const fz = (n: number) => Math.round(n * fs) + 2; // font-size helper: scale + 2px
+
+    const transferQrHtml = (receiptSettings.showQrCode !== false && bankForDisplay?.qrCodeImage)
+      ? '<div style="text-align:center; margin-top: ' + Math.round(12*fs) + 'px; padding-top: ' + Math.round(10*fs) + 'px; border-top: 1px dotted #000;">' +
+      '<div class="font-bold" style="font-size: ' + fz(14) + 'px; margin-bottom: ' + Math.round(8*fs) + 'px;">' + t.scanToPay + '</div>' +
+      '<div style="background: white; padding: ' + Math.round(10*fs) + 'px; display: inline-block; border: 2px solid #000;">' +
+      '<img src="' + bankForDisplay.qrCodeImage + '" alt="Bank QR Code" style="width: ' + Math.round(220*fs) + 'px; height: ' + Math.round(220*fs) + 'px; object-fit: contain; display: block; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; image-rendering: pixelated;" />' +
       '</div>' +
       '</div>'
       : '';
@@ -2653,27 +2729,28 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '<meta charset="UTF-8">' +
       '<style>' +
       "@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;500;700&display=swap');" +
+      `@page { size: ${receiptPageWidth} auto; margin: 0; }` +
       "* { font-family: 'Noto Sans Lao', sans-serif; }" +
-      "body { font-family: 'Noto Sans Lao', sans-serif; padding: 20px; max-width: 300px; margin: 0 auto; color: #000; }" +
+      "body { font-family: 'Noto Sans Lao', sans-serif; padding: " + Math.round(8*fs) + "px; width: " + receiptBodyWidth + "px; margin: 0 auto; color: #000; box-sizing: border-box; }" +
       '.text-center { text-align: center; }' +
-      '.mb-4 { margin-bottom: 1rem; }' +
-      '.mt-6 { margin-top: 1.5rem; }' +
-      '.text-xs { font-size: 12px; }' +
-      '.text-sm { font-size: 14px; }' +
+      '.mb-4 { margin-bottom: ' + Math.round(16*fs) + 'px; }' +
+      '.mt-6 { margin-top: ' + Math.round(24*fs) + 'px; }' +
+      '.text-xs { font-size: ' + fz(12) + 'px; }' +
+      '.text-sm { font-size: ' + fz(14) + 'px; }' +
       '.font-bold { font-weight: bold; }' +
       '.flex { display: flex; justify-content: space-between; }' +
-      '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 10px 0; }' +
-      '.space-y-1 > div { margin-bottom: 4px; }' +
+      '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: ' + Math.round(10*fs) + 'px 0; margin: ' + Math.round(10*fs) + 'px 0; }' +
+      '.space-y-1 > div { margin-bottom: ' + Math.round(4*fs) + 'px; }' +
       'table { width: 100%; border-collapse: collapse; font-family: \'Noto Sans Lao\', sans-serif; }' +
-      'th, td { font-size: 12px; font-family: \'Noto Sans Lao\', sans-serif; }' +
+      'th, td { font-size: ' + fz(12) + 'px; font-family: \'Noto Sans Lao\', sans-serif; }' +
       'h1, h2, h3, h4, h5, h6, p, div, span { font-family: \'Noto Sans Lao\', sans-serif; }' +
       '</style>' +
       '</head>' +
       '<body>' +
       '<div class="text-center mb-4">' +
-      '<h3 class="font-bold text-lg" style="margin:0 0 2px 0;">' + (generalSettings.storeName || '') + '</h3>' +
-      (receiptSettings.storeAddress ? '<div class="text-xs" style="margin-bottom:2px;">' + receiptSettings.storeAddress + '</div>' : '') +
-      (receiptSettings.phoneNumber ? '<div class="text-xs" style="margin-bottom:2px;">' + receiptSettings.phoneNumber + '</div>' : '') +
+      '<h3 class="font-bold" style="margin:0 0 ' + Math.round(2*fs) + 'px 0; font-size: ' + fz(18) + 'px;">' + (generalSettings.storeName || '') + '</h3>' +
+      (receiptSettings.storeAddress ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px;">' + receiptSettings.storeAddress + '</div>' : '') +
+      (receiptSettings.phoneNumber ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px;">' + receiptSettings.phoneNumber + '</div>' : '') +
       (receiptSettings.headerText ? '<div class="text-xs mt-2">' + receiptSettings.headerText + '</div>' : '') +
       '</div>' +
       '<div class="text-xs mb-4">' +
@@ -2684,10 +2761,10 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '<table>' +
       '<thead>' +
       '<tr>' +
-      '<th style="text-align:left; padding-bottom: 4px;">' + t.item + '</th>' +
-      '<th style="text-align:right; padding-bottom: 4px;">' + t.unit + '</th>' +
-      '<th style="text-align:right; padding-bottom: 4px;">' + t.price + '</th>' +
-      '<th style="text-align:right; padding-bottom: 4px;">' + t.total + '</th>' +
+      '<th style="text-align:left; padding-bottom: ' + Math.round(4*fs) + 'px;">' + t.item + '</th>' +
+      '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">' + t.unit + '</th>' +
+      '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">' + t.price + '</th>' +
+      '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">' + t.total + '</th>' +
       '</tr>' +
       '</thead>' +
       '<tbody>' +
@@ -2711,19 +2788,19 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       transferDetailsHtml +
       noteHtml +
       '</div>' +
-      '<div style="text-align: center; margin-top: 10px; border-top: 1px dashed #000; padding-top: 10px;">' +
-      '<div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 12px;">' +
-      '<div style="font-weight: bold; font-size: 14px;">' + t.total.toUpperCase() + '</div>' +
-      '<div style="font-weight: bold; font-size: 18px;">' + formatCurrency(total) + '</div>' +
+      '<div style="text-align: center; margin-top: ' + Math.round(10*fs) + 'px; border-top: 1px dashed #000; padding-top: ' + Math.round(10*fs) + 'px;">' +
+      '<div style="display: flex; justify-content: center; align-items: center; gap: ' + Math.round(10*fs) + 'px; margin-bottom: ' + Math.round(12*fs) + 'px;">' +
+      '<div style="font-weight: bold; font-size: ' + fz(16) + 'px;">' + t.total.toUpperCase() + '</div>' +
+      '<div style="font-weight: bold; font-size: ' + fz(24) + 'px;">' + formatCurrency(total) + '</div>' +
       '</div>' +
-      '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center;">' +
+      '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: ' + Math.round(10*fs) + 'px; text-align: center;">' +
       '<div>' +
-      '<div style="font-size: 11px; color: #666;">THB</div>' +
-      '<div style="font-weight: bold; font-size: 16px;">฿' + (total / (currencySettings.thbRate || 36.5)).toFixed(2) + '</div>' +
+      '<div style="font-size: ' + fz(13) + 'px; color: #666;">THB</div>' +
+      '<div style="font-weight: bold; font-size: ' + fz(20) + 'px;">฿' + (total / (currencySettings.thbRate || 36.5)).toFixed(2) + '</div>' +
       '</div>' +
       '<div>' +
-      '<div style="font-size: 11px; color: #666;">USD</div>' +
-      '<div style="font-weight: bold; font-size: 16px;">$' + (total / currencySettings.currencyRate).toFixed(2) + '</div>' +
+      '<div style="font-size: ' + fz(13) + 'px; color: #666;">USD</div>' +
+      '<div style="font-weight: bold; font-size: ' + fz(20) + 'px;">$' + (total / currencySettings.currencyRate).toFixed(2) + '</div>' +
       '</div>' +
       '</div>' +
       '</div>' +

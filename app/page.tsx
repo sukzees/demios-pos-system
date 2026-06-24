@@ -178,7 +178,7 @@ const DASHBOARD_FORMULAS = {
 };
 
 export default function DashboardPage() {
-  const { isSupabaseConfigured, checkSupabaseConfig, isCheckingConfig, currencySettings, generalSettings } = usePosStore();
+  const { isSupabaseConfigured, checkSupabaseConfig, isCheckingConfig, currencySettings, generalSettings, fetchAppSettings } = usePosStore();
   const currentLanguage = (generalSettings?.language || 'en') as 'en' | 'lo' | 'th';
   const t = TRANSLATIONS[currentLanguage];
   const formulas = DASHBOARD_FORMULAS[currentLanguage] || DASHBOARD_FORMULAS.en;
@@ -207,7 +207,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     checkSupabaseConfig();
-  }, [checkSupabaseConfig]);
+    fetchAppSettings();
+  }, [checkSupabaseConfig, fetchAppSettings]);
 
   const [mounted, setMounted] = useState(false);
 
