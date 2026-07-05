@@ -7,6 +7,7 @@ import { usePosStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { MobileNav } from '@/components/mobile-nav';
 import { TopBar } from '@/components/top-bar';
+import { KitchenQueueProcessor } from '@/components/kitchen-queue-processor';
 
 const LICENSE_AUTO_SYNC_INTERVAL_MS = Number(process.env.NEXT_PUBLIC_LICENSE_REALTIME_SYNC_INTERVAL_MS || 30000);
 
@@ -86,6 +87,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-white font-sans">
+      <KitchenQueueProcessor />
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <TopBar />

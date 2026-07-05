@@ -303,9 +303,21 @@ app.on('quit', () => {
 const gotTheLock = app.requestSingleInstanceLock();
 
 // IPC Handler for silent printing
+// Writes HTML to a temp file and loads via file:// to avoid data: URL length limits
+// (large base64 QR images get truncated in data: URLs on Windows/Electron).
 ipcMain.handle('print-silent', async (event, html, printerName) => {
+  const fs = require('fs');
+  const path = require('path');
+  const os = require('os');
+  let printWindow;
+  let tempFile = '';
   try {
-    const printWindow = new BrowserWindow({
+    // Write HTML to temp file so base64 images are not truncated by data: URL limits
+    const tempDir = os.tmpdir();
+    tempFile = path.join(tempDir, `print-${Date.now()}.html`);
+    fs.writeFileSync(tempFile, html, 'utf8');
+
+    printWindow = new BrowserWindow({
       show: false,
       webPreferences: {
         nodeIntegration: false,
@@ -313,8 +325,32 @@ ipcMain.handle('print-silent', async (event, html, printerName) => {
       },
     });
 
-    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    await printWindow.loadFile(tempFile);
 
+    // Wait for all images (especially QR base64 data URLs) to fully decode before printing
+    await printWindow.webContents.executeJavaScript(`
+      (async () => {
+        const imgs = document.querySelectorAll('img');
+        if (imgs.length > 0) {
+          await Promise.allSettled(Array.from(imgs).map(async (img) => {
+            try {
+              if (typeof img.decode === 'function') {
+                await img.decode();
+              } else {
+                await new Promise((resolve) => {
+                  if (img.complete && img.naturalWidth > 0) { resolve(); return; }
+                  img.addEventListener('load', resolve, { once: true });
+                  img.addEventListener('error', resolve, { once: true });
+                });
+              }
+            } catch (e) {}
+          }));
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      })()
+    `);
+
+    // printBackground: true is required for background colors/images to print
     const options = {
       silent: true,
       printBackground: true,
@@ -323,10 +359,13 @@ ipcMain.handle('print-silent', async (event, html, printerName) => {
 
     await printWindow.webContents.print(options);
     printWindow.close();
+    try { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch (e) {}
 
     return { success: true };
   } catch (error) {
     console.error('[Electron] Silent print error:', error);
+    if (printWindow) printWindow.close();
+    try { if (tempFile && fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch (e) {}
     return { success: false, error: error.message };
   }
 });

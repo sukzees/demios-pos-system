@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Plus, Edit, Trash2, Grid3x3, Users, AlertTriangle } from 'lucide-react';
+import { Plus, Edit, Trash2, Grid3x3, Users, AlertTriangle, GripVertical } from 'lucide-react';
 import { usePosStore } from '@/lib/store';
 import { supabase, Zone, Table } from '@/lib/supabase';
 import {
@@ -70,6 +70,7 @@ const TRANSLATIONS = {
     noZonesFound: 'No zones found.',
     noTablesFound: 'No tables found.',
     people: 'people',
+    dragHint: 'Drag cards to reorder. The order is reflected on the POS screen.',
   },
   lo: {
     tablesZones: 'ໂຕະ ແລະ ໂຊນ',
@@ -104,6 +105,7 @@ const TRANSLATIONS = {
     noZonesFound: 'ບໍ່ພົບໂຊນ.',
     noTablesFound: 'ບໍ່ພົບໂຕະ.',
     people: 'ຄົນ',
+    dragHint: 'ລາກບັດເພື່ອຈັດລຳດັບ ລຳດັບຈະສະແດງຢູ່ໜ້າ POS.',
   },
   th: {
     tablesZones: 'โต๊ะและโซน',
@@ -138,6 +140,7 @@ const TRANSLATIONS = {
     noZonesFound: 'ไม่พบโซน',
     noTablesFound: 'ไม่พบโต๊ะ',
     people: 'คน',
+    dragHint: 'ลากการ์ดเพื่อจัดเรียงลำดับ ลำดับจะแสดงผลในหน้า POS',
   }
 };
 
@@ -156,6 +159,8 @@ export default function TablesPage() {
   const [deleteZoneId, setDeleteZoneId] = useState<string | null>(null);
   const [deleteTableId, setDeleteTableId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [dragTableId, setDragTableId] = useState<string | null>(null);
+  const [dragZoneId, setDragZoneId] = useState<string | null>(null);
 
   const [newZone, setNewZone] = useState<{
     name: string;
@@ -314,6 +319,47 @@ export default function TablesPage() {
     setEditingTableId(null);
   };
 
+  // Persist new display_order for a reordered list
+  const persistOrder = async (tableName: 'tables' | 'zones', list: { id: string }[]) => {
+    try {
+      await Promise.all(
+        list.map((row, index) =>
+          supabase.from(tableName).update({ display_order: index }).eq('id', row.id)
+        )
+      );
+    } catch (error) {
+      console.error(`Error saving ${tableName} order:`, error);
+    }
+  };
+
+  const handleTableDrop = async (targetId: string) => {
+    const sourceId = dragTableId;
+    setDragTableId(null);
+    if (!sourceId || sourceId === targetId) return;
+    const current = [...tables];
+    const from = current.findIndex(tb => tb.id === sourceId);
+    const to = current.findIndex(tb => tb.id === targetId);
+    if (from === -1 || to === -1) return;
+    const [moved] = current.splice(from, 1);
+    current.splice(to, 0, moved);
+    setTables(current);
+    await persistOrder('tables', current);
+  };
+
+  const handleZoneDrop = async (targetId: string) => {
+    const sourceId = dragZoneId;
+    setDragZoneId(null);
+    if (!sourceId || sourceId === targetId) return;
+    const current = [...zones];
+    const from = current.findIndex(z => z.id === sourceId);
+    const to = current.findIndex(z => z.id === targetId);
+    if (from === -1 || to === -1) return;
+    const [moved] = current.splice(from, 1);
+    current.splice(to, 0, moved);
+    setZones(current);
+    await persistOrder('zones', current);
+  };
+
   const getZoneName = (zoneId?: string) => {
     if (!zoneId) return '-';
     const zone = zones.find(z => z.id === zoneId);
@@ -403,19 +449,36 @@ export default function TablesPage() {
             </Dialog>
           </div>
 
+          {tables.length > 0 && (
+            <p className="text-sm text-zinc-500">{t.dragHint}</p>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {tables.length === 0 ? (
               <div className="col-span-full text-center py-12 text-zinc-500">{t.noTablesFound}</div>
             ) : (
               tables.map((table) => (
-                <Card key={table.id} className="border-0 shadow-lg rounded-2xl overflow-hidden">
+                <Card
+                  key={table.id}
+                  draggable
+                  onDragStart={() => setDragTableId(table.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => handleTableDrop(table.id)}
+                  onDragEnd={() => setDragTableId(null)}
+                  className={`border-0 shadow-lg rounded-2xl overflow-hidden transition-opacity ${
+                    dragTableId === table.id ? 'opacity-40' : ''
+                  }`}
+                >
                   <CardHeader className={`pb-3 ${
                     table.status === 'available' ? 'bg-emerald-50' :
                     table.status === 'occupied' ? 'bg-red-50' :
                     table.status === 'reserved' ? 'bg-amber-50' : 'bg-zinc-50'
                   }`}>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-2xl font-bold">{table.table_number}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <GripVertical className="h-5 w-5 text-zinc-400 cursor-grab active:cursor-grabbing" />
+                        <CardTitle className="text-2xl font-bold">{table.table_number}</CardTitle>
+                      </div>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" onClick={() => handleEditTable(table)} className="h-8 w-8">
                           <Edit className="h-4 w-4" />
@@ -502,15 +565,32 @@ export default function TablesPage() {
             </Dialog>
           </div>
 
+          {zones.length > 0 && (
+            <p className="text-sm text-zinc-500">{t.dragHint}</p>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {zones.length === 0 ? (
               <div className="col-span-full text-center py-12 text-zinc-500">{t.noZonesFound}</div>
             ) : (
               zones.map((zone) => (
-                <Card key={zone.id} className="border-0 shadow-lg rounded-2xl overflow-hidden">
+                <Card
+                  key={zone.id}
+                  draggable
+                  onDragStart={() => setDragZoneId(zone.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => handleZoneDrop(zone.id)}
+                  onDragEnd={() => setDragZoneId(null)}
+                  className={`border-0 shadow-lg rounded-2xl overflow-hidden transition-opacity ${
+                    dragZoneId === zone.id ? 'opacity-40' : ''
+                  }`}
+                >
                   <CardHeader style={{ backgroundColor: zone.color + '20' }} className="pb-3">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-xl font-bold">{zone.name}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <GripVertical className="h-5 w-5 text-zinc-400 cursor-grab active:cursor-grabbing" />
+                        <CardTitle className="text-xl font-bold">{zone.name}</CardTitle>
+                      </div>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" onClick={() => handleEditZone(zone)} className="h-8 w-8">
                           <Edit className="h-4 w-4" />

@@ -50,6 +50,19 @@ const TRANSLATIONS = {
     endDate: 'End Date',
     loadingChart: 'Loading chart...',
     noItemSales: 'No item sales for this period.',
+    summaryTab: 'Summary',
+    detailedTab: 'Detailed Report',
+    orderTransactions: 'Order Transactions',
+    orderId: 'Order ID',
+    paymentMethod: 'Payment',
+    orderType: 'Type',
+    tableNumber: 'Table',
+    paymentBreakdown: 'Payment Breakdown',
+    count: 'Count',
+    hourlyBreakdown: 'Hourly Breakdown',
+    hour: 'Hour',
+    allItems: 'All Items Sold',
+    total: 'Total',
   },
   lo: {
     salesReport: 'ລາຍງານການຂາຍ',
@@ -89,6 +102,19 @@ const TRANSLATIONS = {
     endDate: 'ວັນທີສິ້ນສຸດ',
     loadingChart: 'ກຳລັງໂຫລດຕາຕະລາງ...',
     noItemSales: 'ບໍ່ມີຍອດຂາຍສິນຄ້າໃນໄລຍະນີ້.',
+    summaryTab: 'ສະຫຼຸບ',
+    detailedTab: 'ລາຍງານລະອຽດ',
+    orderTransactions: 'ລາຍການທຸລະກຳ',
+    orderId: 'ເລກທີ່ອໍເດີ',
+    paymentMethod: 'ການຊຳລະ',
+    orderType: 'ປະເພດ',
+    tableNumber: 'ໂຕະ',
+    paymentBreakdown: 'ການຊຳລະແຍກຕາມປະເພດ',
+    count: 'ຈຳນວນ',
+    hourlyBreakdown: 'ຍອດຂາຍຕາມຊົ່ວໂມງ',
+    hour: 'ຊົ່ວໂມງ',
+    allItems: 'ສິນຄ້າທີ່ຂາຍທັງໝົດ',
+    total: 'ລວມ',
   },
   th: {
     salesReport: 'รายงานการขาย',
@@ -128,6 +154,19 @@ const TRANSLATIONS = {
     endDate: 'วันที่สิ้นสุด',
     loadingChart: 'กำลังโหลดกราฟ...',
     noItemSales: 'ไม่มีรายการขายในท่วงเวลานี้',
+    summaryTab: 'สรุป',
+    detailedTab: 'รายงานละเอียด',
+    orderTransactions: 'รายการธุรกรรม',
+    orderId: 'เลขที่ออเดอร์',
+    paymentMethod: 'การชำระเงิน',
+    orderType: 'ประเภท',
+    tableNumber: 'โต๊ะ',
+    paymentBreakdown: 'ยอดขายตามวิธีชำระ',
+    count: 'จำนวน',
+    hourlyBreakdown: 'ยอดขายรายชั่วโมง',
+    hour: 'ชั่วโมง',
+    allItems: 'รายการขายทั้งหมด',
+    total: 'ยอดรวม',
   }
 };
 
@@ -164,6 +203,17 @@ export default function ReportsPage() {
   const [salesData, setSalesData] = useState(MOCK_SALES_DATA);
   const [categoryData, setCategoryData] = useState(MOCK_CATEGORY_DATA);
   const [itemSalesData, setItemSalesData] = useState<{ name: string; quantity: number; sales: number }[]>([]);
+  const [reportTab, setReportTab] = useState<'summary' | 'detailed'>('summary');
+  const [detailedOrders, setDetailedOrders] = useState<Array<{
+    id: string;
+    created_at: string;
+    total_amount: number;
+    payment_method: string;
+    order_type: string;
+    table_number: string;
+  }>>([]);
+  const [paymentBreakdown, setPaymentBreakdown] = useState<{ method: string; count: number; total: number }[]>([]);
+  const [fullItemSales, setFullItemSales] = useState<{ name: string; quantity: number; sales: number }[]>([]);
   const [mounted, setMounted] = useState(false);
   const [dateRange, setDateRange] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('weekly');
   const [customDateFrom, setCustomDateFrom] = useState('');
@@ -385,7 +435,7 @@ export default function ReportsPage() {
             { data: portions },
             { data: expenses },
           ] = await Promise.all([
-            supabase.from('orders').select('id, total_amount, created_at, status'),
+            supabase.from('orders').select('id, total_amount, created_at, status, payment_method, order_type, table:tables(table_number)'),
             supabase.from('order_items').select('order_id, item_id, quantity, price_at_time, notes, item:items(name, category_id)'),
             supabase.from('categories').select('id, name'),
             supabase.from('items').select('id, name, cost_price, inventory_item_id, is_recipe, type'),
@@ -487,6 +537,33 @@ export default function ReportsPage() {
 
           setCategoryData(categoryChart.length > 0 ? categoryChart : [{ name: 'No Data', value: 0 }]);
           setItemSalesData(itemChart);
+          setFullItemSales(
+            Object.entries(itemTotals)
+              .map(([name, values]) => ({ name, quantity: values.quantity, sales: values.sales }))
+              .sort((a, b) => b.sales - a.sales)
+          );
+
+          const paymentTotals: Record<string, { count: number; total: number }> = {};
+          const orderRows = completedOrders.map((order: any) => {
+            const method = String(order.payment_method || 'cash');
+            paymentTotals[method] = paymentTotals[method] || { count: 0, total: 0 };
+            paymentTotals[method].count += 1;
+            paymentTotals[method].total += Number(order.total_amount || 0);
+            return {
+              id: String(order.id),
+              created_at: order.created_at,
+              total_amount: Number(order.total_amount || 0),
+              payment_method: method,
+              order_type: String(order.order_type || 'dine-in'),
+              table_number: String(order.table?.table_number || '-'),
+            };
+          });
+          setDetailedOrders(orderRows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+          setPaymentBreakdown(
+            Object.entries(paymentTotals)
+              .map(([method, values]) => ({ method, count: values.count, total: values.total }))
+              .sort((a, b) => b.total - a.total)
+          );
         } catch (error) {
           console.error('Error fetching reports data:', error);
         }
@@ -520,6 +597,18 @@ export default function ReportsPage() {
           { name: 'Cheese Burger', quantity: 98, sales: 979.02 },
           { name: 'Fries', quantity: 150, sales: 598.5 },
           { name: 'Cola', quantity: 180, sales: 450 },
+        ]);
+        setFullItemSales([
+          { name: 'Classic Burger', quantity: 120, sales: 1078.8 },
+          { name: 'Cheese Burger', quantity: 98, sales: 979.02 },
+          { name: 'Fries', quantity: 150, sales: 598.5 },
+          { name: 'Cola', quantity: 180, sales: 450 },
+        ]);
+        setDetailedOrders([]);
+        setPaymentBreakdown([
+          { method: 'cash', count: 280, total: 6200 },
+          { method: 'card', count: 120, total: 3400 },
+          { method: 'online', count: 65, total: 1800 },
         ]);
       }
     };
@@ -581,6 +670,27 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      <div className="flex gap-2">
+        <Button
+          variant={reportTab === 'summary' ? 'default' : 'outline'}
+          size="sm"
+          className="rounded-xl"
+          onClick={() => setReportTab('summary')}
+        >
+          {t.summaryTab}
+        </Button>
+        <Button
+          variant={reportTab === 'detailed' ? 'default' : 'outline'}
+          size="sm"
+          className="rounded-xl"
+          onClick={() => setReportTab('detailed')}
+        >
+          {t.detailedTab}
+        </Button>
+      </div>
+
+      {reportTab === 'summary' && (
+      <>
       {dateRange === 'custom' && (
         <Card className="border-blue-100 bg-blue-50/30 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
           <CardContent className="p-4">
@@ -762,6 +872,140 @@ export default function ReportsPage() {
           </div>
         </CardContent>
       </Card>
+      </>
+      )}
+
+      {reportTab === 'detailed' && (
+        <div className="space-y-4">
+          {dateRange === 'custom' && (
+            <Card className="border-blue-100 bg-blue-50/30 shadow-sm">
+              <CardContent className="p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-blue-900/60 uppercase ml-1">{t.startDate}</label>
+                    <Input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} className="h-11 rounded-xl" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-blue-900/60 uppercase ml-1">{t.endDate}</label>
+                    <Input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} className="h-11 rounded-xl" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm">{t.grossSales}</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatCurrency(reportSummary.grossSales, currencySettings)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm">{t.totalOrders}</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{reportSummary.totalOrders}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm">{t.totalProfit}</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatCurrency(reportSummary.totalProfit, currencySettings)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm">{t.netProfit}</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatCurrency(reportSummary.netProfit, currencySettings)}</div></CardContent></Card>
+          </div>
+
+          <Card className="border-zinc-200 shadow-sm overflow-hidden">
+            <CardHeader className="bg-zinc-50/50 border-b"><CardTitle>{t.paymentBreakdown}</CardTitle></CardHeader>
+            <CardContent className="p-0">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-blue-50/20 text-blue-700">
+                    <th className="p-3 text-left">{t.paymentMethod}</th>
+                    <th className="p-3 text-right">{t.count}</th>
+                    <th className="p-3 text-right">{t.sales}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentBreakdown.map((row) => (
+                    <tr key={row.method} className="border-b last:border-0">
+                      <td className="p-3 capitalize">{row.method}</td>
+                      <td className="p-3 text-right">{row.count}</td>
+                      <td className="p-3 text-right font-medium">{formatCurrency(row.total, currencySettings)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+
+          <Card className="border-zinc-200 shadow-sm overflow-hidden">
+            <CardHeader className="bg-zinc-50/50 border-b"><CardTitle>{t.hourlyBreakdown}</CardTitle></CardHeader>
+            <CardContent className="p-0 max-h-[320px] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-blue-50/20 text-blue-700 sticky top-0">
+                    <th className="p-3 text-left">{t.hour}</th>
+                    <th className="p-3 text-right">{t.orders}</th>
+                    <th className="p-3 text-right">{t.sales}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {salesData.map((row) => (
+                    <tr key={row.date} className="border-b last:border-0">
+                      <td className="p-3">{row.date}</td>
+                      <td className="p-3 text-right">{row.orders}</td>
+                      <td className="p-3 text-right">{formatCurrency(row.sales, currencySettings)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+
+          <Card className="border-zinc-200 shadow-sm overflow-hidden">
+            <CardHeader className="bg-zinc-50/50 border-b"><CardTitle>{t.orderTransactions}</CardTitle></CardHeader>
+            <CardContent className="p-0 max-h-[400px] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-blue-50/20 text-blue-700 sticky top-0">
+                    <th className="p-3 text-left">{t.orderId}</th>
+                    <th className="p-3 text-left">{t.date}</th>
+                    <th className="p-3 text-left">{t.paymentMethod}</th>
+                    <th className="p-3 text-left">{t.orderType}</th>
+                    <th className="p-3 text-left">{t.tableNumber}</th>
+                    <th className="p-3 text-right">{t.total}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailedOrders.length === 0 ? (
+                    <tr><td colSpan={6} className="p-8 text-center text-zinc-500">{t.noItemSales}</td></tr>
+                  ) : detailedOrders.map((order) => (
+                    <tr key={order.id} className="border-b last:border-0 hover:bg-zinc-50/50">
+                      <td className="p-3 font-mono text-xs">{order.id.substring(0, 8).toUpperCase()}</td>
+                      <td className="p-3">{new Date(order.created_at).toLocaleString()}</td>
+                      <td className="p-3 capitalize">{order.payment_method}</td>
+                      <td className="p-3">{order.order_type}</td>
+                      <td className="p-3">{order.table_number}</td>
+                      <td className="p-3 text-right font-medium">{formatCurrency(order.total_amount, currencySettings)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+
+          <Card className="border-zinc-200 shadow-sm overflow-hidden">
+            <CardHeader className="bg-zinc-50/50 border-b"><CardTitle>{t.allItems}</CardTitle></CardHeader>
+            <CardContent className="p-0 max-h-[400px] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-blue-50/20 text-blue-700 sticky top-0">
+                    <th className="p-3 text-left">{t.item}</th>
+                    <th className="p-3 text-right">{t.quantitySold}</th>
+                    <th className="p-3 text-right">{t.sales}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fullItemSales.map((row) => (
+                    <tr key={row.name} className="border-b last:border-0">
+                      <td className="p-3">{row.name}</td>
+                      <td className="p-3 text-right">{row.quantity}</td>
+                      <td className="p-3 text-right">{formatCurrency(row.sales, currencySettings)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

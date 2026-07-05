@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Filter, Eye, Printer, Trash2, CheckSquare, Square } from 'lucide-react';
+import { Search, Filter, Eye, Printer, Trash2, CheckSquare, Square, Download } from 'lucide-react';
 import { supabase, Order } from '@/lib/supabase';
 import { usePosStore } from '@/lib/store';
 import { format } from 'date-fns';
@@ -18,6 +18,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import html2canvas from 'html2canvas';
+import { getLogoTargetWidth, resizeImageForPrint, buildLogoHtml, injectLogoIntoReceiptHtml } from '@/lib/receipt-image';
 
 const MOCK_ORDERS: Order[] = [
   { id: 'ORD-001', total_amount: 45.50, status: 'completed', payment_method: 'card', created_at: new Date().toISOString() },
@@ -84,6 +85,48 @@ const getOrderLineDisplayName = (line: any) => {
 
   return appendPortionToName(baseName, portionName);
 };
+
+/** Merge duplicate lines for receipt print (same item + portion + price + note → sum qty) */
+const combineOrderItemsForPrint = (items: any[]) => {
+  const map = new Map<string, any>();
+  const order: string[] = [];
+  for (const item of items) {
+    const notesText = String(item?.notes || '');
+    const key = [
+      item.item_id || item.item?.id || getOrderLineDisplayName(item),
+      getNoteField(notesText, 'Portion'),
+      Number(item.price_at_time || 0),
+      getNoteField(notesText, 'Note'),
+    ].join('|');
+    const qty = Number(item.quantity || 0);
+    const existing = map.get(key);
+    if (existing) {
+      existing.quantity = Number(existing.quantity || 0) + qty;
+    } else {
+      map.set(key, { ...item, quantity: qty });
+      order.push(key);
+    }
+  }
+  return order.map((k) => map.get(k));
+};
+
+const isCancelledKitchenItem = (line: any) =>
+  /(?:^|\s\|\s)Kitchen:\s*cancelled/i.test(String(line?.notes || '')) ||
+  !!line?.isKitchenCancelled;
+
+const isDisplayableOrderItem = (line: any) => {
+  const notes = String(line?.notes || '');
+  if (/Order Meta >>>/.test(notes) && !/(?:^|\s\|\s)(Item|Recipe):/i.test(notes)) {
+    return false;
+  }
+  return true;
+};
+
+const tagOrderItemRows = (rows: any[]) =>
+  (rows || []).map((line) => ({
+    ...line,
+    isKitchenCancelled: isCancelledKitchenItem(line),
+  }));
 
 const parseLegacyOrderItems = (order: Order) => {
   const notes = String((order as any).notes || '').trim();
@@ -206,6 +249,10 @@ const TRANSLATIONS = {
     printReceipt: 'Print Receipt',
     viewDetails: 'View Details',
     selectForDeletion: 'Select for deletion',
+    itemCancelled: 'Cancelled',
+    exportCsv: 'Export CSV',
+    table: 'Table',
+    orderType: 'Order Type',
   },
   lo: {
     orderHistory: 'ປະຫວັດການສັ່ງຊື້',
@@ -263,6 +310,10 @@ const TRANSLATIONS = {
     printReceipt: 'ພິມໃບເສັດ',
     viewDetails: 'ເບິ່ງລາຍລະອຽດ',
     selectForDeletion: 'ເລືອກເພື່ອລົບ',
+    itemCancelled: 'ຍົກເລີກ',
+    exportCsv: 'ສົ່ງອອກ CSV',
+    table: 'ໂຕະ',
+    orderType: 'ປະເພດ',
   },
   th: {
     orderHistory: 'ประวัติการสั่งซื้อ',
@@ -320,6 +371,10 @@ const TRANSLATIONS = {
     printReceipt: 'พิมพ์ใบเสร็จ',
     viewDetails: 'ดูรายละเอียด',
     selectForDeletion: 'เลือกเพื่อลบ',
+    itemCancelled: 'ยกเลิก',
+    exportCsv: 'ส่งออก CSV',
+    table: 'โต๊ะ',
+    orderType: 'ประเภท',
   }
 };
 
@@ -343,8 +398,6 @@ export default function OrderHistoryPage() {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [isPrinting, setIsPrinting] = useState(false);
-
   const printWithIframe = (html: string) => {
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
@@ -356,14 +409,34 @@ export default function OrderHistoryPage() {
       iframeDoc.write(html);
       iframeDoc.close();
 
-      setTimeout(() => {
+      // Wait for all images (including QR base64 data URLs) to fully load before printing
+      const triggerPrint = async () => {
+        const imgs = iframeDoc.querySelectorAll('img');
+        if (imgs.length > 0) {
+          await Promise.allSettled(Array.from(imgs).map(async (img) => {
+            try {
+              if (typeof (img as HTMLImageElement).decode === 'function') {
+                await (img as HTMLImageElement).decode();
+              } else {
+                await new Promise<void>((resolve) => {
+                  if (img.complete && (img as HTMLImageElement).naturalWidth > 0) { resolve(); return; }
+                  const onLoad = () => resolve();
+                  const onError = () => resolve();
+                  img.addEventListener('load', onLoad, { once: true });
+                  img.addEventListener('error', onError, { once: true });
+                });
+              }
+            } catch (e) {}
+          }));
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
-
         setTimeout(() => {
           document.body.removeChild(iframe);
         }, 1000);
-      }, 500);
+      };
+      setTimeout(() => { triggerPrint(); }, 500);
     }
   };
 
@@ -389,15 +462,47 @@ export default function OrderHistoryPage() {
     };
   };
 
+  // Resize QR image to fit thermal paper width.
+  // Thermal printer at 203 DPI: 1px ≈ 0.125mm, so 200px ≈ 25mm (good QR size).
+  // 80mm: 240px QR (~30mm) | 58mm: 180px QR (~22mm)
+  const resizeQrForPrint = (qrDataUrl: string, paperWidth: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const targetSize = paperWidth === '80mm' ? 240 : 180;
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const cvs = document.createElement('canvas');
+          cvs.width = targetSize;
+          cvs.height = targetSize;
+          const ctx = cvs.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, targetSize, targetSize);
+            // Use crisp-edges rendering for QR to preserve sharp pixel edges
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, 0, 0, targetSize, targetSize);
+            resolve(cvs.toDataURL('image/png'));
+            return;
+          }
+        } catch (e) {
+          console.warn('[PRINT] QR resize failed, using original:', e);
+        }
+        resolve(qrDataUrl);
+      };
+      img.onerror = () => resolve(qrDataUrl);
+      img.src = qrDataUrl;
+    });
+  };
+
   // Function to convert HTML to image and send to printer
-  const printHTMLAsImage = async (html: string, printerIp: string, paperWidth: string) => {
+  const printHTMLAsImage = async (html: string, printerIp: string, paperWidth: string, qrImageData: string = '', footerText: string = '', logoImageData: string = '', logoHtml: string = '') => {
     try {
       const { canUseOfflineNetworkPrint } = getPrintRuntime();
       const isLocalIP = printerIp.startsWith('192.168.') || printerIp.startsWith('10.') || printerIp.startsWith('172.');
 
       if (!canUseOfflineNetworkPrint && isLocalIP) {
         console.warn('[PRINT] Online runtime detected. Using browser print fallback instead of LAN API printing.');
-        printWithIframe(html);
+        printWithIframe(logoHtml ? injectLogoIntoReceiptHtml(html, logoHtml) : html);
         return true;
       }
 
@@ -457,10 +562,35 @@ export default function OrderHistoryPage() {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
 
-      // Convert HTML to canvas with the exact printer pixel width
+      // QR/Logo images: ensure they are fully loaded and are base64 data URLs.
+      // html2canvas clones the DOM and images in the clone may not have loaded yet.
+      // Pre-convert all images to base64 data URLs so they are inlined in the HTML.
+      const allImgs = renderRoot.querySelectorAll('img');
+      if (allImgs.length > 0) {
+        console.log('[PRINT] Found', allImgs.length, 'img elements in receipt');
+        for (const img of Array.from(allImgs)) {
+          const htmlImg = img as HTMLImageElement;
+          const src = htmlImg.src || '';
+          if (!src.startsWith('data:') && htmlImg.naturalWidth > 0) {
+            try {
+              const tmpCvs = iframeDoc.createElement('canvas');
+              tmpCvs.width = htmlImg.naturalWidth;
+              tmpCvs.height = htmlImg.naturalHeight;
+              tmpCvs.getContext('2d')?.drawImage(htmlImg, 0, 0);
+              htmlImg.src = tmpCvs.toDataURL('image/png');
+              console.log('[PRINT] Converted img to base64 data URL');
+            } catch (e) {
+              console.warn('[PRINT] Failed to convert img to data URL:', e);
+            }
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      // Convert HTML to canvas — scale 1 to match printer pixel width exactly
       const canvas = await html2canvas(renderRoot, {
         backgroundColor: '#ffffff',
-        scale: 1, // Keep at 1 to avoid duplicate characters
+        scale: 1, // Keep at 1 to match printer pixel width exactly (576/384px)
         logging: false,
         width: width,
         height: renderRoot.scrollHeight,
@@ -487,7 +617,10 @@ export default function OrderHistoryPage() {
         body: JSON.stringify({
           printerIp: printerIp,
           imageData: imageData,
-          paperWidth: paperWidth
+          paperWidth: paperWidth,
+          qrImageData: qrImageData,
+          footerText: footerText,
+          logoImageData: logoImageData
         })
       });
 
@@ -557,10 +690,44 @@ export default function OrderHistoryPage() {
         data = fallback.data;
       }
 
-      setOrderItems(data && data.length > 0 ? data : parseLegacyOrderItems(order));
+      let items = tagOrderItemRows(data && data.length > 0 ? data : parseLegacyOrderItems(order));
+
+      // Completed bills only store paid lines — pull cancelled kitchen items from sibling table orders
+      if (order.table_id && order.status === 'completed') {
+        const orderTime = new Date(order.created_at || Date.now());
+        const from = new Date(orderTime.getTime() - 6 * 60 * 60 * 1000).toISOString();
+        const to = new Date(orderTime.getTime() + 60 * 60 * 1000).toISOString();
+        const existingIds = new Set(items.map((line) => line.id).filter(Boolean));
+
+        const { data: relatedOrders } = await supabase
+          .from('orders')
+          .select('id')
+          .eq('table_id', order.table_id)
+          .neq('id', order.id)
+          .gte('created_at', from)
+          .lte('created_at', to);
+
+        const relatedOrderIds = (relatedOrders || []).map((row) => row.id);
+        if (relatedOrderIds.length > 0) {
+          const { data: cancelledRows } = await supabase
+            .from('order_items')
+            .select('*, item:items(*)')
+            .in('order_id', relatedOrderIds)
+            .ilike('notes', '%Kitchen: cancelled%')
+            .order('created_at', { ascending: true });
+
+          for (const row of cancelledRows || []) {
+            if (row.id && existingIds.has(row.id)) continue;
+            items.push({ ...row, isKitchenCancelled: true, isReferenceOnly: true });
+            if (row.id) existingIds.add(row.id);
+          }
+        }
+      }
+
+      setOrderItems(items.filter(isDisplayableOrderItem));
     } catch (error) {
       console.error('Error fetching order details:', error);
-      setOrderItems(parseLegacyOrderItems(order));
+      setOrderItems(tagOrderItemRows(parseLegacyOrderItems(order)).filter(isDisplayableOrderItem));
     } finally {
       setIsLoadingDetails(false);
     }
@@ -637,16 +804,20 @@ export default function OrderHistoryPage() {
           data = fallback.data;
         }
         itemsToPrint = data && data.length > 0 ? data : parseLegacyOrderItems(order);
+        itemsToPrint = itemsToPrint.filter(
+          (item: any) => isDisplayableOrderItem(item) && !isCancelledKitchenItem(item)
+        );
+        itemsToPrint = combineOrderItemsForPrint(itemsToPrint);
       } catch (error) {
         console.error('Error fetching items for print:', error);
-        itemsToPrint = parseLegacyOrderItems(order);
+        itemsToPrint = combineOrderItemsForPrint(parseLegacyOrderItems(order));
       }
     } else {
       // Mock items for demo
-      itemsToPrint = [
+      itemsToPrint = combineOrderItemsForPrint([
         { quantity: 1, price_at_time: 10.00, item: { name: 'Mock Item A' } },
         { quantity: 2, price_at_time: 15.00, item: { name: 'Mock Item B' } }
-      ];
+      ]);
     }
 
     const subtotal = itemsToPrint.reduce((sum, item: any) => sum + (Number(item.price_at_time || 0) * Number(item.quantity || 0)), 0);
@@ -716,17 +887,29 @@ export default function OrderHistoryPage() {
     const receiptPaperSize = receiptSettings.receiptSize || '80mm';
     const receiptPageWidth = receiptPaperSize === '80mm' ? '80mm' : '58mm';
     const receiptBodyWidth = receiptPaperSize === '80mm' ? 576 : 384;
-    const fs = receiptPaperSize === '80mm' ? 1.5 : 1.0;
+    const fs = receiptPaperSize === '80mm' ? 1.7 : 1.2;
     const fz = (n: number) => Math.round(n * fs) + 2; // font-size helper: scale + 2px
 
-    const transferQrHtml = showTransferInfo && (receiptSettings.showQrCode !== false) && bankQrCodeImage
+    const transferQrHtml = (receiptSettings.showQrCode !== false) && bankQrCodeImage
       ? '<div style="text-align:center; margin-top: ' + Math.round(12*fs) + 'px; padding-top: ' + Math.round(10*fs) + 'px; border-top: 1px dotted #000;">' +
-      '<div class="font-bold" style="font-size: ' + fz(14) + 'px; margin-bottom: ' + Math.round(8*fs) + 'px;">Scan to Pay</div>' +
-      '<div style="background: white; padding: ' + Math.round(10*fs) + 'px; display: inline-block; border: 2px solid #000;">' +
-      '<img src="' + bankQrCodeImage + '" alt="Bank QR Code" style="width: ' + Math.round(220*fs) + 'px; height: ' + Math.round(220*fs) + 'px; object-fit: contain; display: block; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; image-rendering: pixelated;" />' +
-      '</div>' +
+      '<div class="font-bold" style="font-size: ' + fz(14) + 'px; margin-bottom: ' + Math.round(4*fs) + 'px;">Scan to Pay</div>' +
       '</div>'
       : '';
+
+    // QR image data sent separately to thermal printer (avoids dithering destroying QR pattern)
+    // Resize QR to fit paper width so it prints at appropriate size
+    const receiptSize = receiptSettings.receiptSize || '80mm';
+    const rawQrData = (receiptSettings.showQrCode !== false) && bankQrCodeImage
+      ? bankQrCodeImage
+      : '';
+    const qrImageData = rawQrData ? await resizeQrForPrint(rawQrData, receiptSize) : '';
+
+    const logoTargetWidth = getLogoTargetWidth(receiptSize as '58mm' | '80mm');
+    const rawLogoData = generalSettings.storeLogo || '';
+    const logoImageData = rawLogoData
+      ? await resizeImageForPrint(rawLogoData, logoTargetWidth)
+      : '';
+    const logoHtml = logoImageData ? buildLogoHtml(logoImageData, logoTargetWidth) : '';
 
     const receiptHtml =
       '<html>' +
@@ -734,10 +917,10 @@ export default function OrderHistoryPage() {
       '<title>Bill Preview</title>' +
       '<meta charset="UTF-8">' +
       '<style>' +
-      "@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;500;700&display=swap');" +
+      "@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;700&family=Noto+Sans+Lao:wght@400;500;700&display=swap');" +
       `@page { size: ${receiptPageWidth} auto; margin: 0; }` +
-      "* { font-family: 'Noto Sans Lao', sans-serif; }" +
-      "body { font-family: 'Noto Sans Lao', sans-serif; padding: " + Math.round(8*fs) + "px; width: " + receiptBodyWidth + "px; margin: 0 auto; color: #000; box-sizing: border-box; }" +
+      "* { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; }" +
+      "body { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; padding: " + Math.round(8*fs) + "px; width: " + receiptBodyWidth + "px; margin: 0 auto; color: #000; box-sizing: border-box; }" +
       '.text-center { text-align: center; }' +
       '.mb-4 { margin-bottom: ' + Math.round(16*fs) + 'px; }' +
       '.mt-6 { margin-top: ' + Math.round(24*fs) + 'px; }' +
@@ -747,9 +930,9 @@ export default function OrderHistoryPage() {
       '.flex { display: flex; justify-content: space-between; }' +
       '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: ' + Math.round(10*fs) + 'px 0; margin: ' + Math.round(10*fs) + 'px 0; }' +
       '.space-y-1 > div { margin-bottom: ' + Math.round(4*fs) + 'px; }' +
-      'table { width: 100%; border-collapse: collapse; font-family: \'Noto Sans Lao\', sans-serif; }' +
-      'th, td { font-size: ' + fz(12) + 'px; font-family: \'Noto Sans Lao\', sans-serif; }' +
-      'h1, h2, h3, h4, h5, h6, p, div, span { font-family: \'Noto Sans Lao\', sans-serif; }' +
+      "table { width: 100%; border-collapse: collapse; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; }" +
+      "th, td { font-size: " + fz(12) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; }" +
+      "h1, h2, h3, h4, h5, h6, p, div, span { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; }" +
       '</style>' +
       '</head>' +
       '<body>' +
@@ -809,11 +992,10 @@ export default function OrderHistoryPage() {
       '</div>' +
       '</div>' +
       transferQrHtml +
-      '<div class="text-center mt-6 text-xs">' +
-      escapeHtml(receiptSettings.footerText || '') +
-      '</div>' +
       '</body>' +
       '</html>';
+
+    const receiptHtmlWithLogo = injectLogoIntoReceiptHtml(receiptHtml, logoHtml);
 
     const printerId = receiptSettings.receiptPrinter;
     let targetPrinter = null;
@@ -825,14 +1007,10 @@ export default function OrderHistoryPage() {
     }
 
     if (targetPrinter && targetPrinter.ipAddress !== 'System-Driver') {
-      setIsPrinting(true);
-      printHTMLAsImage(receiptHtml, targetPrinter.ipAddress, receiptSettings.receiptSize || '80mm')
+      printHTMLAsImage(receiptHtml, targetPrinter.ipAddress, receiptSize, qrImageData, receiptSettings.footerText || '', logoImageData, logoHtml)
         .catch(err => {
           console.error('Failed to print receipt via network:', err);
           alert(`Failed to print receipt: ${err.message}`);
-        })
-        .finally(() => {
-          setIsPrinting(false);
         });
       return;
     }
@@ -849,18 +1027,63 @@ export default function OrderHistoryPage() {
       const doc = iframe.contentWindow?.document;
       if (doc) {
         doc.open();
-        doc.write(receiptHtml);
+        doc.write(receiptHtmlWithLogo);
         doc.close();
-        setTimeout(() => {
-          iframe.contentWindow?.print();
+        // Wait for images (QR base64) to decode before printing
+        const triggerPrint = async () => {
+          const imgs = doc.querySelectorAll('img');
+          if (imgs.length > 0) {
+            await Promise.allSettled(Array.from(imgs).map(async (img) => {
+              try {
+                if (typeof (img as HTMLImageElement).decode === 'function') {
+                  await (img as HTMLImageElement).decode();
+                } else {
+                  await new Promise<void>((resolve) => {
+                    if (img.complete && (img as HTMLImageElement).naturalWidth > 0) { resolve(); return; }
+                    const onLoad = () => resolve();
+                    const onError = () => resolve();
+                    img.addEventListener('load', onLoad, { once: true });
+                    img.addEventListener('error', onError, { once: true });
+                  });
+                }
+              } catch (e) {}
+            }));
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          try { iframe.contentWindow?.print(); } catch (e) {}
           document.body.removeChild(iframe);
-        }, 500);
+        };
+        setTimeout(() => { triggerPrint(); }, 500);
       }
     } else {
       const printWindow = window.open('', '_blank', 'width=400,height=600');
       if (printWindow) {
-        printWindow.document.write(receiptHtml);
+        printWindow.document.write(receiptHtmlWithLogo);
         printWindow.document.close();
+        // Wait for images (QR base64) to decode before printing
+        printWindow.onload = async () => {
+          const imgs = printWindow.document.querySelectorAll('img');
+          if (imgs.length > 0) {
+            await Promise.allSettled(Array.from(imgs).map(async (img) => {
+              try {
+                if (typeof (img as HTMLImageElement).decode === 'function') {
+                  await (img as HTMLImageElement).decode();
+                } else {
+                  await new Promise<void>((resolve) => {
+                    if (img.complete && (img as HTMLImageElement).naturalWidth > 0) { resolve(); return; }
+                    const onLoad = () => resolve();
+                    const onError = () => resolve();
+                    img.addEventListener('load', onLoad, { once: true });
+                    img.addEventListener('error', onError, { once: true });
+                  });
+                }
+              } catch (e) {}
+            }));
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          printWindow.focus();
+          printWindow.print();
+        };
       }
     }
   };
@@ -891,7 +1114,13 @@ export default function OrderHistoryPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, paymentFilter, statusFilter, dateFrom, dateTo, pageSize]);
-  const detailsSubtotal = orderItems.reduce((sum, line) => sum + ((line.price_at_time || 0) * (line.quantity || 0)), 0);
+  const billableOrderItems = orderItems.filter(
+    (line) => isDisplayableOrderItem(line) && !isCancelledKitchenItem(line)
+  );
+  const detailsSubtotal = billableOrderItems.reduce(
+    (sum, line) => sum + ((line.price_at_time || 0) * (line.quantity || 0)),
+    0
+  );
   const detailsTax = Math.max(0, (selectedOrder?.total_amount || 0) - detailsSubtotal);
   const selectedOrderMeta = selectedOrder ? orderMetaById[selectedOrder.id] : undefined;
   const parsedOrderMeta = (() => {
@@ -944,10 +1173,61 @@ export default function OrderHistoryPage() {
   };
   const getOrderItemName = getOrderLineDisplayName;
 
+  const escapeCsvCell = (value: unknown) => {
+    const text = String(value ?? '');
+    if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+    return text;
+  };
+
+  const handleExportCsv = () => {
+    const rows: string[] = [];
+    rows.push([
+      t.orderId,
+      t.dateTime,
+      t.status,
+      t.paymentMethod,
+      t.orderType,
+      t.table,
+      t.total,
+    ].map(escapeCsvCell).join(','));
+
+    for (const order of filteredOrders) {
+      const tableNumber = (order as any).table?.table_number || '-';
+      rows.push([
+        order.id,
+        format(new Date(order.created_at), 'yyyy-MM-dd HH:mm:ss'),
+        order.status,
+        formatPaymentMethodLabel(order.payment_method),
+        (order as any).order_type || 'dine-in',
+        tableNumber,
+        Number(order.total_amount || 0).toFixed(2),
+      ].map(escapeCsvCell).join(','));
+    }
+
+    const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `order-history-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex-1 space-y-4 p-4 sm:p-8 sm:pt-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{t.orderHistory}</h2>
+        <Button
+          variant="outline"
+          className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50 w-full sm:w-auto"
+          onClick={handleExportCsv}
+          disabled={filteredOrders.length === 0}
+        >
+          <Download className="h-4 w-4" />
+          {t.exportCsv}
+        </Button>
       </div>
 
       <Card className="border-blue-100 shadow-sm overflow-hidden">
@@ -1296,18 +1576,37 @@ export default function OrderHistoryPage() {
                   ) : orderItems.length === 0 ? (
                     <div className="p-8 text-center text-zinc-500">{t.noItems}</div>
                   ) : (
-                    orderItems.map((item, idx) => (
-                      <div key={idx} className="p-3 border-b last:border-0 grid grid-cols-12 gap-4 text-sm items-center">
+                    orderItems.filter(isDisplayableOrderItem).map((item, idx) => {
+                      const cancelled = isCancelledKitchenItem(item);
+                      return (
+                      <div
+                        key={item.id || idx}
+                        className={`p-3 border-b last:border-0 grid grid-cols-12 gap-4 text-sm items-center ${
+                          cancelled ? 'bg-red-50/60' : ''
+                        }`}
+                      >
                         <div className="col-span-6">
-                          <div className="font-medium">{getOrderItemName(item)}</div>
+                          <div className={`font-medium ${cancelled ? 'line-through text-red-600' : ''}`}>
+                            {getOrderItemName(item)}
+                          </div>
+                          {cancelled && (
+                            <span className="mt-1 inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                              {t.itemCancelled}
+                            </span>
+                          )}
                         </div>
-                        <div className="col-span-2 text-center">{item.quantity}</div>
-                        <div className="col-span-2 text-right">{formatCurrency(item.price_at_time, currencySettings)}</div>
-                        <div className="col-span-2 text-right font-medium">
+                        <div className={`col-span-2 text-center ${cancelled ? 'text-red-500 line-through' : ''}`}>
+                          {item.quantity}
+                        </div>
+                        <div className={`col-span-2 text-right ${cancelled ? 'text-red-400 line-through' : ''}`}>
+                          {formatCurrency(item.price_at_time, currencySettings)}
+                        </div>
+                        <div className={`col-span-2 text-right font-medium ${cancelled ? 'text-red-400 line-through' : ''}`}>
                           {formatCurrency((item.price_at_time * item.quantity), currencySettings)}
                         </div>
                       </div>
-                    ))
+                    );
+                    })
                   )}
                 </div>
               </div>

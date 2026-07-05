@@ -233,6 +233,8 @@ export type Table = {
   status: 'available' | 'occupied' | 'reserved' | 'inactive';
   current_order_id?: string;
   is_merged?: boolean;  // ทำเครื่องหมายว่าโต๊ะนี้ถูกรวมมาจากโต๊ะอื่น
+  merged_tables?: string | null;  // เลขโต๊ะที่ถูกรวมเข้ามา (คั่นด้วยเครื่องหมายจุลภาค) เช่น "4,5"
+  merged_into?: string | null;  // id ของโต๊ะปลายทางที่โต๊ะนี้ถูกรวมไป (ใช้ซ่อนโต๊ะต้นทาง)
   display_order: number;
   created_at: string;
 };

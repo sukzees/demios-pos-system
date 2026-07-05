@@ -10,7 +10,7 @@ export type { Employee };
 const ENV_LICENSE_KEY = (process.env.NEXT_PUBLIC_POS_LICENSE_KEY || '').trim();
 const LICENSE_SYNC_INTERVAL_MS = Number(process.env.NEXT_PUBLIC_LICENSE_SYNC_INTERVAL_MS || 60 * 60 * 1000);
 const INACTIVE_LICENSE_STATUSES = ['inactive', 'expired', 'revoked', 'suspended', 'blocked', 'disabled'];
-const MAX_PERSISTED_QR_CODE_LENGTH = 250_000;
+const MAX_PERSISTED_QR_CODE_LENGTH = 1_000_000;
 let pushSettingsTimer: ReturnType<typeof setTimeout> | null = null;
 
 const isMissingColumnInSchemaCache = (error: any, table: string, column: string): boolean => {
@@ -24,6 +24,343 @@ const triggerPortionRefresh = () => {
     window.dispatchEvent(new CustomEvent('refreshPortions'));
   }
 };
+
+export type SplitBillAllocation = {
+  lineKey: string;
+  quantity: number;
+  /** @deprecated migrated to lineKey */
+  cartIndex?: number;
+};
+
+export type SplitBillTab = {
+  id: string;
+  name: string;
+  allocations: SplitBillAllocation[];
+  /** @deprecated migrated to allocations */
+  itemIndices?: number[];
+};
+
+export function getCartLineKey(line: CartLine, _index?: number) {
+  if (line.clientLineId) return `c:${line.clientLineId}`;
+  if (line.orderItemId) return `o:${line.orderItemId}`;
+  return `f:${line.sourceItemId || line.item.id}:${line.portionId || 'base'}:${line.notes || ''}:${line.sentToKitchen ? 's' : 'u'}`;
+}
+
+export function resolveCartIndexFromLineKey(cart: CartLine[], lineKey: string): number {
+  return cart.findIndex((line, index) => getCartLineKey(line, index) === lineKey);
+}
+
+export function resolveAllocationLineKey(
+  allocation: SplitBillAllocation,
+  cart: CartLine[]
+): string | null {
+  if (allocation.lineKey) return allocation.lineKey;
+  if (
+    allocation.cartIndex !== undefined &&
+    allocation.cartIndex >= 0 &&
+    allocation.cartIndex < cart.length
+  ) {
+    return getCartLineKey(cart[allocation.cartIndex], allocation.cartIndex);
+  }
+  return null;
+}
+
+export function normalizeSplitBillAllocation(
+  allocation: SplitBillAllocation,
+  cart: CartLine[]
+): SplitBillAllocation | null {
+  const lineKey = resolveAllocationLineKey(allocation, cart);
+  if (!lineKey) return null;
+  const cartIndex = resolveCartIndexFromLineKey(cart, lineKey);
+  if (cartIndex < 0) return null;
+  const line = cart[cartIndex];
+  if (!line || line.cancelled) return null;
+  const quantity = Math.min(allocation.quantity, line.quantity);
+  if (quantity <= 0) return null;
+  return { lineKey, quantity };
+}
+
+export function normalizeSplitBillTab(tab: SplitBillTab, cart: CartLine[]): SplitBillTab {
+  const raw = tab.allocations?.length
+    ? tab.allocations
+    : (tab.itemIndices || []).map((idx) => ({
+        cartIndex: idx,
+        lineKey: idx >= 0 && idx < cart.length ? getCartLineKey(cart[idx], idx) : '',
+        quantity: cart[idx]?.quantity ?? 1,
+      }));
+
+  const allocations = raw
+    .map((a) => normalizeSplitBillAllocation(a as SplitBillAllocation, cart))
+    .filter((a): a is SplitBillAllocation => a !== null);
+
+  return { ...tab, allocations, itemIndices: undefined };
+}
+
+export function sanitizeSplitBillTabs(tabs: SplitBillTab[], cart: CartLine[]): SplitBillTab[] {
+  return tabs.map((tab) => normalizeSplitBillTab(tab, cart));
+}
+
+export function getTotalAllocatedQtyForLineKey(tabs: SplitBillTab[], lineKey: string): number {
+  return tabs.reduce(
+    (sum, tab) => sum + (tab.allocations.find((a) => a.lineKey === lineKey)?.quantity ?? 0),
+    0
+  );
+}
+
+export function getTotalAllocatedQtyForLine(
+  tabs: SplitBillTab[],
+  cartIndex: number,
+  cart: CartLine[]
+): number {
+  const line = cart[cartIndex];
+  if (!line) return 0;
+  return getTotalAllocatedQtyForLineKey(tabs, getCartLineKey(line, cartIndex));
+}
+
+export function fillUnassignedSplitBillItemsToFirstTab(
+  tabs: SplitBillTab[],
+  cart: CartLine[]
+): SplitBillTab[] {
+  if (!tabs.length) return tabs;
+  let nextTabs = sanitizeSplitBillTabs(tabs, cart);
+  cart.forEach((line, cartIndex) => {
+    if (line.cancelled) return;
+    const lineKey = getCartLineKey(line, cartIndex);
+    const total = getTotalAllocatedQtyForLineKey(nextTabs, lineKey);
+    const unassigned = line.quantity - total;
+    if (unassigned > 0) {
+      nextTabs = addSplitBillQtyToFirstTabByKey(nextTabs, lineKey, unassigned, cart);
+    }
+  });
+  return nextTabs;
+}
+
+export function createFirstSplitBillTab(cart: CartLine[]): SplitBillTab[] {
+  const allocations: SplitBillAllocation[] = [];
+  cart.forEach((line, cartIndex) => {
+    if (!line.cancelled && line.quantity > 0) {
+      allocations.push({
+        lineKey: getCartLineKey(line, cartIndex),
+        quantity: line.quantity,
+      });
+    }
+  });
+  return [{ id: `sb-${Date.now()}`, name: 'Bill 1', allocations }];
+}
+
+export function setFirstTabLineAllocationByKey(
+  tabs: SplitBillTab[],
+  lineKey: string,
+  quantity: number,
+  cart: CartLine[]
+): SplitBillTab[] {
+  if (!tabs.length || quantity <= 0) return tabs;
+  const cartIndex = resolveCartIndexFromLineKey(cart, lineKey);
+  if (cartIndex < 0) return tabs;
+  const line = cart[cartIndex];
+  if (!line || line.cancelled) return tabs;
+
+  const sanitized = sanitizeSplitBillTabs(tabs, cart);
+  const otherQty = sanitized.slice(1).reduce(
+    (sum, tab) => sum + (tab.allocations.find((a) => a.lineKey === lineKey)?.quantity ?? 0),
+    0
+  );
+  const qty = Math.min(quantity, Math.max(0, line.quantity - otherQty));
+
+  return sanitized.map((tab, tabIdx) => {
+    if (tabIdx !== 0) return tab;
+    const allocs = [...tab.allocations];
+    const existingIdx = allocs.findIndex((a) => a.lineKey === lineKey);
+    if (qty <= 0) {
+      if (existingIdx >= 0) allocs.splice(existingIdx, 1);
+    } else if (existingIdx >= 0) {
+      allocs[existingIdx] = { lineKey, quantity: qty };
+    } else {
+      allocs.push({ lineKey, quantity: qty });
+    }
+    return { ...tab, allocations: allocs };
+  });
+}
+
+export function setFirstTabLineAllocation(
+  tabs: SplitBillTab[],
+  cartIndex: number,
+  quantity: number,
+  cart: CartLine[]
+): SplitBillTab[] {
+  const line = cart[cartIndex];
+  if (!line) return tabs;
+  return setFirstTabLineAllocationByKey(tabs, getCartLineKey(line, cartIndex), quantity, cart);
+}
+
+export function addSplitBillQtyToFirstTabByKey(
+  tabs: SplitBillTab[],
+  lineKey: string,
+  qtyToAdd: number,
+  cart: CartLine[]
+): SplitBillTab[] {
+  if (!tabs.length || qtyToAdd <= 0) return tabs;
+  const cartIndex = resolveCartIndexFromLineKey(cart, lineKey);
+  if (cartIndex < 0) return tabs;
+  const line = cart[cartIndex];
+  if (!line || line.cancelled) return tabs;
+
+  const sanitized = sanitizeSplitBillTabs(tabs, cart);
+  const otherQty = sanitized.slice(1).reduce(
+    (sum, tab) => sum + (tab.allocations.find((a) => a.lineKey === lineKey)?.quantity ?? 0),
+    0
+  );
+  const maxFirst = Math.max(0, line.quantity - otherQty);
+
+  return sanitized.map((tab, tabIdx) => {
+    if (tabIdx !== 0) return tab;
+    const allocs = [...tab.allocations];
+    const existingIdx = allocs.findIndex((a) => a.lineKey === lineKey);
+    const current = existingIdx >= 0 ? allocs[existingIdx].quantity : 0;
+    const next = Math.min(maxFirst, current + qtyToAdd);
+    if (next <= 0) {
+      if (existingIdx >= 0) allocs.splice(existingIdx, 1);
+    } else if (existingIdx >= 0) {
+      allocs[existingIdx] = { lineKey, quantity: next };
+    } else {
+      allocs.push({ lineKey, quantity: next });
+    }
+    return { ...tab, allocations: allocs };
+  });
+}
+
+export function addSplitBillQtyToFirstTab(
+  tabs: SplitBillTab[],
+  cartIndex: number,
+  qtyToAdd: number,
+  cart: CartLine[]
+): SplitBillTab[] {
+  const line = cart[cartIndex];
+  if (!line) return tabs;
+  return addSplitBillQtyToFirstTabByKey(tabs, getCartLineKey(line, cartIndex), qtyToAdd, cart);
+}
+
+export function assignSplitBillNewItemsToFirstTab(
+  tabs: SplitBillTab[],
+  oldCart: CartLine[],
+  newCart: CartLine[]
+): SplitBillTab[] {
+  if (!newCart.some((line) => !line.cancelled)) return tabs;
+
+  if (!tabs.length) {
+    return createFirstSplitBillTab(newCart);
+  }
+
+  let nextTabs = sanitizeSplitBillTabs(tabs, newCart);
+
+  if (!oldCart.length) {
+    return fillUnassignedSplitBillItemsToFirstTab(nextTabs, newCart);
+  }
+
+  const oldQtyByKey = new Map<string, number>();
+  oldCart.forEach((line, index) => {
+    if (line.cancelled) return;
+    oldQtyByKey.set(getCartLineKey(line, index), line.quantity);
+  });
+
+  newCart.forEach((line, cartIndex) => {
+    if (line.cancelled) return;
+    const key = getCartLineKey(line, cartIndex);
+    const prevQty = oldQtyByKey.get(key);
+    if (prevQty === undefined) {
+      nextTabs = setFirstTabLineAllocationByKey(nextTabs, key, line.quantity, newCart);
+    } else if (line.quantity > prevQty) {
+      nextTabs = addSplitBillQtyToFirstTabByKey(nextTabs, key, line.quantity - prevQty, newCart);
+    }
+  });
+
+  return nextTabs;
+}
+
+export function applyPartialPaymentToCart(
+  cart: CartLine[],
+  paidAllocations: SplitBillAllocation[]
+): CartLine[] {
+  const paidByKey = new Map<string, number>();
+  for (const allocation of paidAllocations) {
+    const key = resolveAllocationLineKey(allocation, cart);
+    if (!key) continue;
+    paidByKey.set(key, (paidByKey.get(key) || 0) + allocation.quantity);
+  }
+
+  const nextCart: CartLine[] = [];
+  for (let i = 0; i < cart.length; i++) {
+    const line = cart[i];
+    const paidQty = paidByKey.get(getCartLineKey(line, i)) || 0;
+    if (paidQty <= 0) {
+      nextCart.push(line);
+      continue;
+    }
+    const remaining = line.quantity - paidQty;
+    if (remaining > 0) {
+      nextCart.push({ ...line, quantity: remaining });
+    }
+  }
+  return normalizeCart(nextCart);
+}
+
+export function reconcileSplitBillTabsAfterPartialPay(
+  tabs: SplitBillTab[],
+  paidAllocations: SplitBillAllocation[],
+  paidTabId: string | undefined,
+  cartBefore: CartLine[]
+): SplitBillTab[] {
+  const normalizedPaid = paidAllocations
+    .map((a) => normalizeSplitBillAllocation(a, cartBefore))
+    .filter((a): a is SplitBillAllocation => a !== null);
+  const newCart = applyPartialPaymentToCart(cartBefore, normalizedPaid);
+
+  return tabs.map((tab) => {
+    if (paidTabId && tab.id === paidTabId) {
+      return { ...tab, allocations: [] };
+    }
+
+    const newAllocations: SplitBillAllocation[] = [];
+    for (const alloc of tab.allocations) {
+      const lineKey = resolveAllocationLineKey(alloc, cartBefore);
+      if (!lineKey) continue;
+      const newIdx = resolveCartIndexFromLineKey(newCart, lineKey);
+      if (newIdx < 0) continue;
+      const qty = Math.min(alloc.quantity, newCart[newIdx]?.quantity ?? alloc.quantity);
+      if (qty <= 0) continue;
+      const existing = newAllocations.find((a) => a.lineKey === lineKey);
+      if (existing) existing.quantity = Math.max(existing.quantity, qty);
+      else newAllocations.push({ lineKey, quantity: qty });
+    }
+    return { ...tab, allocations: newAllocations };
+  });
+}
+
+/** @deprecated use reconcileSplitBillTabsAfterPartialPay */
+export function reconcileSplitBillTabsAfterPayment(
+  tabs: SplitBillTab[],
+  paidIndices: number[],
+  cartLengthBefore: number
+): SplitBillTab[] {
+  const paidSet = new Set(paidIndices);
+  const remainingOldIndices: number[] = [];
+  for (let i = 0; i < cartLengthBefore; i++) {
+    if (!paidSet.has(i)) remainingOldIndices.push(i);
+  }
+  const oldToNew = new Map<number, number>();
+  remainingOldIndices.forEach((oldIdx, newIdx) => oldToNew.set(oldIdx, newIdx));
+
+  return tabs.map((tab): SplitBillTab => {
+    const allocations: SplitBillAllocation[] = tab.allocations
+      .filter((a) => a.cartIndex !== undefined && !paidSet.has(a.cartIndex))
+      .flatMap((a) => {
+        const newIdx = oldToNew.get(a.cartIndex!);
+        if (newIdx === undefined) return [];
+        return [{ lineKey: a.lineKey, quantity: a.quantity, cartIndex: newIdx }];
+      });
+    return { ...tab, allocations };
+  });
+}
 
 type CartLine = {
   item: Item;
@@ -41,7 +378,111 @@ type CartLine = {
   cancelledAt?: string;
 };
 
+/** Kitchen / cancelled lines must never merge with new menu adds */
+export const isCombinableCartLine = (line: CartLine) =>
+  !line.orderItemId &&
+  !line.sentToKitchen &&
+  !line.completedInKitchen &&
+  !line.cancelled &&
+  !line.cancelledAt;
+
 const createCartLineId = () => `cart-line-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const normalizeCartLine = (line: CartLine): CartLine => {
+  if (line.cancelled || line.cancelledAt) {
+    return { ...line, cancelled: true, sentToKitchen: true };
+  }
+  if (!line.clientLineId && !line.orderItemId) {
+    return { ...line, clientLineId: createCartLineId() };
+  }
+  return line;
+};
+
+export const normalizeCart = (lines: CartLine[]) => lines.map(normalizeCartLine);
+
+export const formatItemNoteForDb = (note?: string) => {
+  const trimmed = note?.trim();
+  return trimmed ? `Note: ${trimmed}` : undefined;
+};
+
+export const parseItemNoteFromDb = (raw?: string | null) => {
+  const text = String(raw || '');
+  const prefixed = text.match(/(?:^|\s\|\s)Note:\s*([^|]+)/)?.[1]?.trim();
+  if (prefixed) return prefixed;
+  const known = /^(Line:|Item:|Recipe:|Portion:|Kitchen:|CancelledAt:|Order Meta)/;
+  const legacy = text
+    .split(/\s\|\s/)
+    .map((part) => part.trim())
+    .filter((part) => part && !known.test(part))
+    .join(' | ');
+  return legacy || undefined;
+};
+
+export type CheckoutOptions = {
+  /** Pay only selected items; table stays open with remaining items */
+  partial?: boolean;
+  itemsOverride?: CartLine[];
+  /** Cart indices being paid (legacy — full line removal) */
+  paidIndices?: number[];
+  /** Partial quantities paid per cart line */
+  paidAllocations?: SplitBillAllocation[];
+  /** Split-bill tab that was paid (cleared after checkout) */
+  paidTabId?: string;
+};
+
+export type HeldOrder = {
+  id: string;
+  cart: CartLine[];
+  date: string;
+  note?: string;
+  table?: any;
+  orderType?: 'dine-in' | 'takeout' | 'delivery' | null;
+  /** Sequential display number for held takeout orders */
+  orderNumber?: number;
+};
+
+export type KitchenQueueJob = {
+  id: string;
+  label: string;
+  tableNumber?: string;
+  tableId?: string;
+  itemCount: number;
+  status: 'pending' | 'printing' | 'failed' | 'done';
+  createdAt: string;
+  lastError?: string;
+  retryCount: number;
+  cartSnapshot: string;
+  /** Timestamp (ms) until retry spinner is shown; cleared after 2s */
+  retryAnimatingUntil?: number;
+};
+
+const KITCHEN_RETRY_ANIMATION_MS = 2000;
+
+const markKitchenJobsRetryAnimating = (
+  jobs: KitchenQueueJob[],
+  ids: string[],
+): KitchenQueueJob[] => {
+  if (ids.length === 0) return jobs;
+  const idSet = new Set(ids);
+  const until = Date.now() + KITCHEN_RETRY_ANIMATION_MS;
+  return jobs.map((job) => (
+    idSet.has(job.id) ? { ...job, retryAnimatingUntil: until } : job
+  ));
+};
+
+const scheduleKitchenRetryAnimationClear = (get: () => PosState, set: (partial: Partial<PosState>) => void, ids: string[]) => {
+  if (ids.length === 0) return;
+  const idSet = new Set(ids);
+  window.setTimeout(() => {
+    set({
+      kitchenPrintQueue: get().kitchenPrintQueue.map((job) => (
+        idSet.has(job.id) && job.retryAnimatingUntil
+          ? { ...job, retryAnimatingUntil: undefined }
+          : job
+      )),
+    });
+  }, KITCHEN_RETRY_ANIMATION_MS);
+};
 
 const stripBankQrCode = <T extends { qrCodeImage?: string } | null | undefined>(bank: T) => {
   if (!bank) return bank;
@@ -90,7 +531,7 @@ type PendingAction =
   | { type: 'ADD_EXPENSE'; payload: Omit<Expense, 'id' | 'created_at'> & { tempId: string } }
   | { type: 'ADD_EMPLOYEE'; payload: Omit<Employee, 'id' | 'created_at'> & { tempId: string } }
   | { type: 'UPDATE_STOCK'; payload: { itemId: string; stock: number } }
-  | { type: 'CHECKOUT'; payload: { cart: CartLine[]; paymentMethod: 'cash' | 'card' | 'online' | 'transfer'; totalAmount: number; date: string; notes?: string; cashTendered?: number; selectedBank?: { id: string; bankName: string; accountName: string; accountNumber: string; qrCodeImage?: string } | null } };
+  | { type: 'CHECKOUT'; payload: { cart: CartLine[]; paymentMethod: 'cash' | 'card' | 'online' | 'transfer'; totalAmount: number; date: string; notes?: string; cashTendered?: number; selectedBank?: { id: string; bankName: string; accountName: string; accountNumber: string; qrCodeImage?: string } | null; tableId?: string | null; orderType?: 'dine-in' | 'takeout' | 'delivery' | null } };
 
 interface PosState {
   user: Employee | null;
@@ -98,6 +539,15 @@ interface PosState {
   categories: Category[];
   cart: CartLine[];
   savedCarts: Record<string, CartLine[]>; // เก็บ cart แยกตามโต๊ะ/orderType
+  /** Per-table flag: bill was printed at least once this session */
+  tableBillPrinted: Record<string, boolean>;
+  /** Per-table: new items were sent to kitchen after bill print (shows yellow status) */
+  tablePostPrintKitchenSent: Record<string, boolean>;
+  /** Kitchen print queue — order saved to DB first, print processed async */
+  kitchenPrintQueue: KitchenQueueJob[];
+  /** Split-bill tabs per table (key: table-{id}) */
+  tableSplitBills: Record<string, SplitBillTab[]>;
+  tableSplitBillActiveTab: Record<string, string>;
   isSupabaseConfigured: boolean;
   isCheckingConfig: boolean;
   isOnline: boolean;
@@ -109,7 +559,8 @@ interface PosState {
     cashTendered?: number | null;
     selectedBank?: { id: string; bankName: string; accountName: string; accountNumber: string; qrCodeImage?: string } | null;
   }>;
-  heldOrders: { id: string; cart: CartLine[]; date: string; note?: string; table?: any; orderType?: 'dine-in' | 'takeout' | 'delivery' | null }[];
+  heldOrders: HeldOrder[];
+  heldTakeoutNumberSeq: number;
   receiptSettings: {
     headerText: string;
     footerText: string;
@@ -136,6 +587,7 @@ interface PosState {
   };
   generalSettings: {
     storeName: string;
+    storeLogo?: string;
     taxRate: number;
     timezone: string;
     language?: 'en' | 'lo' | 'th';
@@ -193,7 +645,7 @@ interface PosState {
   logout: () => void;
   updateReceiptSettings: (settings: Partial<{ headerText: string; footerText: string; storeAddress: string; phoneNumber: string; showBankDetail: boolean; showQrCode: boolean; receiptSize: '58mm' | '80mm'; enableVoidBill: boolean; autoPrintVoidBill: boolean; receiptPrinter: string; voidBillPrinter: string; kitchenBillSize: '58mm' | '80mm'; voidBillSize: '58mm' | '80mm'; showTableNumber: boolean }>) => void;
   updateCurrencySettings: (settings: { defaultCurrency: string; currencySymbol: string; currencyFormat: string; currencyRate: number; currencySymbolPosition: 'left' | 'right'; thbRate?: number }) => void;
-  updateGeneralSettings: (settings: { storeName: string; taxRate: number; timezone: string; language?: 'en' | 'lo' | 'th' }) => void;
+  updateGeneralSettings: (settings: { storeName: string; storeLogo?: string; taxRate: number; timezone: string; language?: 'en' | 'lo' | 'th' }) => void;
   updateBankConfigs: (banks: { id: string; bankName: string; accountName: string; accountNumber: string; enabledForTransfer: boolean; qrCodeImage?: string }[]) => void;
   updateUnitConfigs: (units: { id: string; name: string; value: string }[]) => void;
   updatePrinterConfigs: (printers: { id: string; name: string; ipAddress: string; location: string; isDefault: boolean; enabled: boolean; autoPrint?: boolean }[]) => void;
@@ -217,19 +669,38 @@ interface PosState {
   cancelCartItemByIndex: (index: number) => void;
   updateCartQuantity: (itemId: string, quantity: number) => void;
   updateCartQuantityByIndex: (index: number, quantity: number) => void;
+  updateCartItemNotesByIndex: (index: number, notes: string) => void;
   clearCart: () => Promise<void>;
   clearUnsentItems: () => void;
   markCartItemsAsSent: () => void;
+  markTableBillPrinted: () => void;
+  clearTableBillPrinted: (tableId: string) => void;
+  enqueueKitchenPrint: (job: Omit<KitchenQueueJob, 'status' | 'retryCount' | 'createdAt'>) => void;
+  setKitchenJobStatus: (id: string, status: KitchenQueueJob['status'], lastError?: string) => void;
+  retryKitchenJob: (id: string) => void;
+  retryAllFailedKitchenJobs: () => void;
+  dismissKitchenJob: (id: string) => void;
+  clearCompletedKitchenJobs: () => void;
+  setTableSplitBills: (tableKey: string, tabs: SplitBillTab[], activeTabId?: string) => void;
+  reconcileTableSplitBillsAfterPartialPay: (
+    tableKey: string,
+    paidAllocations: SplitBillAllocation[],
+    paidTabId: string | undefined,
+    cartBefore: CartLine[]
+  ) => void;
+  clearTableSplitBills: (tableKey: string) => void;
+  syncSplitBillNewItemsToFirstTab: (tableKey: string, oldCart: CartLine[], newCart: CartLine[]) => void;
   holdOrder: (note?: string) => Promise<void>;
   resumeOrder: (orderId: string) => void;
   removeHeldOrder: (orderId: string) => void;
-  setHeldOrders: (orders: { id: string; cart: CartLine[]; date: string; note?: string; table?: any; orderType?: 'dine-in' | 'takeout' | 'delivery' | null }[]) => void;
+  setHeldOrders: (orders: HeldOrder[]) => void;
   checkout: (
     paymentMethod: 'cash' | 'card' | 'online' | 'transfer',
     notes?: string,
     cashTendered?: number,
     selectedBank?: { id: string; bankName: string; accountName: string; accountNumber: string; qrCodeImage?: string } | null,
-    totalOverride?: number
+    totalOverride?: number,
+    options?: CheckoutOptions
   ) => Promise<boolean>;
   updateItemStock: (itemId: string, stock: number, notes?: string) => Promise<void>;
   addItem: (item: Omit<Item, 'id' | 'created_at'>) => Promise<void>;
@@ -259,6 +730,11 @@ export const usePosStore = create<PosState>()(
       categories: [],
       cart: [],
       savedCarts: {}, // เริ่มต้นเป็น object ว่าง
+      tableBillPrinted: {},
+      tablePostPrintKitchenSent: {},
+      kitchenPrintQueue: [],
+      tableSplitBills: {},
+      tableSplitBillActiveTab: {},
       isSupabaseConfigured: false,
       isCheckingConfig: true,
       isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
@@ -267,6 +743,7 @@ export const usePosStore = create<PosState>()(
       checkoutError: null,
       orderMetaById: {},
       heldOrders: [],
+      heldTakeoutNumberSeq: 0,
       receiptSettings: {
         headerText: "Welcome to My Awesome Store!",
         footerText: "Thank you for your business!",
@@ -293,6 +770,7 @@ export const usePosStore = create<PosState>()(
       },
       generalSettings: {
         storeName: "My Awesome Store",
+        storeLogo: '',
         taxRate: 8,
         timezone: "America/Los_Angeles",
         language: 'en'
@@ -473,18 +951,38 @@ export const usePosStore = create<PosState>()(
         // บันทึก cart ปัจจุบันก่อนเปลี่ยน
         if (currentTable || currentOrderType) {
           const currentKey = currentTable ? `table-${currentTable.id}` : `takeout`;
-          savedCarts[currentKey] = [...cart];
+          savedCarts[currentKey] = normalizeCart([...cart]);
         }
         
         // โหลด cart ของโต๊ะ/orderType ใหม่
         const newKey = table ? `table-${table.id}` : `takeout`;
-        const newCart = savedCarts[newKey] || [];
-        
+        // If DB says table is free, ignore stale local cart left after checkout
+        const isFreshTable = table && table.status === 'available' && !table.current_order_id;
+        const updatedSavedCarts = { ...savedCarts };
+        if (isFreshTable && updatedSavedCarts[newKey]?.length) {
+          delete updatedSavedCarts[newKey];
+        }
+        const newCart = normalizeCart(isFreshTable ? [] : (updatedSavedCarts[newKey] || []));
+        const updatedBillPrinted = { ...get().tableBillPrinted };
+        const updatedPostPrint = { ...get().tablePostPrintKitchenSent };
+        const updatedSplitBills = { ...get().tableSplitBills };
+        const updatedSplitBillActive = { ...get().tableSplitBillActiveTab };
+        if (isFreshTable) {
+          delete updatedBillPrinted[newKey];
+          delete updatedPostPrint[newKey];
+          delete updatedSplitBills[newKey];
+          delete updatedSplitBillActive[newKey];
+        }
+
         set({ 
           currentTable: table, 
           currentOrderType: orderType,
           cart: newCart,
-          savedCarts: { ...savedCarts }
+          savedCarts: updatedSavedCarts,
+          tableBillPrinted: updatedBillPrinted,
+          tablePostPrintKitchenSent: updatedPostPrint,
+          tableSplitBills: updatedSplitBills,
+          tableSplitBillActiveTab: updatedSplitBillActive,
         });
       },
       clearCurrentTable: () => {
@@ -493,12 +991,12 @@ export const usePosStore = create<PosState>()(
         // บันทึก cart ปัจจุบันก่อนล้าง
         if (currentTable || currentOrderType) {
           const currentKey = currentTable ? `table-${currentTable.id}` : `takeout`;
-          savedCarts[currentKey] = [...cart];
+          savedCarts[currentKey] = normalizeCart([...cart]);
         }
-        
-        set({ 
-          cart: [],  // ล้าง cart ออกจากหน้าจอ
-          currentTable: null, 
+
+        set({
+          cart: [],
+          currentTable: null,
           currentOrderType: null,
           savedCarts: { ...savedCarts }
         });
@@ -924,7 +1422,7 @@ export const usePosStore = create<PosState>()(
               // For now, let's just ensure the stock value is correct
             } else if (action.type === 'CHECKOUT') {
               console.log('[SYNC] Processing CHECKOUT action from pendingActions');
-              const { cart, paymentMethod, totalAmount, date, notes, cashTendered, selectedBank } = action.payload;
+              const { cart, paymentMethod, totalAmount, date, notes, cashTendered, selectedBank, tableId, orderType } = action.payload;
               const selectedBankForMeta = stripBankQrCode(selectedBank);
 
               const orderInsertPayload: Record<string, any> = {
@@ -1000,8 +1498,8 @@ export const usePosStore = create<PosState>()(
                   quantity: c.quantity,
                   price_at_time: c.item.price,
                   notes: isInventoryItem
-                    ? [`Item: ${c.item.name}`, c.notes, c.portionName ? `Portion: ${c.portionName}` : undefined, orderMeta].filter(Boolean).join(' | ') || undefined
-                    : [`Item: ${c.item.name}`, `Recipe: ${c.item.name}`, c.notes, c.portionName ? `Portion: ${c.portionName}` : undefined, orderMeta].filter(Boolean).join(' | ') || undefined
+                    ? [`Item: ${c.item.name}`, formatItemNoteForDb(c.notes), c.portionName ? `Portion: ${c.portionName}` : undefined, orderMeta].filter(Boolean).join(' | ') || undefined
+                    : [`Item: ${c.item.name}`, `Recipe: ${c.item.name}`, formatItemNoteForDb(c.notes), c.portionName ? `Portion: ${c.portionName}` : undefined, orderMeta].filter(Boolean).join(' | ') || undefined
                 };
               });
 
@@ -1157,6 +1655,28 @@ export const usePosStore = create<PosState>()(
                 } catch (txError) {
                   console.warn('Checkout sync: failed to write inventory transactions', txError);
                 }
+              }
+
+              // Release table when syncing an offline checkout
+              if (tableId && orderType === 'dine-in') {
+                await supabase
+                  .from('orders')
+                  .update({ status: 'cancelled' })
+                  .eq('table_id', tableId)
+                  .eq('status', 'pending');
+                await supabase
+                  .from('tables')
+                  .update({
+                    status: 'available',
+                    current_order_id: null,
+                    is_merged: false,
+                    merged_tables: null
+                  })
+                  .eq('id', tableId);
+                await supabase
+                  .from('tables')
+                  .update({ merged_into: null })
+                  .eq('merged_into', tableId);
               }
             }
 
@@ -1523,11 +2043,10 @@ export const usePosStore = create<PosState>()(
         const portionId = options?.portionId;
         const addQty = options?.quantity ?? 1;
 
-        // Check if item with same portion already exists
-        // Don't combine with items that have been sent to kitchen or completed in kitchen
+        // Only combine with fresh unsent lines (never kitchen / cancelled / persisted rows)
         const existing = portionId
-          ? cart.find(c => (c.sourceItemId || c.item.id) === sourceId && c.portionId === portionId && !c.sentToKitchen && !c.completedInKitchen)
-          : cart.find(c => (c.sourceItemId || c.item.id) === sourceId && !c.portionId && !c.sentToKitchen && !c.completedInKitchen);
+          ? cart.find(c => (c.sourceItemId || c.item.id) === sourceId && c.portionId === portionId && isCombinableCartLine(c))
+          : cart.find(c => (c.sourceItemId || c.item.id) === sourceId && !c.portionId && isCombinableCartLine(c));
 
         // Get current stock for validation only (don't deduct yet)
         const sourceItem = items.find(i => i.id === sourceId);
@@ -1547,21 +2066,34 @@ export const usePosStore = create<PosState>()(
 
         // Add to cart WITHOUT deducting stock
         // Stock will be deducted only when checkout is confirmed
+        let newCart: CartLine[];
         if (existing) {
-          set({ cart: cart.map(c => c === existing ? { ...c, quantity: c.quantity + addQty } : c) });
+          const updated = { ...existing, quantity: existing.quantity + addQty };
+          newCart = [updated, ...cart.filter((c) => c !== existing)];
         } else {
-          set({
-            cart: [...cart, {
-              item,
-              quantity: addQty,
-              clientLineId: createCartLineId(),
-              sourceItemId: sourceId,
-              portionName: options?.portionName,
-              portionId: portionId,
-              sentToKitchen: false,
-              completedInKitchen: false
-            }]
-          });
+          newCart = [{
+            item,
+            quantity: addQty,
+            clientLineId: createCartLineId(),
+            sourceItemId: sourceId,
+            portionName: options?.portionName,
+            portionId: portionId,
+            sentToKitchen: false,
+            completedInKitchen: false
+          }, ...cart];
+        }
+
+        const patch: Partial<PosState> = { cart: newCart };
+        if (currentTable && currentOrderType === 'dine-in') {
+          const key = `table-${currentTable.id}`;
+          patch.savedCarts = { ...get().savedCarts, [key]: normalizeCart(newCart) };
+          patch.tablePostPrintKitchenSent = { ...get().tablePostPrintKitchenSent, [key]: false };
+        }
+        set(patch);
+
+        if (currentTable && currentOrderType === 'dine-in') {
+          const key = `table-${currentTable.id}`;
+          get().syncSplitBillNewItemsToFirstTab(key, cart, newCart);
         }
 
         // Mark table as occupied when adding first item (dine-in only)
@@ -1581,7 +2113,7 @@ export const usePosStore = create<PosState>()(
             try {
               await supabase
                 .from('tables')
-                .update({ status: 'available', current_order_id: null })
+                .update({ status: 'available', current_order_id: null, is_merged: false, merged_tables: null })
                 .eq('id', currentTable.id);
               get().clearCurrentTable();
             } catch (err) {
@@ -1608,7 +2140,7 @@ export const usePosStore = create<PosState>()(
             try {
               await supabase
                 .from('tables')
-                .update({ status: 'available', current_order_id: null })
+                .update({ status: 'available', current_order_id: null, is_merged: false, merged_tables: null })
                 .eq('id', currentTable.id);
               get().clearCurrentTable();
             } catch (err) {
@@ -1630,7 +2162,14 @@ export const usePosStore = create<PosState>()(
           }
           return item;
         });
-        set({ cart: updatedCart });
+        const { currentTable, currentOrderType, savedCarts, tablePostPrintKitchenSent } = get();
+        const patch: Partial<PosState> = { cart: updatedCart };
+        if (currentTable && currentOrderType === 'dine-in') {
+          const key = `table-${currentTable.id}`;
+          patch.savedCarts = { ...savedCarts, [key]: normalizeCart(updatedCart) };
+          patch.tablePostPrintKitchenSent = { ...tablePostPrintKitchenSent, [key]: false };
+        }
+        set(patch);
       },
 
       cancelCartItemByIndex: (index) => {
@@ -1650,7 +2189,14 @@ export const usePosStore = create<PosState>()(
           }
           return item;
         });
-        set({ cart: updatedCart });
+        const { currentTable, currentOrderType, savedCarts, tablePostPrintKitchenSent } = get();
+        const patch: Partial<PosState> = { cart: updatedCart };
+        if (currentTable && currentOrderType === 'dine-in') {
+          const key = `table-${currentTable.id}`;
+          patch.savedCarts = { ...savedCarts, [key]: normalizeCart(updatedCart) };
+          patch.tablePostPrintKitchenSent = { ...tablePostPrintKitchenSent, [key]: false };
+        }
+        set(patch);
       },
 
       updateCartQuantity: (itemId, quantity) => {
@@ -1672,7 +2218,7 @@ export const usePosStore = create<PosState>()(
             return quantity > currentStock;
           }
           const otherLinesQty = cart
-            .filter(c => c.item.id !== itemId && (c.sourceItemId || c.item.id) === sourceId)
+            .filter(c => c.item.id !== itemId && (c.sourceItemId || c.item.id) === sourceId && !c.cancelled)
             .reduce((sum, c) => sum + c.quantity, 0);
           return otherLinesQty + quantity > currentStock;
         })();
@@ -1747,6 +2293,18 @@ export const usePosStore = create<PosState>()(
         });
       },
 
+      updateCartItemNotesByIndex: (index, notes) => {
+        const { cart } = get();
+        const cartItem = cart[index];
+        if (!cartItem || cartItem.sentToKitchen || cartItem.cancelled) return;
+        const trimmed = notes.trim();
+        set({
+          cart: cart.map((c, i) =>
+            i === index ? { ...c, notes: trimmed || undefined } : c
+          ),
+        });
+      },
+
       clearCart: async () => {
         const { currentTable, currentOrderType, isSupabaseConfigured, isOnline, savedCarts } = get();
         
@@ -1755,7 +2313,7 @@ export const usePosStore = create<PosState>()(
           try {
             await supabase
               .from('tables')
-              .update({ status: 'available', current_order_id: null })
+              .update({ status: 'available', current_order_id: null, is_merged: false, merged_tables: null })
               .eq('id', currentTable.id);
           } catch (err) {
             console.error('Failed to release table:', err);
@@ -1788,7 +2346,7 @@ export const usePosStore = create<PosState>()(
             try {
               await supabase
                 .from('tables')
-                .update({ status: 'available', current_order_id: null })
+                .update({ status: 'available', current_order_id: null, is_merged: false, merged_tables: null })
                 .eq('id', currentTable.id);
               get().clearCurrentTable();
             } catch (err) {
@@ -1799,33 +2357,168 @@ export const usePosStore = create<PosState>()(
       },
 
       markCartItemsAsSent: () => {
-        const cart = get().cart;
-        const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const { cart, currentTable, currentOrderType, savedCarts, tableBillPrinted, tablePostPrintKitchenSent } = get();
+        const baseMs = Date.now();
+        let sendIndex = 0;
         const updatedCart = cart.map(item => {
           if (!item.sentToKitchen && !item.cancelled) {
+            const sentToKitchenTime = new Date(baseMs + sendIndex * 1000).toLocaleTimeString([], {
+              hour: '2-digit', minute: '2-digit', second: '2-digit',
+            });
+            sendIndex += 1;
             return { 
               ...item, 
               clientLineId: item.clientLineId || createCartLineId(),
               sentToKitchen: true,
-              sentToKitchenTime: currentTime
+              sentToKitchenTime
             };
           }
           return item;
         });
-        set({ cart: updatedCart });
+        const patch: Partial<PosState> = { cart: updatedCart };
+        if (currentTable && currentOrderType === 'dine-in') {
+          const key = `table-${currentTable.id}`;
+          patch.savedCarts = { ...savedCarts, [key]: normalizeCart(updatedCart) };
+          if (tableBillPrinted[key]) {
+            patch.tablePostPrintKitchenSent = { ...tablePostPrintKitchenSent, [key]: true };
+          }
+        }
+        set(patch);
+      },
+
+      markTableBillPrinted: () => {
+        const { currentTable, currentOrderType, cart, savedCarts, tableBillPrinted } = get();
+        if (!currentTable || currentOrderType !== 'dine-in') return;
+        const key = `table-${currentTable.id}`;
+        set({
+          tableBillPrinted: { ...tableBillPrinted, [key]: true },
+          savedCarts: { ...savedCarts, [key]: normalizeCart([...cart]) },
+        });
+      },
+
+      clearTableBillPrinted: (tableId: string) => {
+        const key = `table-${tableId}`;
+        const updated = { ...get().tableBillPrinted };
+        const updatedPost = { ...get().tablePostPrintKitchenSent };
+        delete updated[key];
+        delete updatedPost[key];
+        set({ tableBillPrinted: updated, tablePostPrintKitchenSent: updatedPost });
+      },
+
+      enqueueKitchenPrint: (job) => {
+        const entry: KitchenQueueJob = {
+          ...job,
+          status: 'pending',
+          retryCount: 0,
+          createdAt: new Date().toISOString(),
+        };
+        set({ kitchenPrintQueue: [...get().kitchenPrintQueue, entry] });
+      },
+
+      setKitchenJobStatus: (id, status, lastError) => {
+        set({
+          kitchenPrintQueue: get().kitchenPrintQueue.map((job) =>
+            job.id === id ? { ...job, status, lastError: lastError ?? job.lastError } : job
+          ),
+        });
+      },
+
+      retryKitchenJob: (id) => {
+        const nextQueue = get().kitchenPrintQueue.map((job) =>
+          job.id === id
+            ? { ...job, status: 'pending' as const, retryCount: job.retryCount + 1, lastError: undefined }
+            : job
+        );
+        set({ kitchenPrintQueue: markKitchenJobsRetryAnimating(nextQueue, [id]) });
+        scheduleKitchenRetryAnimationClear(get, set, [id]);
+      },
+
+      retryAllFailedKitchenJobs: () => {
+        const failedIds = get().kitchenPrintQueue
+          .filter((job) => job.status === 'failed')
+          .map((job) => job.id);
+        const nextQueue = get().kitchenPrintQueue.map((job) =>
+          job.status === 'failed'
+            ? { ...job, status: 'pending' as const, retryCount: job.retryCount + 1, lastError: undefined }
+            : job
+        );
+        set({ kitchenPrintQueue: markKitchenJobsRetryAnimating(nextQueue, failedIds) });
+        scheduleKitchenRetryAnimationClear(get, set, failedIds);
+      },
+
+      dismissKitchenJob: (id) => {
+        set({ kitchenPrintQueue: get().kitchenPrintQueue.filter((job) => job.id !== id) });
+      },
+
+      clearCompletedKitchenJobs: () => {
+        set({ kitchenPrintQueue: get().kitchenPrintQueue.filter((job) => job.status !== 'done') });
+      },
+
+      setTableSplitBills: (tableKey, tabs, activeTabId) => {
+        const nextActive = activeTabId && tabs.some((t) => t.id === activeTabId)
+          ? activeTabId
+          : tabs[0]?.id || '';
+        set({
+          tableSplitBills: { ...get().tableSplitBills, [tableKey]: tabs },
+          tableSplitBillActiveTab: { ...get().tableSplitBillActiveTab, [tableKey]: nextActive },
+        });
+      },
+
+      reconcileTableSplitBillsAfterPartialPay: (tableKey, paidAllocations, paidTabId, cartBefore) => {
+        const tabs = get().tableSplitBills[tableKey];
+        if (!tabs?.length || !paidAllocations.length) return;
+        const reconciled = reconcileSplitBillTabsAfterPartialPay(tabs, paidAllocations, paidTabId, cartBefore);
+        const activeId = get().tableSplitBillActiveTab[tableKey];
+        get().setTableSplitBills(tableKey, reconciled, activeId);
+      },
+
+      clearTableSplitBills: (tableKey) => {
+        const splitBills = { ...get().tableSplitBills };
+        const splitActive = { ...get().tableSplitBillActiveTab };
+        delete splitBills[tableKey];
+        delete splitActive[tableKey];
+        set({ tableSplitBills: splitBills, tableSplitBillActiveTab: splitActive });
+      },
+
+      syncSplitBillNewItemsToFirstTab: (tableKey, oldCart, newCart) => {
+        if (oldCart === newCart) return;
+        const { tableSplitBills, tableSplitBillActiveTab } = get();
+        const existing = tableSplitBills[tableKey] || [];
+        const updated = assignSplitBillNewItemsToFirstTab(existing, oldCart, newCart);
+        const normalizedExisting = existing.length
+          ? sanitizeSplitBillTabs(existing, newCart)
+          : existing;
+        const changed = JSON.stringify(updated) !== JSON.stringify(normalizedExisting);
+        if (!changed) return;
+
+        const patch: Partial<PosState> = {
+          tableSplitBills: { ...tableSplitBills, [tableKey]: updated },
+        };
+        if (!tableSplitBillActiveTab[tableKey] && updated[0]?.id) {
+          patch.tableSplitBillActiveTab = { ...tableSplitBillActiveTab, [tableKey]: updated[0].id };
+        }
+        set(patch);
       },
 
       holdOrder: async (note) => {
-        const { cart, heldOrders, currentTable, currentOrderType, savedCarts } = get();
+        const { cart, heldOrders, currentTable, currentOrderType, savedCarts, heldTakeoutNumberSeq } = get();
         if (cart.length === 0) return;
 
-        const newHeldOrder = {
+        const isTakeout = currentOrderType === 'takeout';
+        const maxExistingTakeoutNo = heldOrders
+          .filter((o) => o.orderType === 'takeout' && o.orderNumber != null)
+          .reduce((max, o) => Math.max(max, o.orderNumber!), 0);
+        const nextTakeoutNo = Math.max(heldTakeoutNumberSeq, maxExistingTakeoutNo) + 1;
+        const orderNumber = isTakeout ? nextTakeoutNo : undefined;
+
+        const newHeldOrder: HeldOrder = {
           id: `hold-${Date.now()}`,
           cart: [...cart],
           date: new Date().toISOString(),
           note,
           table: currentTable,
-          orderType: currentOrderType
+          orderType: currentOrderType,
+          orderNumber,
         };
 
         // Release table if dine-in
@@ -1833,7 +2526,7 @@ export const usePosStore = create<PosState>()(
           try {
             await supabase
               .from('tables')
-              .update({ status: 'available', current_order_id: null })
+              .update({ status: 'available', current_order_id: null, is_merged: false, merged_tables: null })
               .eq('id', currentTable.id);
           } catch (err) {
             console.error('Failed to release table:', err);
@@ -1846,12 +2539,19 @@ export const usePosStore = create<PosState>()(
           delete savedCarts[currentKey];
         }
 
+        const updatedBillPrinted = { ...get().tableBillPrinted };
+        if (currentTable && currentOrderType === 'dine-in') {
+          delete updatedBillPrinted[`table-${currentTable.id}`];
+        }
+
         set({
           heldOrders: [...heldOrders, newHeldOrder],
+          heldTakeoutNumberSeq: isTakeout && orderNumber ? orderNumber : heldTakeoutNumberSeq,
           cart: [],
           currentTable: null,
           currentOrderType: null,
-          savedCarts: { ...savedCarts }
+          savedCarts: { ...savedCarts },
+          tableBillPrinted: updatedBillPrinted,
         });
       },
 
@@ -1910,29 +2610,28 @@ export const usePosStore = create<PosState>()(
       },
       setHeldOrders: (orders) => set({ heldOrders: orders }),
 
-      checkout: async (paymentMethod, notes, cashTendered, selectedBank, totalOverride) => {
+      checkout: async (paymentMethod, notes, cashTendered, selectedBank, totalOverride, options) => {
         const { cart, isSupabaseConfigured, items, isOnline, generalSettings, currentTable, currentOrderType, isCheckingOut } = get();
+        const isPartial = !!options?.partial;
         
         console.log('[CHECKOUT] Starting checkout...', {
           cartLength: cart.length,
+          isPartial,
           isSupabaseConfigured,
           isOnline,
           isCheckingOut
         });
         
-        if (cart.length === 0) return false;
+        const activeCart = (isPartial && options?.itemsOverride?.length ? options.itemsOverride : cart)
+          .filter(c => !c.cancelled);
+        
+        if (activeCart.length === 0) return false;
         
         // Prevent duplicate checkout calls
         if (isCheckingOut) {
           console.log('[CHECKOUT] Already processing checkout, ignoring duplicate call');
           return false;
         }
-        
-        // Filter out cancelled items
-        const activeCart = cart.filter(c => !c.cancelled);
-        console.log('[CHECKOUT] Active cart items:', activeCart.length);
-        
-        if (activeCart.length === 0) return false;
         
         // Set checkout flag to prevent duplicate calls
         set({ checkoutError: null, isCheckingOut: true });
@@ -1948,15 +2647,79 @@ export const usePosStore = create<PosState>()(
         const selectedBankForMeta = stripBankQrCode(selectedBank);
 
         console.log('[CHECKOUT] Clearing cart from UI...');
-        // Clear cart immediately (don't update stock in local state yet)
-        set({ cart: [] });
+        if (!isPartial) {
+          // Full checkout: clear cart and local saved cart immediately
+          const checkoutTableKey = currentTable
+            ? `table-${currentTable.id}`
+            : currentOrderType === 'takeout'
+              ? 'takeout'
+              : null;
+          const clearedSavedCarts = { ...get().savedCarts };
+          const clearedBillPrinted = { ...get().tableBillPrinted };
+          const clearedPostPrint = { ...get().tablePostPrintKitchenSent };
+          const clearedSplitBills = { ...get().tableSplitBills };
+          const clearedSplitActive = { ...get().tableSplitBillActiveTab };
+          if (checkoutTableKey) {
+            delete clearedSavedCarts[checkoutTableKey];
+            if (currentTable && currentOrderType === 'dine-in') {
+              delete clearedBillPrinted[checkoutTableKey];
+              delete clearedPostPrint[checkoutTableKey];
+              delete clearedSplitBills[checkoutTableKey];
+              delete clearedSplitActive[checkoutTableKey];
+            }
+          }
+          set({
+            cart: [],
+            savedCarts: clearedSavedCarts,
+            tableBillPrinted: clearedBillPrinted,
+            tablePostPrintKitchenSent: clearedPostPrint,
+            tableSplitBills: clearedSplitBills,
+            tableSplitBillActiveTab: clearedSplitActive,
+          });
+        }
 
         if (!isSupabaseConfigured) {
-          // For offline mode, stock is managed in inventory_items
-          // Don't update stock locally since it's not in items table anymore
-          // Items displayed include inventory_items which have stock
-          
-          // Clear table info on successful checkout
+          if (isPartial && options?.paidAllocations?.length) {
+            const newCart = applyPartialPaymentToCart(previousCart, options.paidAllocations);
+            const sc = { ...get().savedCarts };
+            const bp = { ...get().tableBillPrinted };
+            if (currentTable) {
+              const key = `table-${currentTable.id}`;
+              sc[key] = newCart;
+              bp[key] = false;
+              get().reconcileTableSplitBillsAfterPartialPay(
+                key,
+                options.paidAllocations,
+                options.paidTabId,
+                previousCart
+              );
+            }
+            set({ cart: newCart, savedCarts: sc, tableBillPrinted: bp, isCheckingOut: false });
+            return true;
+          }
+          if (isPartial && options?.paidIndices?.length) {
+            const paidSet = new Set(options.paidIndices);
+            const remainingCart = previousCart.filter((_, i) => !paidSet.has(i));
+            const sc = { ...get().savedCarts };
+            const bp = { ...get().tableBillPrinted };
+            if (currentTable) {
+              const key = `table-${currentTable.id}`;
+              sc[key] = remainingCart;
+              bp[key] = false;
+              const paidAllocations = options.paidIndices.map((idx) => ({
+                lineKey: getCartLineKey(previousCart[idx], idx),
+                quantity: previousCart[idx]?.quantity ?? 1,
+              }));
+              get().reconcileTableSplitBillsAfterPartialPay(
+                key,
+                paidAllocations,
+                options.paidTabId,
+                previousCart
+              );
+            }
+            set({ cart: remainingCart, savedCarts: sc, tableBillPrinted: bp, isCheckingOut: false });
+            return true;
+          }
           set({ currentTable: null, currentOrderType: null, isCheckingOut: false });
           return true;
         }
@@ -2042,8 +2805,8 @@ export const usePosStore = create<PosState>()(
                 quantity: c.quantity,
                 price_at_time: c.item.price,
                 notes: isMenuItem
-                  ? [`Item: ${c.item.name}`, c.notes, c.portionName ? `Portion: ${c.portionName}` : undefined, orderMeta].filter(Boolean).join(' | ') || undefined
-                  : [`Item: ${c.item.name}`, `Recipe: ${c.item.name}`, c.notes, c.portionName ? `Portion: ${c.portionName}` : undefined, orderMeta].filter(Boolean).join(' | ') || undefined
+                  ? [`Item: ${c.item.name}`, formatItemNoteForDb(c.notes), c.portionName ? `Portion: ${c.portionName}` : undefined, orderMeta].filter(Boolean).join(' | ') || undefined
+                  : [`Item: ${c.item.name}`, `Recipe: ${c.item.name}`, formatItemNoteForDb(c.notes), c.portionName ? `Portion: ${c.portionName}` : undefined, orderMeta].filter(Boolean).join(' | ') || undefined
               };
             });
 
@@ -2290,36 +3053,99 @@ export const usePosStore = create<PosState>()(
             await get().fetchItemsAndCategories();
             set({ checkoutError: null });
 
+            if (isPartial && options?.paidAllocations?.length) {
+              const newCart = applyPartialPaymentToCart(previousCart, options.paidAllocations);
+              const updatedSavedCarts = { ...get().savedCarts };
+              const updatedPostPrint = { ...get().tablePostPrintKitchenSent };
+              if (currentTable && currentOrderType === 'dine-in') {
+                const key = `table-${currentTable.id}`;
+                updatedSavedCarts[key] = newCart;
+                updatedPostPrint[key] = false;
+                get().reconcileTableSplitBillsAfterPartialPay(
+                  key,
+                  options.paidAllocations,
+                  options.paidTabId,
+                  previousCart
+                );
+              }
+              set({
+                cart: newCart,
+                savedCarts: updatedSavedCarts,
+                tablePostPrintKitchenSent: updatedPostPrint,
+                isCheckingOut: false,
+              });
+            } else if (isPartial && options?.paidIndices?.length) {
+              const paidSet = new Set(options.paidIndices);
+              const remainingCart = previousCart.filter((_, i) => !paidSet.has(i));
+              const updatedSavedCarts = { ...get().savedCarts };
+              const updatedPostPrint = { ...get().tablePostPrintKitchenSent };
+              if (currentTable && currentOrderType === 'dine-in') {
+                const key = `table-${currentTable.id}`;
+                updatedSavedCarts[key] = remainingCart;
+                updatedPostPrint[key] = false;
+                const paidAllocations = options.paidIndices.map((idx) => ({
+                  lineKey: getCartLineKey(previousCart[idx], idx),
+                  quantity: previousCart[idx]?.quantity ?? 1,
+                }));
+                get().reconcileTableSplitBillsAfterPartialPay(
+                  key,
+                  paidAllocations,
+                  options.paidTabId,
+                  previousCart
+                );
+              }
+              set({
+                cart: remainingCart,
+                savedCarts: updatedSavedCarts,
+                tablePostPrintKitchenSent: updatedPostPrint,
+                isCheckingOut: false,
+              });
+            } else {
+            // Cancel any leftover pending orders for this table (kitchen orders from before checkout)
+            if (currentTable?.id && currentOrderType === 'dine-in') {
+              try {
+                await supabase
+                  .from('orders')
+                  .update({ status: 'cancelled' })
+                  .eq('table_id', currentTable.id)
+                  .eq('status', 'pending');
+              } catch (pendingErr) {
+                console.error('Failed to cancel pending table orders:', pendingErr);
+              }
+            }
+
             // Release table after successful checkout
             if (currentTable && currentOrderType === 'dine-in') {
               try {
-                await supabase
+                const { error: tableError } = await supabase
                   .from('tables')
                   .update({ 
                     status: 'available',
-                    current_order_id: null
+                    current_order_id: null,
+                    is_merged: false,
+                    merged_tables: null
                   })
                   .eq('id', currentTable.id);
+                if (tableError) throw tableError;
+
+                // Bring back any source tables that were hidden under this merged table
+                await supabase
+                  .from('tables')
+                  .update({ merged_into: null })
+                  .eq('merged_into', currentTable.id);
               } catch (tableError) {
                 console.error('Failed to release table:', tableError);
               }
             }
 
-            // ล้าง savedCart ของโต๊ะ/orderType ปัจจุบัน
-            const { savedCarts } = get();
-            if (currentTable || currentOrderType) {
-              const currentKey = currentTable ? `table-${currentTable.id}` : `takeout`;
-              delete savedCarts[currentKey];
-            }
-
-            // Clear current table and order type
+            // Ensure local table selection is cleared (savedCarts already cleared at start)
             set({ 
               currentTable: null, 
-              currentOrderType: null,
-              savedCarts: { ...savedCarts }
+              currentOrderType: null
             });
+            }
 
-            // Track shift amounts if shift is open
+            // Track shift amounts if shift is open (full and split bill)
             if (get().isShiftOpen) {
               const { shiftCashAmount, shiftTransferAmount } = get();
               const { user } = get();
@@ -2408,22 +3234,27 @@ export const usePosStore = create<PosState>()(
             return false;
           }
         } else {
-          // Offline: Queue action
+          // Offline: Queue action and clear local table state so UI doesn't stay stuck
           set(state => ({
             pendingActions: [...state.pendingActions, {
               type: 'CHECKOUT',
               payload: {
-                cart,
+                cart: activeCart,
                 paymentMethod,
                 totalAmount,
                 date: new Date().toISOString(),
                 notes,
                 cashTendered,
-                selectedBank: selectedBankForMeta
+                selectedBank: selectedBankForMeta,
+                tableId: currentTable?.id || null,
+                orderType: currentOrderType || 'takeout'
               }
-            }]
+            }],
+            currentTable: null,
+            currentOrderType: null,
+            checkoutError: null,
+            isCheckingOut: false
           }));
-          set({ checkoutError: null, isCheckingOut: false });
           return true;
         }
       }
@@ -2463,7 +3294,13 @@ export const usePosStore = create<PosState>()(
         pendingActions: stripPendingActionQrCodes(state.pendingActions),
         orderMetaById: stripOrderMetaQrCodes(state.orderMetaById),
         heldOrders: state.heldOrders,
+        heldTakeoutNumberSeq: state.heldTakeoutNumberSeq,
         savedCarts: state.savedCarts,
+        tableBillPrinted: state.tableBillPrinted,
+        tablePostPrintKitchenSent: state.tablePostPrintKitchenSent,
+        kitchenPrintQueue: state.kitchenPrintQueue,
+        tableSplitBills: state.tableSplitBills,
+        tableSplitBillActiveTab: state.tableSplitBillActiveTab,
         currentTable: state.currentTable,
         currentOrderType: state.currentOrderType,
         cart: state.cart,

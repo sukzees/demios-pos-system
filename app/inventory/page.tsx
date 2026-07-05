@@ -32,6 +32,20 @@ type TranslationMap = Record<string, string>;
 type InventoryStockFilter = 'all' | 'needs_attention' | 'low_stock' | 'out_of_stock' | 'in_stock' | 'has_portions';
 type InventoryTypeFilter = 'all' | 'standalone' | 'ingredient';
 
+const isMissingColumnInSchemaCache = (error: unknown, column: string): boolean => {
+  const message = String((error as { message?: string })?.message || '').toLowerCase();
+  const col = column.toLowerCase();
+  return (
+    (message.includes('schema cache') && message.includes(col)) ||
+    (message.includes(col) && (message.includes('does not exist') || message.includes('could not find')))
+  );
+};
+
+const isPortionConstraintError = (error: unknown): boolean => {
+  const message = String((error as { message?: string })?.message || '').toLowerCase();
+  return message.includes('check_item') || message.includes('inventory_item_id');
+};
+
 const TRANSLATIONS: Record<'en' | 'lo' | 'th', TranslationMap> = {
   en: {
     inventory: 'Inventory',
@@ -1036,11 +1050,36 @@ function InventoryContent() {
     }
 
     try {
-      const { data, error } = await supabase
+      let data: any[] | null = null;
+      let error: unknown = null;
+
+      const full = await supabase
         .from('item_portions')
-        .select('portion_name, portion_cost_price, portion_price, portion_stock')
-        .eq('inventory_item_id', itemId)  // Changed from item_id to inventory_item_id
+        .select('portion_name, portion_price, portion_cost_price, portion_stock')
+        .eq('inventory_item_id', itemId)
         .order('created_at', { ascending: true });
+
+      if (!full.error) {
+        data = full.data;
+      } else if (isMissingColumnInSchemaCache(full.error, 'portion_cost_price')) {
+        const retry = await supabase
+          .from('item_portions')
+          .select('portion_name, portion_price, portion_stock')
+          .eq('inventory_item_id', itemId)
+          .order('created_at', { ascending: true });
+        data = retry.data;
+        error = retry.error;
+      } else if (isMissingColumnInSchemaCache(full.error, 'inventory_item_id')) {
+        const retry = await supabase
+          .from('item_portions')
+          .select('portion_name, portion_price, portion_stock')
+          .eq('item_id', itemId)
+          .order('created_at', { ascending: true });
+        data = retry.data;
+        error = retry.error;
+      } else {
+        throw full.error;
+      }
 
       if (error) throw error;
 
@@ -1062,99 +1101,141 @@ function InventoryContent() {
     }
   };
 
-  const syncItemPortions = async (itemId: string, validPortions: { name: string; price: string; stock: string; sellingPrice: string }[]) => {
+  const syncItemPortions = async (
+    itemId: string,
+    validPortions: { name: string; price: string; stock: string; sellingPrice: string }[],
+    portionsEnabled: boolean
+  ) => {
     if (!isSupabaseConfigured) return;
 
-    try {
-      await supabase.from('item_portions').delete().eq('inventory_item_id', itemId);  // Changed from item_id to inventory_item_id
-      if (hasPortions && validPortions.length > 0) {
-        const { error } = await supabase
-          .from('item_portions')
-          .insert(
-            validPortions.map((portion) => ({
-              inventory_item_id: itemId,  // Changed from item_id to inventory_item_id
-              portion_name: portion.name.trim(),
-              portion_cost_price: parseFloat(portion.price),
-              portion_price: parseFloat(portion.sellingPrice) || 0,
-              portion_stock: parseInt(portion.stock) || 0
-            }))
-          );
-        if (error) throw error;
+    const deleteResult = await supabase
+      .from('item_portions')
+      .delete()
+      .eq('inventory_item_id', itemId);
+    if (deleteResult.error && !isMissingColumnInSchemaCache(deleteResult.error, 'inventory_item_id')) {
+      throw deleteResult.error;
+    }
+
+    if (!portionsEnabled || validPortions.length === 0) return;
+
+    const buildRows = (includeCostPrice: boolean) =>
+      validPortions.map((portion) => ({
+        inventory_item_id: itemId,
+        item_id: null,
+        recipe_id: null,
+        portion_name: portion.name.trim(),
+        portion_stock: parseInt(portion.stock, 10) || 0,
+        ...(includeCostPrice
+          ? {
+              portion_cost_price: parseFloat(portion.price) || 0,
+              portion_price: parseFloat(portion.sellingPrice) || parseFloat(portion.price) || 0,
+            }
+          : {
+              portion_price: parseFloat(portion.price) || 0,
+            }),
+      }));
+
+    let insertResult = await supabase.from('item_portions').insert(buildRows(true));
+    if (insertResult.error && isMissingColumnInSchemaCache(insertResult.error, 'portion_cost_price')) {
+      insertResult = await supabase.from('item_portions').insert(buildRows(false));
+    }
+    if (insertResult.error) {
+      if (isPortionConstraintError(insertResult.error) || isMissingColumnInSchemaCache(insertResult.error, 'inventory_item_id')) {
+        throw new Error(
+          'Database needs migration: run migrations/add_inventory_item_id_to_portions.sql in Supabase SQL Editor'
+        );
       }
-    } catch (error: any) {
-      console.warn('Failed to save portions:', error?.message || error);
+      throw insertResult.error;
     }
   };
 
   const handleSaveItem = async () => {
-    if (!newItem.name || !newItem.inventory_category_id || (editingId ? !newItem.price : (!hasPortions && !newItem.price))) {
+    if (!newItem.name || !newItem.inventory_category_id) {
       alert(t.fillAllFields || 'Please fill in all required fields');
       return;
     }
 
-    setIsLoading(true);
+    const validPortions = hasPortions
+      ? portionRows.filter((row) => row.name.trim() && (parseFloat(row.price) || 0) > 0)
+      : [];
 
-    try {
-      const validPortions = hasPortions
-        ? portionRows.filter((row) => row.name.trim() && (parseFloat(row.price) || 0) > 0)
-        : [];
-
-      if (hasPortions && validPortions.length === 0) {
+    if (hasPortions) {
+      if (validPortions.length === 0) {
         alert(t.addAtLeastOnePortion || 'Please add at least one valid portion with name and price.');
         return;
       }
+    } else if (!(parseFloat(newItem.price) > 0)) {
+      alert(t.fillAllFields || 'Please fill in all required fields');
+      return;
+    }
 
+    const basePrice = parseFloat(newItem.price) > 0
+      ? parseFloat(newItem.price)
+      : Math.min(...validPortions.map((p) => parseFloat(p.price)).filter((n) => n > 0));
+
+    const stockTotal = hasPortions && validPortions.length > 0
+      ? validPortions.reduce((sum, p) => sum + (parseInt(p.stock, 10) || 0), 0)
+      : parseInt(newItem.stock, 10) || 0;
+
+    setIsLoading(true);
+
+    try {
       if (editingId) {
-        // Update existing item
         const { error } = await supabase
           .from('inventory_items')
           .update({
             name: newItem.name,
-            cost_price: parseFloat(newItem.price),
-            price: parseFloat(newItem.price),
+            cost_price: basePrice,
+            price: basePrice,
             inventory_category_id: newItem.inventory_category_id,
-            stock: parseInt(newItem.stock) || 0,
+            stock: stockTotal,
             type: newItem.itemType,
             unit: newItem.unit || 'pcs',
-            min_stock: Math.max(0, parseInt(newItem.min_stock) || 0)
+            min_stock: Math.max(0, parseInt(newItem.min_stock, 10) || 0),
           })
           .eq('id', editingId);
 
         if (error) throw error;
-        await syncItemPortions(editingId, validPortions);
+        await syncItemPortions(editingId, validPortions, hasPortions);
       } else {
-        // Keep one product and attach portions metadata; do not split into separate items.
-        const basePrice = parseFloat(newItem.price);
-
         if (isSupabaseConfigured) {
-          const stock = parseInt(newItem.stock) || 0;
           const { data, error } = await supabase
             .from('inventory_items')
             .insert({
               name: newItem.name,
               price: basePrice,
-              cost_price: parseFloat(newItem.price),
+              cost_price: basePrice,
               inventory_category_id: newItem.inventory_category_id,
-              stock,
+              stock: stockTotal,
               image_url: '',
               type: newItem.itemType,
               unit: newItem.unit || 'pcs',
-              min_stock: Math.max(0, parseInt(newItem.min_stock) || 0)
+              min_stock: Math.max(0, parseInt(newItem.min_stock, 10) || 0),
             })
             .select()
             .single();
 
           if (error) throw error;
 
-          await syncItemPortions(data.id, validPortions);
-          if (stock > 0) {
-            await supabase.from('inventory_transactions').insert({
+          await syncItemPortions(data.id, validPortions, hasPortions);
+
+          if (stockTotal > 0) {
+            const txBase = {
               item_id: data.id,
-              inventory_item_id: data.id,
-              quantity_change: stock,
+              quantity_change: stockTotal,
               transaction_type: 'restock',
-              notes: 'Initial stock'
+              notes: 'Initial stock',
+            };
+            const txWithInv = await supabase.from('inventory_transactions').insert({
+              ...txBase,
+              inventory_item_id: data.id,
             });
+            if (txWithInv.error && isMissingColumnInSchemaCache(txWithInv.error, 'inventory_item_id')) {
+              const txFallback = await supabase.from('inventory_transactions').insert(txBase);
+              if (txFallback.error) console.warn('Initial stock transaction failed:', txFallback.error.message);
+            } else if (txWithInv.error) {
+              console.warn('Initial stock transaction failed:', txWithInv.error.message);
+            }
           }
         } else {
           setItems((prev) => [
@@ -1162,26 +1243,27 @@ function InventoryContent() {
               id: `local-${Date.now()}`,
               name: newItem.name,
               price: basePrice,
-              cost_price: parseFloat(newItem.price),
+              cost_price: basePrice,
               inventory_category_id: newItem.inventory_category_id,
-              stock: parseInt(newItem.stock) || 0,
+              stock: stockTotal,
               image_url: '',
               type: newItem.itemType,
               unit: newItem.unit || 'pcs',
-              min_stock: Math.max(0, parseInt(newItem.min_stock) || 0),
-              created_at: new Date().toISOString()
+              min_stock: Math.max(0, parseInt(newItem.min_stock, 10) || 0),
+              created_at: new Date().toISOString(),
             },
-            ...prev
+            ...prev,
           ]);
         }
       }
 
       setIsDialogOpen(false);
       resetForm();
-      // Refresh list
-      setTimeout(fetchItemsAndCategoriesLocal, 500);
-    } catch (error) {
-      alert(t.failedSaveItem || 'Failed to save item. Please try again.');
+      await fetchItemsAndCategoriesLocal();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Save inventory item failed:', error);
+      alert(`${t.failedSaveItem || 'Failed to save item. Please try again.'}\n${message}`);
     } finally {
       setIsLoading(false);
     }
@@ -1689,8 +1771,8 @@ function InventoryContent() {
               </div>
               <DialogFooter className="pt-2 border-t border-zinc-100">
                 <Button
-                  type="submit"
-                  onClick={handleSaveItem}
+                  type="button"
+                  onClick={() => void handleSaveItem()}
                   disabled={isLoading}
                   className="w-full sm:w-auto h-12 rounded-xl text-sm font-bold bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-100"
                 >

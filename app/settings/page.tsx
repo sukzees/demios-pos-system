@@ -1,12 +1,19 @@
 'use client';
 
-import { ChangeEvent, useState, useEffect } from 'react';
+import { ChangeEvent, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 const TRANSLATIONS = {
   en: {
     settings: 'Settings',
@@ -20,6 +27,10 @@ const TRANSLATIONS = {
     licenseKey: 'License Key',
     generalSettings: 'General Settings',
     storeName: 'Store Name',
+    storeLogo: 'Store Logo',
+    uploadLogo: 'Upload Logo',
+    removeLogo: 'Remove',
+    logoHint: 'Shown at the top of the printed bill',
     taxRate: 'Default Tax Rate (%)',
     timezone: 'Timezone',
     language: 'Language',
@@ -183,6 +194,10 @@ const TRANSLATIONS = {
     licenseKey: 'ລະຫັດລິຂະສິດ',
     generalSettings: 'ການຕັ້ງຄ່າທົ່ວໄປ',
     storeName: 'ຊື່ຮ້ານ',
+    storeLogo: 'ໂລໂກ້ຮ້ານ',
+    uploadLogo: 'ອັບໂຫຼດໂລໂກ້',
+    removeLogo: 'ລຶບ',
+    logoHint: 'ສະແດງຢູ່ເທິງສຸດຂອງໃບບິນ',
     taxRate: 'ອັດຕາພາສີ (%)',
     timezone: 'ເຂດເວລາ',
     language: 'ພາສາ',
@@ -335,6 +350,10 @@ const TRANSLATIONS = {
     licenseKey: 'รหัสลิขสิทธิ์',
     generalSettings: 'การตั้งค่าทั่วไป',
     storeName: 'ชื่อร้าน',
+    storeLogo: 'โลโก้ร้าน',
+    uploadLogo: 'อัปโหลดโลโก้',
+    removeLogo: 'ลบ',
+    logoHint: 'แสดงที่ด้านบนของใบบิล',
     taxRate: 'อัตราภาษี (%)',
     timezone: 'เขตเวลา',
     language: 'ภาษา',
@@ -488,7 +507,7 @@ const TRANSLATIONS = {
   }
 };
 
-import { Save, Trash2, Plus, Printer, RefreshCw, Eye, Edit, Upload, X } from 'lucide-react';
+import { Save, Trash2, Plus, Printer, RefreshCw, Eye, Edit, Upload, X, Image as ImageIcon } from 'lucide-react';
 import { usePosStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { UpdateTab } from '@/components/settings/update-tab';
@@ -510,7 +529,6 @@ export default function SettingsPage() {
     printerConfigs,
     updatePrinterConfigs,
     categories,
-    items,
     fetchItemsAndCategories,
     fetchAppSettings,
     stationMappings,
@@ -530,31 +548,97 @@ export default function SettingsPage() {
 
   const currentLanguage = (generalSettings?.language || 'en') as 'en' | 'lo' | 'th';
   const t = TRANSLATIONS[currentLanguage] as Record<string, string>;
-  
-  // Fetch recipes for station mapping
-  const [recipes, setRecipes] = useState<any[]>([]);
-  
-  useEffect(() => {
-    const fetchRecipes = async () => {
-      if (!isSupabaseConfigured) return;
-      try {
-        const { data, error } = await supabase
-          .from('recipes')
-          .select('*')
-          .order('created_at', { ascending: false });
-        if (data) setRecipes(data);
-        if (error) console.error('Error fetching recipes:', error);
-      } catch (error) {
-        console.error('Error fetching recipes:', error);
+
+  type StationMenuItem = {
+    id: string;
+    name: string;
+    category_id: string | null;
+    itemSource: 'item' | 'recipe';
+  };
+
+  const [settingsTab, setSettingsTab] = useState('general');
+  const [stationMenuItems, setStationMenuItems] = useState<StationMenuItem[]>([]);
+  const [stationMenuCatalogReady, setStationMenuCatalogReady] = useState(false);
+
+  const stationMenuItemsByCategory = useMemo(() => {
+    const map = new Map<string, StationMenuItem[]>();
+    for (const item of stationMenuItems) {
+      const categoryId = String(item.category_id ?? '');
+      if (!categoryId) continue;
+      const list = map.get(categoryId) ?? [];
+      list.push(item);
+      map.set(categoryId, list);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return map;
+  }, [stationMenuItems]);
+
+  const resolveStationCategoryId = useCallback((categoryId: string) => {
+    if (categories.some((category) => String(category.id) === String(categoryId))) {
+      return String(categoryId);
+    }
+    return categories[0] ? String(categories[0].id) : '';
+  }, [categories]);
+
+  const loadStationMenuCatalog = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setStationMenuItems([]);
+      setStationMenuCatalogReady(true);
+      return;
+    }
+
+    setStationMenuCatalogReady(false);
+    try {
+      const [itemsRes, recipesRes] = await Promise.all([
+        supabase.from('items').select('id, name, category_id').not('category_id', 'is', null),
+        supabase.from('recipes').select('id, name, category_id').not('category_id', 'is', null).order('name'),
+      ]);
+
+      if (itemsRes.error) throw itemsRes.error;
+      if (recipesRes.error) throw recipesRes.error;
+
+      const merged = new Map<string, StationMenuItem>();
+      for (const row of itemsRes.data || []) {
+        merged.set(`item-${row.id}`, {
+          id: row.id,
+          name: String(row.name || ''),
+          category_id: row.category_id,
+          itemSource: 'item',
+        });
       }
-    };
-    fetchRecipes();
+      for (const row of recipesRes.data || []) {
+        merged.set(`recipe-${row.id}`, {
+          id: row.id,
+          name: String(row.name || ''),
+          category_id: row.category_id,
+          itemSource: 'recipe',
+        });
+      }
+
+      setStationMenuItems(
+        Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name))
+      );
+    } catch (error) {
+      console.error('Error loading menu catalog for station mapping:', error);
+      setStationMenuItems([]);
+    } finally {
+      setStationMenuCatalogReady(true);
+    }
   }, [isSupabaseConfigured]);
-  
-  // Combine items and recipes like in Items & Categories page
-  const menuItems = items.filter(item => item.is_recipe !== false);
-  const recipeItems = recipes.map(recipe => ({ ...recipe, is_recipe: true }));
-  const displayItems = [...menuItems, ...recipeItems];
+
+  useEffect(() => {
+    if (isSupabaseConfigured) {
+      void loadStationMenuCatalog();
+    }
+  }, [isSupabaseConfigured, loadStationMenuCatalog]);
+
+  useEffect(() => {
+    if (settingsTab === 'station' && isSupabaseConfigured) {
+      void loadStationMenuCatalog();
+    }
+  }, [settingsTab, isSupabaseConfigured, loadStationMenuCatalog]);
   
   const [headerText, setHeaderText] = useState(receiptSettings.headerText);
   const [footerText, setFooterText] = useState(receiptSettings.footerText);
@@ -573,6 +657,7 @@ export default function SettingsPage() {
 
   // General settings
   const [storeName, setStoreName] = useState(generalSettings.storeName);
+  const [storeLogo, setStoreLogo] = useState(generalSettings.storeLogo || '');
   const [taxRate, setTaxRate] = useState(generalSettings.taxRate);
   const [timezone, setTimezone] = useState(generalSettings.timezone);
   const [language, setLanguage] = useState<'en' | 'lo' | 'th'>(generalSettings.language || 'en');
@@ -614,6 +699,7 @@ export default function SettingsPage() {
   });
   const [editingPrinterId, setEditingPrinterId] = useState<string | null>(null);
   const [localStationMappings, setLocalStationMappings] = useState(stationMappings);
+  const stationMappingsDirtyRef = useRef(false);
   const [systemPrinters, setSystemPrinters] = useState<string[]>([]);
   const [selectedSystemPrinter, setSelectedSystemPrinter] = useState<string>('');
   const [localAutoPrint, setLocalAutoPrint] = useState(autoPrint ?? false);
@@ -632,6 +718,8 @@ export default function SettingsPage() {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [isSavingDatabase, setIsSavingDatabase] = useState(false);
   const [databaseMessage, setDatabaseMessage] = useState('');
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [backupMessage, setBackupMessage] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -699,6 +787,7 @@ export default function SettingsPage() {
     setKitchenBillSize(receiptSettings.kitchenBillSize || '80mm');
     setVoidBillSize(receiptSettings.voidBillSize || '80mm');
     setStoreName(generalSettings.storeName);
+    setStoreLogo(generalSettings.storeLogo || '');
     setTaxRate(generalSettings.taxRate);
     setTimezone(generalSettings.timezone);
     setLanguage(generalSettings.language || 'en');
@@ -711,7 +800,6 @@ export default function SettingsPage() {
     setLocalBanks(bankConfigs);
     setLocalUnits(unitConfigs || []);
     setLocalPrinters(printerConfigs);
-    setLocalStationMappings(stationMappings);
 
     if (licenseInfo) {
       setLicenseKey(serverLicenseKey || licenseInfo.key);
@@ -731,7 +819,61 @@ export default function SettingsPage() {
     }
     setLocalAutoPrint(autoPrint ?? false);
     setLocalSilentPrint(silentPrint ?? false);
-  }, [receiptSettings, currencySettings, generalSettings, bankConfigs, unitConfigs, printerConfigs, stationMappings, licenseInfo, autoPrint, silentPrint, serverLicenseKey]);
+  }, [receiptSettings, currencySettings, generalSettings, bankConfigs, unitConfigs, printerConfigs, licenseInfo, autoPrint, silentPrint, serverLicenseKey]);
+
+  // Sync station mappings from store only when user has not edited locally (avoid reset from license/settings polling)
+  useEffect(() => {
+    if (!stationMappingsDirtyRef.current) {
+      setLocalStationMappings(stationMappings);
+    }
+  }, [stationMappings]);
+
+  // Fix stale category ids so item dropdown filters match without manual category change
+  useEffect(() => {
+    if (settingsTab !== 'station' || categories.length === 0) return;
+
+    setLocalStationMappings((prev) => {
+      let changed = false;
+      const next = prev.map((mapping) => {
+        const matchedCategory = categories.find(
+          (category) => String(category.id) === String(mapping.categoryId)
+        );
+        if (matchedCategory) {
+          if (String(matchedCategory.id) !== String(mapping.categoryId)) {
+            changed = true;
+            return { ...mapping, categoryId: matchedCategory.id };
+          }
+          return mapping;
+        }
+        const fallbackId = categories[0]?.id;
+        if (!fallbackId) return mapping;
+        changed = true;
+        return { ...mapping, categoryId: fallbackId, selectedItemId: '*' };
+      });
+      return changed ? next : prev;
+    });
+  }, [settingsTab, categories]);
+
+  // Reset item selection when saved item no longer exists in its category
+  useEffect(() => {
+    if (!stationMenuCatalogReady || stationMenuItems.length === 0) return;
+
+    setLocalStationMappings((prev) => {
+      let changed = false;
+      const next = prev.map((mapping) => {
+        if (!mapping.selectedItemId || mapping.selectedItemId === '*') return mapping;
+        const categoryId = resolveStationCategoryId(mapping.categoryId);
+        const exists = stationMenuItems.some(
+          (item) => String(item.id) === String(mapping.selectedItemId)
+            && String(item.category_id) === categoryId
+        );
+        if (exists) return mapping;
+        changed = true;
+        return { ...mapping, selectedItemId: '*' };
+      });
+      return changed ? next : prev;
+    });
+  }, [stationMenuCatalogReady, stationMenuItems, resolveStationCategoryId]);
 
   useEffect(() => {
     if (isSupabaseConfigured) {
@@ -1001,15 +1143,63 @@ export default function SettingsPage() {
 
       if (data.success) {
         setDatabaseMessage(t.restartMessage);
-        alert(t.restartMessage);
       } else {
-        setDatabaseMessage(data.error || 'Failed to save database settings');
+        setDatabaseMessage('Failed to save settings: ' + (data.error || 'Unknown error'));
       }
     } catch (error: any) {
-      console.error('Failed to save database settings:', error);
-      setDatabaseMessage('An error occurred while saving: ' + (error.message || ''));
+      console.error('Save failed:', error);
+      setDatabaseMessage('Failed to save settings: ' + error.message);
     } finally {
       setIsSavingDatabase(false);
+    }
+  };
+
+  const handleBackupDatabase = async () => {
+    setIsBackingUp(true);
+    setBackupMessage('');
+
+    try {
+      const response = await fetch('/api/backup', {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create backup');
+      }
+
+      // Get the SQL content
+      const sqlContent = await response.text();
+      
+      // Create a blob and download it
+      const blob = new Blob([sqlContent], { type: 'application/sql' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      a.download = `pos-backup-${timestamp}.sql`;
+      
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      setBackupMessage(
+        currentLanguage === 'en' ? 'Backup downloaded successfully!' :
+        currentLanguage === 'lo' ? 'ດາວໂຫລດສຳຮອງສຳເລັດແລ້ວ!' :
+        'ดาวน์โหลดสำรองสำเร็จแล้ว!'
+      );
+    } catch (error: any) {
+      console.error('Backup failed:', error);
+      setBackupMessage(
+        currentLanguage === 'en' ? `Backup failed: ${error.message}` :
+        currentLanguage === 'lo' ? `ສຳຮອງບໍ່ສຳເລັດ: ${error.message}` :
+        `สำรองไม่สำเร็จ: ${error.message}`
+      );
+    } finally {
+      setIsBackingUp(false);
     }
   };
 
@@ -1226,9 +1416,45 @@ export default function SettingsPage() {
     alert(t.receiptSettingsSaved);
   };
 
+  const handleStoreLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const source = typeof reader.result === 'string' ? reader.result : '';
+      if (!source) return;
+
+      const img = document.createElement('img');
+      img.onload = () => {
+        const maxSize = 320;
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d');
+
+        if (!context) {
+          setStoreLogo(source);
+          return;
+        }
+
+        context.drawImage(img, 0, 0, width, height);
+        setStoreLogo(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => setStoreLogo(source);
+      img.src = source;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSaveGeneralSettings = () => {
     updateGeneralSettings({
       storeName,
+      storeLogo,
       taxRate,
       timezone,
       language
@@ -1616,6 +1842,7 @@ export default function SettingsPage() {
   };
 
   const handleAddStationMapping = () => {
+    stationMappingsDirtyRef.current = true;
     const defaultPrinterId = localPrinters.find(p => p.isDefault)?.id || localPrinters[0]?.id || '';
     const defaultCategoryId = categories[0]?.id || '';
 
@@ -1632,10 +1859,12 @@ export default function SettingsPage() {
   };
 
   const handleDeleteStationMapping = (mappingId: string) => {
+    stationMappingsDirtyRef.current = true;
     setLocalStationMappings((prev) => prev.filter((m) => m.id !== mappingId));
   };
 
   const updateStationRow = (mappingId: string, field: 'categoryId' | 'printerId' | 'selectedItemId', value: string) => {
+    stationMappingsDirtyRef.current = true;
     setLocalStationMappings((prev) => prev.map((row) => (
       row.id === mappingId
         ? {
@@ -1650,7 +1879,8 @@ export default function SettingsPage() {
 
   const handleSaveStationMappings = () => {
     updateStationMappings(localStationMappings);
-    alert(t.syncSuccess);
+    stationMappingsDirtyRef.current = false;
+    alert(t.stationMappingSaved);
   };
 
   const previewBank = localBanks.find((bank) => bank.enabledForTransfer) || localBanks[0] || null;
@@ -1661,7 +1891,7 @@ export default function SettingsPage() {
         <h2 className="text-3xl font-bold tracking-tight">{t.settings}</h2>
       </div>
 
-      <Tabs defaultValue="general" className="space-y-4">
+      <Tabs value={settingsTab} onValueChange={setSettingsTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="general">{t.generalSetting}</TabsTrigger>
           <TabsTrigger value="unit">{t.unitConfig}</TabsTrigger>
@@ -1706,6 +1936,38 @@ export default function SettingsPage() {
                     <option value="lo">ລາວ (Lao)</option>
                     <option value="th">ไทย (Thai)</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t.storeLogo}</Label>
+                <div className="flex items-center gap-4">
+                  <div className="relative h-20 w-20 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 flex items-center justify-center">
+                    {storeLogo ? (
+                      <Image src={storeLogo} alt="Store logo preview" fill sizes="80px" className="object-contain" unoptimized />
+                    ) : (
+                      <ImageIcon className="h-8 w-8 text-zinc-300" />
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50">
+                      <Upload className="h-4 w-4" />
+                      {t.uploadLogo}
+                      <Input type="file" accept="image/*" onChange={handleStoreLogoUpload} className="hidden" />
+                    </label>
+                    {storeLogo && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700"
+                        onClick={() => setStoreLogo('')}
+                      >
+                        {t.removeLogo}
+                      </Button>
+                    )}
+                    <span className="text-xs text-zinc-500">{t.logoHint}</span>
+                  </div>
                 </div>
               </div>
 
@@ -2382,6 +2644,11 @@ export default function SettingsPage() {
                 <div className="flex justify-center">
                   <div className="w-[360px] bg-zinc-50 p-6 border border-zinc-200 shadow-sm font-mono text-sm">
                     <div className="text-center mb-4">
+                      {storeLogo && (
+                        <div className="relative mx-auto mb-2 h-16 w-16">
+                          <Image src={storeLogo} alt="Store logo" fill sizes="64px" className="object-contain" unoptimized />
+                        </div>
+                      )}
                       <h3 className="font-bold text-lg mb-0.5">{storeName}</h3>
                       <div className="text-xs text-zinc-500 mb-0.5">{storeAddress}</div>
                       <div className="text-xs text-zinc-500 mb-0.5">{phoneNumber}</div>
@@ -2629,13 +2896,20 @@ export default function SettingsPage() {
                       </tr>
                     ) : (
                       localStationMappings.map((mapping) => {
-                        const categoryItems = displayItems.filter((item) => item.category_id === mapping.categoryId);
+                        const resolvedCategoryId = resolveStationCategoryId(mapping.categoryId);
+                        const categoryItems = stationMenuItemsByCategory.get(resolvedCategoryId) ?? [];
+                        const selectedItemId = mapping.selectedItemId || '*';
+                        const itemSelectValue = selectedItemId === '*'
+                          || categoryItems.some((item) => String(item.id) === String(selectedItemId))
+                          ? selectedItemId
+                          : '*';
+
                         return (
                           <tr key={mapping.id} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
                             <td className="p-3">
                               <select
                                 className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                value={mapping.categoryId}
+                                value={resolvedCategoryId}
                                 onChange={(e) => updateStationRow(mapping.id, 'categoryId', e.target.value)}
                               >
                                 {categories.length === 0 ? (
@@ -2650,19 +2924,29 @@ export default function SettingsPage() {
                               </select>
                             </td>
                             <td className="p-3">
-                              <select
-                                className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                value={mapping.selectedItemId || '*'}
-                                onChange={(e) => updateStationRow(mapping.id, 'selectedItemId', e.target.value)}
-                                disabled={!mapping.categoryId}
+                              <Select
+                                key={`station-items-${mapping.id}-${resolvedCategoryId}-${stationMenuItems.length}-${stationMenuCatalogReady}`}
+                                value={itemSelectValue}
+                                onValueChange={(value) => updateStationRow(mapping.id, 'selectedItemId', value)}
+                                disabled={!resolvedCategoryId || !stationMenuCatalogReady}
+                                onOpenChange={(open) => {
+                                  if (open && !stationMenuCatalogReady) {
+                                    void loadStationMenuCatalog();
+                                  }
+                                }}
                               >
-                                <option value="*">{t.allItems}</option>
-                                {categoryItems.map((item) => (
-                                  <option key={item.id} value={item.id}>
-                                    {item.name}
-                                  </option>
-                                ))}
-                              </select>
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder={stationMenuCatalogReady ? t.allItems : '...'} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="*">{t.allItems}</SelectItem>
+                                  {categoryItems.map((item) => (
+                                    <SelectItem key={`${item.itemSource}-${item.id}`} value={item.id}>
+                                      {item.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </td>
                             <td className="p-3">
                               <select
@@ -3033,6 +3317,51 @@ export default function SettingsPage() {
                     <Save className="h-4 w-4 mr-2" />
                     {isSavingDatabase ? t.saving : t.saveDatabaseSettings}
                   </Button>
+                </div>
+
+                {/* Backup Database Section */}
+                <div className="border-t pt-6 mt-6">
+                  <h3 className="text-lg font-semibold mb-4">
+                    {currentLanguage === 'en' && 'Database Backup'}
+                    {currentLanguage === 'lo' && 'ສຳຮອງຖານຂໍ້ມູນ'}
+                    {currentLanguage === 'th' && 'สำรองฐานข้อมูล'}
+                  </h3>
+                  <p className="text-sm text-zinc-600 mb-4">
+                    {currentLanguage === 'en' && 'Download a complete backup of your database as an SQL file. This includes all tables and data.'}
+                    {currentLanguage === 'lo' && 'ດາວໂຫລດການສຳຮອງຖານຂໍ້ມູນທັງໝົດເປັນໄຟລ໌ SQL ລວມທຸກຕາຕະລາງ ແລະ ຂໍ້ມູນ.'}
+                    {currentLanguage === 'th' && 'ดาวน์โหลดการสำรองฐานข้อมูลทั้งหมดเป็นไฟล์ SQL รวมทุกตารางและข้อมูล'}
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={handleBackupDatabase}
+                    disabled={isBackingUp}
+                    className="gap-2"
+                  >
+                    {isBackingUp ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        {currentLanguage === 'en' && 'Creating Backup...'}
+                        {currentLanguage === 'lo' && 'ກຳລັງສຳຮອງ...'}
+                        {currentLanguage === 'th' && 'กำลังสำรอง...'}
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        {currentLanguage === 'en' && 'Download Backup'}
+                        {currentLanguage === 'lo' && 'ດາວໂຫລດສຳຮອງ'}
+                        {currentLanguage === 'th' && 'ดาวน์โหลดสำรอง'}
+                      </>
+                    )}
+                  </Button>
+                  {backupMessage && (
+                    <div className={`mt-4 p-3 rounded-lg border ${
+                      backupMessage.includes('success') || backupMessage.includes('สำเร็จ') || backupMessage.includes('ສຳເລັດ')
+                        ? 'bg-green-50 border-green-200 text-green-800'
+                        : 'bg-red-50 border-red-200 text-red-800'
+                    }`}>
+                      <p className="text-sm">{backupMessage}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>

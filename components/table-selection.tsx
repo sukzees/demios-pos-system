@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ShoppingBag, Users, Grid3x3, X, Plus, PlayCircle, Clock } from 'lucide-react';
 import { supabase, Zone, Table } from '@/lib/supabase';
 import { usePosStore } from '@/lib/store';
+import { formatCurrency } from '@/lib/currency';
+import { KitchenQueueButton } from '@/components/kitchen-queue-panel';
 
 interface TableSelectionProps {
   onSelectTable: (table: Table | null, orderType: 'dine-in' | 'takeout') => void;
@@ -31,6 +33,7 @@ const TRANSLATIONS = {
     addNew: 'Add New',
     heldTakeoutOrders: 'Held Takeout Orders',
     noHeldTakeout: 'No held takeout orders',
+    orderNumber: 'Order #',
     resume: 'Resume',
     items: 'items',
     setAvailable: 'Set Available',
@@ -38,6 +41,9 @@ const TRANSLATIONS = {
     confirm: 'Confirm',
     cancel: 'Cancel',
     cannotSetAvailable: 'Cannot set table as available. There are items already sent to kitchen. Please complete checkout first.',
+    merged: 'Merged',
+    mergedWith: 'Merged with',
+    billPrinted: 'Bill printed',
   },
   lo: {
     selectOrderType: 'ເລືອກປະເພດການສັ່ງ',
@@ -55,6 +61,7 @@ const TRANSLATIONS = {
     addNew: 'ເພີ່ມໃໝ່',
     heldTakeoutOrders: 'ລາຍການກັບບ້ານທີ່ພັກໄວ້',
     noHeldTakeout: 'ບໍ່ມີລາຍການກັບບ້ານທີ່ພັກໄວ້',
+    orderNumber: 'ເລກທີ່ #',
     resume: 'ສືບຕໍ່',
     items: 'ລາຍການ',
     setAvailable: 'ຕັ້ງເປັນໂຕະວ່າງ',
@@ -62,6 +69,9 @@ const TRANSLATIONS = {
     confirm: 'ຢືນຢັນ',
     cancel: 'ຍົກເລີກ',
     cannotSetAvailable: 'ບໍ່ສາມາດຕັ້ງໂຕະເປັນວ່າງໄດ້. ມີລາຍການທີ່ສົ່ງໄປຄົວແລ້ວ. ກະລຸນາຊຳລະເງິນກ່ອນ.',
+    merged: 'ລວມໂຕະ',
+    mergedWith: 'ລວມກັບໂຕະ',
+    billPrinted: 'ພິມບິນແລ້ວ',
   },
   th: {
     selectOrderType: 'เลือกประเภทการสั่ง',
@@ -79,6 +89,7 @@ const TRANSLATIONS = {
     addNew: 'เพิ่มใหม่',
     heldTakeoutOrders: 'รายการกลับบ้านที่พักไว้',
     noHeldTakeout: 'ไม่มีรายการกลับบ้านที่พักไว้',
+    orderNumber: 'เลขที่ #',
     resume: 'ดำเนินการต่อ',
     items: 'รายการ',
     setAvailable: 'ตั้งเป็นโต๊ะว่าง',
@@ -86,11 +97,14 @@ const TRANSLATIONS = {
     confirm: 'ยืนยัน',
     cancel: 'ยกเลิก',
     cannotSetAvailable: 'ไม่สามารถตั้งโต๊ะเป็นว่างได้ มีรายการที่ส่งไปครัวแล้ว กรุณาชำระเงินก่อน',
+    merged: 'รวมโต๊ะ',
+    mergedWith: 'รวมโต๊ะกับ',
+    billPrinted: 'พิมพ์บิลแล้ว',
   }
 };
 
 export function TableSelection({ onSelectTable, onClose, canClose = true, onResumeOrder }: TableSelectionProps) {
-  const { generalSettings, heldOrders, resumeOrder, savedCarts } = usePosStore();
+  const { generalSettings, heldOrders, resumeOrder, savedCarts, currencySettings, tableBillPrinted, tablePostPrintKitchenSent, clearTableBillPrinted } = usePosStore();
   const currentLanguage = (generalSettings?.language || 'en') as 'en' | 'lo' | 'th';
   const t = TRANSLATIONS[currentLanguage];
 
@@ -114,14 +128,15 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
 
       if (zonesRes.data) setZones(zonesRes.data);
       if (tablesRes.data) {
-        // Check each table's cart to determine actual status
+        // Only treat a table as occupied from local cart when DB also shows it is in use.
+        // After checkout the DB is 'available' but savedCarts can still hold stale sent items (.exe/localStorage).
         const tablesWithActualStatus = tablesRes.data.map(table => {
           const cartKey = `table-${table.id}`;
           const tableCart = savedCarts[cartKey] || [];
           const hasSentItems = tableCart.some(item => item.sentToKitchen && !item.cancelled);
+          const dbInUse = table.status === 'occupied' || table.status === 'reserved' || !!table.current_order_id;
           
-          // If table has sent items, force status to occupied
-          if (hasSentItems && table.status === 'available') {
+          if (hasSentItems && dbInUse) {
             return { ...table, status: 'occupied' as const };
           }
           
@@ -129,18 +144,40 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
         });
         
         setTables(tablesWithActualStatus);
+
+        // Drop stale local carts for tables already released in DB (post-checkout residue)
+        const staleKeys = tablesRes.data
+          .filter(t => t.status === 'available' && !t.current_order_id)
+          .map(t => `table-${t.id}`)
+          .filter(k => (savedCarts[k] || []).length > 0);
+        if (staleKeys.length > 0) {
+          const cleaned = { ...savedCarts };
+          const cleanedBillPrinted = { ...tableBillPrinted };
+          const cleanedPostPrint = { ...tablePostPrintKitchenSent };
+          staleKeys.forEach(k => {
+            delete cleaned[k];
+            delete cleanedBillPrinted[k];
+            delete cleanedPostPrint[k];
+          });
+          usePosStore.setState({ savedCarts: cleaned, tableBillPrinted: cleanedBillPrinted, tablePostPrintKitchenSent: cleanedPostPrint });
+        }
       }
       
-      // Auto-select first zone
+      // Auto-select the first zone only on initial load. Keep the user's current
+      // selection on silent refreshes/realtime updates (otherwise switching zones
+      // would snap back to the first zone every poll).
       if (zonesRes.data && zonesRes.data.length > 0) {
-        setSelectedZone(zonesRes.data[0].id);
+        const zoneList = zonesRes.data;
+        setSelectedZone(prev =>
+          prev && zoneList.some(z => z.id === prev) ? prev : zoneList[0].id
+        );
       }
     } catch (error) {
       console.error('Error fetching zones and tables:', error);
     } finally {
       if (!silent) setIsLoading(false);
     }
-  }, [savedCarts]);
+  }, [savedCarts, tableBillPrinted, tablePostPrintKitchenSent]);
 
   useEffect(() => {
     fetchZonesAndTables();
@@ -188,7 +225,9 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
         .from('tables')
         .update({ 
           status: 'available',
-          current_order_id: null
+          current_order_id: null,
+          is_merged: false,
+          merged_tables: null
         })
         .eq('id', tableId);
 
@@ -197,6 +236,7 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
       const store = usePosStore.getState();
       const updatedSavedCarts = { ...store.savedCarts };
       delete updatedSavedCarts[cartKey];
+      clearTableBillPrinted(tableId);
       
       // Update store with cleared cart
       usePosStore.setState({ savedCarts: updatedSavedCarts });
@@ -232,6 +272,7 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
     switch (status) {
       case 'available': return t.available;
       case 'occupied': return t.occupied;
+      case 'bill-printed': return t.billPrinted;
       case 'reserved': return t.reserved;
       default: return status;
     }
@@ -241,14 +282,36 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
     switch (status) {
       case 'available': return 'bg-emerald-50 border-emerald-200 text-emerald-700';
       case 'occupied': return 'bg-red-50 border-red-200 text-red-700';
+      case 'bill-printed': return 'bg-yellow-50 border-yellow-200 text-yellow-800';
       case 'reserved': return 'bg-amber-50 border-amber-200 text-amber-700';
       default: return 'bg-zinc-50 border-zinc-200 text-zinc-700';
     }
   };
 
+  const getTableVisualStatus = (table: Table, tableCart: { sentToKitchen?: boolean; cancelled?: boolean }[]) => {
+    if (table.status !== 'occupied') return table.status;
+    const hasUnsentItems = tableCart.some(item => !item.sentToKitchen && !item.cancelled);
+    const hasActiveItems = tableCart.some(item => !item.cancelled);
+    const tableKey = `table-${table.id}`;
+    const billPrinted = tableBillPrinted[tableKey] === true;
+    const postPrintSent = tablePostPrintKitchenSent[tableKey] === true;
+    if (hasActiveItems && !hasUnsentItems && billPrinted && postPrintSent) return 'bill-printed';
+    return 'occupied';
+  };
+
+  // A source table is hidden while it is merged into a target that is still merged
+  // and that target still lists this table's number (robust against stale references).
+  const isMergedAway = (table: Table) => {
+    if (!table.merged_into) return false;
+    const target = tables.find(tt => tt.id === table.merged_into);
+    if (!target || !target.is_merged) return false;
+    const numbers = (target.merged_tables || '').split(',').map(s => s.trim());
+    return numbers.includes(table.table_number);
+  };
+
   const filteredTables = selectedZone
-    ? tables.filter(t => t.zone_id === selectedZone && t.status !== 'inactive')
-    : tables.filter(t => t.status !== 'inactive');
+    ? tables.filter(t => t.zone_id === selectedZone && t.status !== 'inactive' && !isMergedAway(t))
+    : tables.filter(t => t.status !== 'inactive' && !isMergedAway(t));
 
   return (
     <>
@@ -281,11 +344,14 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-zinc-200 bg-white">
           <h2 className="text-2xl font-bold text-zinc-900">{t.selectOrderType}</h2>
-          {canClose && (
-            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
-              <X className="h-5 w-5" />
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            <KitchenQueueButton />
+            {canClose && (
+              <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
+                <X className="h-5 w-5" />
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Tabs */}
@@ -347,12 +413,6 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {takeoutHeldOrders.map((order) => {
                       const totalAmount = order.cart.reduce((sum, item) => sum + (item.item.price * item.quantity), 0);
-                      const formatCurrency = (amount: number) => {
-                        return new Intl.NumberFormat('en-US', {
-                          style: 'currency',
-                          currency: 'USD'
-                        }).format(amount);
-                      };
 
                       return (
                         <Card 
@@ -369,9 +429,14 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
                         >
                           <CardHeader className="pb-3 bg-green-50">
                             <CardTitle className="text-lg flex items-center justify-between">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <ShoppingBag className="h-5 w-5 text-green-600" />
                                 <span className="text-green-900">{t.takeout}</span>
+                                {order.orderNumber != null && (
+                                  <span className="text-sm font-bold text-green-800 bg-green-100 px-2 py-0.5 rounded">
+                                    {t.orderNumber}{order.orderNumber}
+                                  </span>
+                                )}
                               </div>
                               <PlayCircle className="h-5 w-5 text-green-600" />
                             </CardTitle>
@@ -399,7 +464,7 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
                                       {item.quantity}x {item.item.name}
                                     </span>
                                     <span className="text-zinc-500 font-medium">
-                                      {formatCurrency(item.item.price * item.quantity)}
+                                      {formatCurrency(item.item.price * item.quantity, currencySettings)}
                                     </span>
                                   </div>
                                 ))}
@@ -414,7 +479,7 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
                               <div className="pt-3 border-t border-zinc-200 flex justify-between items-center">
                                 <span className="font-bold text-zinc-900">Total:</span>
                                 <span className="font-bold text-lg text-green-600">
-                                  {formatCurrency(totalAmount)}
+                                  {formatCurrency(totalAmount, currencySettings)}
                                 </span>
                               </div>
 
@@ -487,11 +552,12 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                       {filteredTables.map((table) => {
                         const isSelectable = table.status !== 'reserved' && table.status !== 'inactive';
+                        const cartKey = `table-${table.id}`;
+                        const tableCart = savedCarts[cartKey] || [];
+                        const visualStatus = getTableVisualStatus(table, tableCart);
                         const isOccupied = table.status === 'occupied';
                         
                         // Check if table has items sent to kitchen
-                        const cartKey = `table-${table.id}`;
-                        const tableCart = savedCarts[cartKey] || [];
                         const hasSentItems = tableCart.some(item => item.sentToKitchen && !item.cancelled);
                         
                         // กำหนดสี border ตามสถานะโต๊ะ
@@ -499,6 +565,7 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
                           switch (status) {
                             case 'available': return 'border-emerald-300';
                             case 'occupied': return 'border-red-300';
+                            case 'bill-printed': return 'border-yellow-400';
                             case 'reserved': return 'border-amber-300';
                             default: return 'border-zinc-200';
                           }
@@ -507,14 +574,22 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
                         return (
                           <Card
                             key={table.id}
-                            className={`cursor-pointer transition-all duration-200 border-2 ${getBorderColor(table.status)} ${
+                            className={`cursor-pointer transition-all duration-200 border-2 ${getBorderColor(visualStatus)} ${
                               isSelectable
                                 ? 'hover:shadow-lg hover:scale-105'
                                 : 'opacity-60 cursor-not-allowed'
                             }`}
                             onClick={() => handleTableSelect(table)}
                           >
-                            <CardHeader className={`pb-3 ${getStatusColor(table.status)}`}>
+                            <CardHeader className={`relative pb-3 ${getStatusColor(visualStatus)}`}>
+                              {table.is_merged && (
+                                <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-700 border border-orange-300">
+                                  <Users className="h-3 w-3" />
+                                  {table.merged_tables
+                                    ? `${t.mergedWith} ${table.merged_tables.split(',').join(', ')}`
+                                    : t.merged}
+                                </span>
+                              )}
                               <CardTitle className="text-2xl font-bold text-center">
                                 {table.table_number}
                               </CardTitle>
@@ -528,14 +603,16 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
                                 <div className="text-center">
                                   <span
                                     className={`px-2 py-1 rounded-full text-xs font-bold ${
-                                      table.status === 'available'
+                                      visualStatus === 'available'
                                         ? 'bg-emerald-100 text-emerald-700'
-                                        : table.status === 'occupied'
+                                        : visualStatus === 'occupied'
                                         ? 'bg-red-100 text-red-700'
+                                        : visualStatus === 'bill-printed'
+                                        ? 'bg-yellow-100 text-yellow-800'
                                         : 'bg-amber-100 text-amber-700'
                                     }`}
                                   >
-                                    {getStatusLabel(table.status)}
+                                    {getStatusLabel(visualStatus)}
                                   </span>
                                 </div>
                                 
