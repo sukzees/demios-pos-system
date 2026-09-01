@@ -231,6 +231,7 @@ const TRANSLATIONS = {
     bank: 'Bank',
     accountName: 'Account Name',
     accountNumber: 'Account Number',
+    bankTransferDetails: 'Bank Transfer Details',
     item: 'Item',
     qty: 'Qty',
     price: 'Price',
@@ -292,6 +293,7 @@ const TRANSLATIONS = {
     bank: 'ທະນາຄານ',
     accountName: 'ຊື່ບັນຊີ',
     accountNumber: 'ເລກບັນຊີ',
+    bankTransferDetails: 'ລາຍລະອຽດການໂອນເງິນ',
     item: 'ລາຍການ',
     qty: 'ຈຳນວນ',
     price: 'ລາຄາ',
@@ -353,6 +355,7 @@ const TRANSLATIONS = {
     bank: 'ธนาคาร',
     accountName: 'ชื่อบัญชี',
     accountNumber: 'เลขบัญชี',
+    bankTransferDetails: 'รายละเอียดการโอนเงิน',
     item: 'รายการ',
     qty: 'จำนวน',
     price: 'ราคา',
@@ -847,66 +850,58 @@ export default function OrderHistoryPage() {
     const isCash = order.payment_method === 'cash';
     const change = cashTendered !== null ? Math.max(0, cashTendered - totalAmount) : 0;
 
+    const receiptPaperSize = receiptSettings.receiptSize || '80mm';
+    const receiptPageWidth = receiptPaperSize === '80mm' ? '80mm' : '58mm';
+    const receiptBodyWidth = receiptPaperSize === '80mm' ? 576 : 384;
+    const fs = receiptPaperSize === '80mm' ? 1.7 : 1.2;
+    const headerFontSizeSetting = receiptSettings.headerFontSize || 18;
+    const totalFontSizeSetting = receiptSettings.totalFontSize || 18;
+    const bodyFontSizeSetting = receiptSettings.bodyFontSize || 12;
+    const fzHeader = (n: number) => Math.round((n || headerFontSizeSetting) * fs); // use custom header font size
+    const fzTotal = (n: number) => Math.round((n || totalFontSizeSetting) * fs); // use custom total font size
+    const fzBody = (n: number) => Math.round((n || bodyFontSizeSetting) * fs); // use custom body font size
+
     const cartItemsHtml = itemsToPrint.map((item: any) =>
       '<tr>' +
-      '<td style="padding: 2px 0; text-align: left; vertical-align: top;">' + escapeHtml(getOrderLineDisplayName(item)) + '</td>' +
-      '<td style="padding: 2px 0; text-align: center; vertical-align: top;">' + escapeHtml(item.quantity || 0) + '</td>' +
-      '<td style="padding: 2px 0; text-align: right; vertical-align: top;">' + formatCurrency(Number(item.price_at_time || 0), currencySettings) + '</td>' +
-      '<td style="padding: 2px 0; text-align: right; vertical-align: top;">' + formatCurrency(Number(item.price_at_time || 0) * Number(item.quantity || 0), currencySettings) + '</td>' +
+      '<td style="padding: ' + Math.round(4*fs) + 'px ' + Math.round(2*fs) + 'px; text-align: left; vertical-align: top;">' + escapeHtml(getOrderLineDisplayName(item)) + '</td>' +
+      '<td style="padding: ' + Math.round(4*fs) + 'px ' + Math.round(2*fs) + 'px; text-align: center; vertical-align: top;">' + escapeHtml(item.quantity || 0) + '</td>' +
+      '<td style="padding: ' + Math.round(4*fs) + 'px ' + Math.round(2*fs) + 'px; text-align: right; vertical-align: top;">' + formatCurrency(Number(item.price_at_time || 0), currencySettings) + '</td>' +
+      '<td style="padding: ' + Math.round(4*fs) + 'px ' + Math.round(2*fs) + 'px; text-align: right; vertical-align: top;">' + formatCurrency(Number(item.price_at_time || 0) * Number(item.quantity || 0), currencySettings) + '</td>' +
       '</tr>'
     ).join('');
     const noteHtml = order.notes
       ? '<div style="margin-top: 10px; border-top: 1px dotted #000; padding-top: 5px;">' +
-      '<span class="font-bold">Notes:</span><br>' +
+      '<span class="font-bold">' + t.orderNote + ':</span><br>' +
       '<span>' + escapeHtml(order.notes) + '</span>' +
       '</div>'
       : '';
     const paymentMethodHtml =
       '<div class="flex justify-between">' +
-      '<span>Payment Method</span>' +
+      '<span>' + t.paymentMethod + '</span>' +
       '<span>' + escapeHtml(paymentMethodLabel) + '</span>' +
       '</div>';
     const cashDetailsHtml = isCash
       ? '<div class="flex justify-between">' +
-      '<span>Cash Tendered</span>' +
+      '<span>' + t.cashTendered + '</span>' +
       '<span>' + formatCurrency(cashTendered ?? totalAmount, currencySettings) + '</span>' +
       '</div>' +
       '<div class="flex justify-between">' +
-      '<span>Change</span>' +
+      '<span>' + t.change + '</span>' +
       '<span>' + formatCurrency(change, currencySettings) + '</span>' +
       '</div>'
       : '';
     const transferDetailsHtml = showTransferInfo
       ? '<div style="margin-top: 8px; border-top: 1px dotted #000; padding-top: 6px;">' +
-      '<div class="font-bold" style="margin-bottom: 4px;">Bank Transfer Details</div>' +
-      '<div>Bank: ' + escapeHtml(bankForDisplay?.bankName || '-') + '</div>' +
-      '<div>Account Name: ' + escapeHtml(bankForDisplay?.accountName || '-') + '</div>' +
-      '<div>Account Number: ' + escapeHtml(bankForDisplay?.accountNumber || '-') + '</div>' +
+      '<div class="font-bold" style="margin-bottom: 4px;">' + t.bankTransferDetails + '</div>' +
+      '<div>' + t.bank + ': ' + escapeHtml(bankForDisplay?.bankName || '-') + '</div>' +
+      '<div>' + t.accountName + ': ' + escapeHtml(bankForDisplay?.accountName || '-') + '</div>' +
+      '<div>' + t.accountNumber + ': ' + escapeHtml(bankForDisplay?.accountNumber || '-') + '</div>' +
       '</div>'
       : '';
-    const receiptPaperSize = receiptSettings.receiptSize || '80mm';
-    const receiptPageWidth = receiptPaperSize === '80mm' ? '80mm' : '58mm';
-    const receiptBodyWidth = receiptPaperSize === '80mm' ? 576 : 384;
-    const fs = receiptPaperSize === '80mm' ? 1.7 : 1.2;
-    // Use custom font sizes from settings, with fallback to defaults
-    const headerFontSizeSetting = receiptSettings.headerFontSize || 18;
-    const totalFontSizeSetting = receiptSettings.totalFontSize || 18;
-    const bodyFontSizeSetting = receiptSettings.bodyFontSize || 12;
-    const fz = (n: number, type: 'header' | 'total' | 'body' = 'body') => {
-      // Apply specific font size based on element type
-      if (type === 'header') {
-        return Math.round(headerFontSizeSetting * fs / 18);
-      }
-      if (type === 'total') {
-        return Math.round(totalFontSizeSetting * fs / 18);
-      }
-      // Default to body font size for other elements
-      return Math.round(bodyFontSizeSetting * fs / 12);
-    };
 
     const transferQrHtml = (receiptSettings.showQrCode !== false) && bankQrCodeImage
       ? '<div style="text-align:center; margin-top: ' + Math.round(12*fs) + 'px; padding-top: ' + Math.round(10*fs) + 'px; border-top: 1px dotted #000;">' +
-      '<div class="font-bold" style="font-size: ' + fz(14) + 'px; margin-bottom: ' + Math.round(4*fs) + 'px;">Scan to Pay</div>' +
+      '<div class="font-bold" style="font-size: ' + fzBody(14) + 'px; margin-bottom: ' + Math.round(4*fs) + 'px;">Scan to Pay</div>' +
       '</div>'
       : '';
 
@@ -932,47 +927,53 @@ export default function OrderHistoryPage() {
       '<meta charset="UTF-8">' +
       '<style>' +
       "@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;700&family=Noto+Sans+Lao:wght@400;500;700&display=swap');" +
-      `@page { size: ${receiptPageWidth} auto; margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }` +
-      "* { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; }" +
-      "body { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; padding: " + Math.round(8*fs) + "px; width: " + receiptBodyWidth + "px; max-width: " + receiptBodyWidth + "px; margin: 0 auto; color: #000; box-sizing: border-box; overflow-x: hidden; }" +
+      `@page { size: ${receiptPageWidth} auto; margin: 3mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }` +
+      "* { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; box-sizing: border-box; }" +
+      "body { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; padding: " + Math.round(12*fs) + "px; width: 100%; max-width: 100%; margin: 0 auto; color: #000; box-sizing: border-box; overflow-x: hidden; word-wrap: break-word; }" +
       '.text-center { text-align: center; }' +
       '.mb-4 { margin-bottom: ' + Math.round(16*fs) + 'px; }' +
       '.mt-6 { margin-top: ' + Math.round(24*fs) + 'px; }' +
-      '.text-xs { font-size: ' + fz(12) + 'px; }' +
-      '.text-sm { font-size: ' + fz(14) + 'px; }' +
+      '.text-xs { font-size: ' + fzBody(10) + 'px; }' +
+      '.text-sm { font-size: ' + fzBody(12) + 'px; }' +
       '.font-bold { font-weight: bold; }' +
       '.flex { display: flex; justify-content: space-between; }' +
-      '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: ' + Math.round(10*fs) + 'px 0; margin: ' + Math.round(10*fs) + 'px 0; }' +
-      '.space-y-1 > div { margin-bottom: ' + Math.round(4*fs) + 'px; }' +
-      "table { width: 100%; border-collapse: collapse; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; table-layout: fixed; }" +
-      "th, td { font-size: " + fz(12) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; white-space: normal; vertical-align: top; padding: 3px 2px; line-height: 1.3; }" +
-      "th:first-child, td:first-child { width: 40%; text-align: left; }" +
-      "th:nth-child(2), td:nth-child(2) { width: 12%; text-align: center; }" +
-      "th:nth-child(3), td:nth-child(3) { width: 24%; text-align: right; }" +
-      "th:last-child, td:last-child { width: 24%; text-align: right; }" +
-      "h1, h2, h3, h4, h5, h6, p, div, span { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; }" +
-      '@media print { body { width: ' + receiptBodyWidth + 'px !important; max-width: ' + receiptBodyWidth + 'px !important; } }' +
+      '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: ' + Math.round(12*fs) + 'px 0; margin: ' + Math.round(12*fs) + 'px 0; }' +
+      '.space-y-1 > div { margin-bottom: ' + Math.round(6*fs) + 'px; }' +
+      "table { width: 100%; border-collapse: collapse; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; table-layout: fixed; max-width: 100%; }" +
+      "th, td { font-size: " + fzBody(bodyFontSizeSetting) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; white-space: normal; padding: " + Math.round(4*fs) + "px " + Math.round(3*fs) + "px; line-height: 1.4; vertical-align: top; }" +
+      (receiptPaperSize === '80mm' 
+        ? "th:nth-child(1), td:nth-child(1) { width: 40%; text-align: left; }" +
+          "th:nth-child(2), td:nth-child(2) { width: 12%; text-align: center; }" +
+          "th:nth-child(3), td:nth-child(3) { width: 24%; text-align: right; }" +
+          "th:nth-child(4), td:nth-child(4) { width: 24%; text-align: right; }"
+        : "th:nth-child(1), td:nth-child(1) { width: 40%; text-align: left; }" +
+          "th:nth-child(2), td:nth-child(2) { width: 12%; text-align: center; }" +
+          "th:nth-child(3), td:nth-child(3) { width: 24%; text-align: right; }" +
+          "th:nth-child(4), td:nth-child(4) { width: 24%; text-align: right; }"
+      ) +
+      "h1, h2, h3, h4, h5, h6, p, div, span { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; max-width: 100%; }" +
+      '@media print { @page { size: ' + receiptPageWidth + ' auto; margin: 3mm; } body { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; overflow-x: hidden; } table { width: 100% !important; max-width: 100% !important; } img { max-width: 100% !important; height: auto !important; } }' +
       '</style>' +
       '</head>' +
-      '<body>' +
-      '<div class="text-center mb-4">' +
-      '<h3 class="font-bold" style="margin:0 0 ' + Math.round(2*fs) + 'px 0; font-size: ' + fz(18, 'header') + 'px; line-height: 1.2;">' + escapeHtml(generalSettings.storeName || '') + '</h3>' +
-      (receiptSettings.storeAddress ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px; line-height: 1.3;">' + escapeHtml(receiptSettings.storeAddress) + '</div>' : '') +
-      (receiptSettings.phoneNumber ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px; line-height: 1.3;">' + escapeHtml(receiptSettings.phoneNumber) + '</div>' : '') +
-      (receiptSettings.headerText ? '<div class="text-xs mt-2" style="line-height: 1.3;">' + escapeHtml(receiptSettings.headerText) + '</div>' : '') +
+      '<body style="width: ' + receiptBodyWidth + 'px; max-width: ' + receiptBodyWidth + 'px;">' +
+      '<div class="text-center mb-4" style="max-width: 100%; overflow-x: hidden; width: 100%;">' +
+      '<h3 class="font-bold" style="margin:0 0 ' + Math.round(2*fs) + 'px 0; font-size: ' + fzHeader(headerFontSizeSetting) + 'px; word-wrap: break-word;">' + escapeHtml(generalSettings.storeName || '') + '</h3>' +
+      (receiptSettings.storeAddress ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px; word-wrap: break-word;">' + escapeHtml(receiptSettings.storeAddress) + '</div>' : '') +
+      (receiptSettings.phoneNumber ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px; word-wrap: break-word;">' + escapeHtml(receiptSettings.phoneNumber) + '</div>' : '') +
+      (receiptSettings.headerText ? '<div class="text-xs mt-2" style="word-wrap: break-word;">' + escapeHtml(receiptSettings.headerText) + '</div>' : '') +
       '</div>' +
       '<div class="text-xs mb-4">' +
-      'Date: ' + escapeHtml(format(new Date(order.created_at), 'MMM dd, yyyy HH:mm')) +
-      (receiptSettings.showTableNumber !== false && (order as any).table ? '<br/>Table: ' + escapeHtml((order as any).table.table_number) : '') +
+      t.date + ': ' + escapeHtml(format(new Date(order.created_at), 'MMM dd, yyyy HH:mm')) +
+      (receiptSettings.showTableNumber !== false && (order as any).table ? '<br/>' + t.table + ': ' + escapeHtml((order as any).table.table_number) : '') +
       '</div>' +
       '<div class="border-y text-xs">' +
       '<table>' +
       '<thead>' +
       '<tr>' +
-      '<th style="text-align:left; padding-bottom: ' + Math.round(4*fs) + 'px;">Item</th>' +
-      '<th style="text-align:center; padding-bottom: ' + Math.round(4*fs) + 'px;">Unit</th>' +
-      '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">Price</th>' +
-      '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">Total</th>' +
+      '<th style="text-align:left; padding-bottom: ' + Math.round(6*fs) + 'px;">' + t.item + '</th>' +
+      '<th style="text-align:center; padding-bottom: ' + Math.round(6*fs) + 'px;">' + t.qty + '</th>' +
+      '<th style="text-align:right; padding-bottom: ' + Math.round(6*fs) + 'px;">' + t.price + '</th>' +
+      '<th style="text-align:right; padding-bottom: ' + Math.round(6*fs) + 'px;">' + t.total + '</th>' +
       '</tr>' +
       '</thead>' +
       '<tbody>' +
@@ -982,11 +983,11 @@ export default function OrderHistoryPage() {
       '</div>' +
       '<div class="space-y-1 text-xs mb-4">' +
       '<div class="flex justify-between">' +
-      '<span>Subtotal</span>' +
+      '<span>' + t.subtotal + '</span>' +
       '<span>' + formatCurrency(subtotal, currencySettings) + '</span>' +
       '</div>' +
       '<div class="flex justify-between">' +
-      '<span>Tax</span>' +
+      '<span>' + t.tax + '</span>' +
       '<span>' + formatCurrency(tax, currencySettings) + '</span>' +
       '</div>' +
       paymentMethodHtml +
@@ -996,17 +997,17 @@ export default function OrderHistoryPage() {
       '</div>' +
       '<div style="text-align: center; margin-top: ' + Math.round(10*fs) + 'px; border-top: 1px dashed #000; padding-top: ' + Math.round(10*fs) + 'px;">' +
       '<div style="display: flex; justify-content: center; align-items: center; gap: ' + Math.round(10*fs) + 'px; margin-bottom: ' + Math.round(12*fs) + 'px;">' +
-      '<div style="font-weight: bold; font-size: ' + fz(16, 'header') + 'px;">TOTAL</div>' +
-      '<div style="font-weight: bold; font-size: ' + fz(24, 'total') + 'px;">' + formatCurrency(totalAmount, currencySettings) + '</div>' +
+      '<div style="font-weight: bold; font-size: ' + fzTotal(totalFontSizeSetting) + 'px;">' + t.total.toUpperCase() + '</div>' +
+      '<div style="font-weight: bold; font-size: ' + fzTotal(totalFontSizeSetting) + 'px;">' + formatCurrency(totalAmount, currencySettings) + '</div>' +
       '</div>' +
       '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: ' + Math.round(10*fs) + 'px; text-align: center;">' +
       '<div>' +
-      '<div style="font-size: ' + fz(13) + 'px; color: #666;">THB</div>' +
-      '<div style="font-weight: bold; font-size: ' + fz(20, 'total') + 'px;">฿' + (totalAmount / ((currencySettings as any).thbRate || 36.5)).toFixed(2) + '</div>' +
+      '<div style="font-size: ' + fzTotal(totalFontSizeSetting * 0.7) + 'px; color: #666;">THB</div>' +
+      '<div style="font-weight: bold; font-size: ' + fzTotal(totalFontSizeSetting) + 'px;">฿' + Math.round(totalAmount / ((currencySettings as any).thbRate || 36.5)).toLocaleString('en-US') + '</div>' +
       '</div>' +
       '<div>' +
-      '<div style="font-size: ' + fz(13) + 'px; color: #666;">USD</div>' +
-      '<div style="font-weight: bold; font-size: ' + fz(20, 'total') + 'px;">$' + (totalAmount / ((currencySettings as any).currencyRate || 1)).toFixed(2) + '</div>' +
+      '<div style="font-size: ' + fzTotal(totalFontSizeSetting * 0.7) + 'px; color: #666;">USD</div>' +
+      '<div style="font-weight: bold; font-size: ' + fzTotal(totalFontSizeSetting) + 'px;">$' + (totalAmount / ((currencySettings as any).currencyRate || 1)).toFixed(2) + '</div>' +
       '</div>' +
       '</div>' +
       '</div>' +
@@ -1198,8 +1199,17 @@ export default function OrderHistoryPage() {
     return text;
   };
 
-  const handleExportCsv = () => {
-    const hasNotes = filteredOrders.some((order) => {
+  const handleExportCsv = async () => {
+    // Use selected orders if any, otherwise use all filtered orders
+    const ordersToExport = selectedOrderIds.size > 0 
+      ? filteredOrders.filter(order => selectedOrderIds.has(order.id))
+      : filteredOrders;
+    
+    if (ordersToExport.length === 0) {
+      return; // No orders to export
+    }
+    
+    const hasNotes = ordersToExport.some((order) => {
       const notes = (order as any).notes || '';
       return typeof notes === 'string' && notes.trim() !== '';
     });
@@ -1212,6 +1222,9 @@ export default function OrderHistoryPage() {
       t.paymentMethod,
       t.orderType,
       t.table,
+      t.item,
+      t.qty,
+      t.price,
       t.total,
     ];
     
@@ -1221,25 +1234,93 @@ export default function OrderHistoryPage() {
     
     rows.push(headerRow.map(escapeCsvCell).join(','));
 
-    for (const order of filteredOrders) {
+    // Fetch order items for all orders
+    for (const order of ordersToExport) {
       const tableNumber = (order as any).table?.table_number || '-';
       const orderNotes = (order as any).notes || '';
       
-      const dataRow: string[] = [
-        order.id,
-        format(new Date(order.created_at), 'yyyy-MM-dd HH:mm:ss'),
-        order.status,
-        formatPaymentMethodLabel(order.payment_method),
-        (order as any).order_type || 'dine-in',
-        tableNumber,
-        Number(order.total_amount || 0).toFixed(2),
-      ];
+      let orderItems: any[] = [];
       
-      if (hasNotes) {
-        dataRow.push(typeof orderNotes === 'string' ? orderNotes : '');
+      if (isSupabaseConfigured) {
+        try {
+          // Try to fetch order items with item details
+          let { data, error } = await supabase
+            .from('order_items')
+            .select('*, item:items(*)')
+            .eq('order_id', order.id)
+            .order('created_at', { ascending: true });
+          
+          if (error) {
+            // Fallback: fetch without item relation
+            const fallback = await supabase
+              .from('order_items')
+              .select('*')
+              .eq('order_id', order.id)
+              .order('created_at', { ascending: true });
+            
+            if (!fallback.error) {
+              data = fallback.data;
+            }
+          }
+          
+          if (data && data.length > 0) {
+            orderItems = data.filter((item: any) => 
+              isDisplayableOrderItem(item) && !isCancelledKitchenItem(item)
+            );
+          }
+        } catch (error) {
+          console.error('Error fetching items for export:', error);
+        }
       }
       
-      rows.push(dataRow.map(escapeCsvCell).join(','));
+      // If order has items, create one row per item
+      if (orderItems.length > 0) {
+        for (const item of orderItems) {
+          const itemName = getOrderLineDisplayName(item);
+          const quantity = item.quantity || 0;
+          const price = Number(item.price_at_time || 0);
+          const itemTotal = price * quantity;
+          
+          const dataRow: string[] = [
+            order.id,
+            format(new Date(order.created_at), 'yyyy-MM-dd HH:mm:ss'),
+            order.status,
+            formatPaymentMethodLabel(order.payment_method),
+            (order as any).order_type || 'dine-in',
+            tableNumber,
+            itemName,
+            String(quantity),
+            price.toFixed(2),
+            itemTotal.toFixed(2),
+          ];
+          
+          if (hasNotes) {
+            dataRow.push(typeof orderNotes === 'string' ? orderNotes : '');
+          }
+          
+          rows.push(dataRow.map(escapeCsvCell).join(','));
+        }
+      } else {
+        // If no items found, create one row with order totals
+        const dataRow: string[] = [
+          order.id,
+          format(new Date(order.created_at), 'yyyy-MM-dd HH:mm:ss'),
+          order.status,
+          formatPaymentMethodLabel(order.payment_method),
+          (order as any).order_type || 'dine-in',
+          tableNumber,
+          '-',
+          '-',
+          '-',
+          Number(order.total_amount || 0).toFixed(2),
+        ];
+        
+        if (hasNotes) {
+          dataRow.push(typeof orderNotes === 'string' ? orderNotes : '');
+        }
+        
+        rows.push(dataRow.map(escapeCsvCell).join(','));
+      }
     }
 
     const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -1265,6 +1346,7 @@ export default function OrderHistoryPage() {
         >
           <Download className="h-4 w-4" />
           {t.exportCsv}
+          {selectedOrderIds.size > 0 && ` (${selectedOrderIds.size})`}
         </Button>
       </div>
 
