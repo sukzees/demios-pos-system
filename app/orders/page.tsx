@@ -849,10 +849,10 @@ export default function OrderHistoryPage() {
 
     const cartItemsHtml = itemsToPrint.map((item: any) =>
       '<tr>' +
-      '<td style="padding: 2px 0; text-align: left;">' + escapeHtml(getOrderLineDisplayName(item)) + '</td>' +
-      '<td style="padding: 2px 0; text-align: right;">' + escapeHtml(item.quantity || 0) + '</td>' +
-      '<td style="padding: 2px 0; text-align: right;">' + formatCurrency(Number(item.price_at_time || 0), currencySettings) + '</td>' +
-      '<td style="padding: 2px 0; text-align: right;">' + formatCurrency(Number(item.price_at_time || 0) * Number(item.quantity || 0), currencySettings) + '</td>' +
+      '<td style="padding: 2px 0; text-align: left; vertical-align: top;">' + escapeHtml(getOrderLineDisplayName(item)) + '</td>' +
+      '<td style="padding: 2px 0; text-align: right; vertical-align: top;">' + escapeHtml(item.quantity || 0) + '</td>' +
+      '<td style="padding: 2px 0; text-align: right; vertical-align: top;">' + formatCurrency(Number(item.price_at_time || 0), currencySettings) + '</td>' +
+      '<td style="padding: 2px 0; text-align: right; vertical-align: top;">' + formatCurrency(Number(item.price_at_time || 0) * Number(item.quantity || 0), currencySettings) + '</td>' +
       '</tr>'
     ).join('');
     const noteHtml = order.notes
@@ -888,7 +888,19 @@ export default function OrderHistoryPage() {
     const receiptPageWidth = receiptPaperSize === '80mm' ? '80mm' : '58mm';
     const receiptBodyWidth = receiptPaperSize === '80mm' ? 576 : 384;
     const fs = receiptPaperSize === '80mm' ? 1.7 : 1.2;
-    const fz = (n: number) => Math.round(n * fs) + 2; // font-size helper: scale + 2px
+    // Use custom font sizes from settings, with fallback to defaults
+    const titleFontSizeSetting = receiptSettings.titleFontSize || 18;
+    const bodyFontSizeSetting = receiptSettings.bodyFontSize || 12;
+    const fz = (n: number) => {
+      // For title elements (header, total), use titleFontSize setting
+      // For body elements (items, general text), use bodyFontSize setting
+      if (n === 18 || n === 24 || n === 20 || n === 16) {
+        // These are typically used for titles/headers/totals
+        return Math.round(titleFontSizeSetting * fs / 18) + 2;
+      }
+      // Default to body font size for other elements
+      return Math.round(bodyFontSizeSetting * fs / 12) + 2;
+    };
 
     const transferQrHtml = (receiptSettings.showQrCode !== false) && bankQrCodeImage
       ? '<div style="text-align:center; margin-top: ' + Math.round(12*fs) + 'px; padding-top: ' + Math.round(10*fs) + 'px; border-top: 1px dotted #000;">' +
@@ -931,17 +943,17 @@ export default function OrderHistoryPage() {
       '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: ' + Math.round(10*fs) + 'px 0; margin: ' + Math.round(10*fs) + 'px 0; }' +
       '.space-y-1 > div { margin-bottom: ' + Math.round(4*fs) + 'px; }' +
       "table { width: 100%; border-collapse: collapse; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; table-layout: fixed; }" +
-      "th, td { font-size: " + fz(12) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; }" +
+      "th, td { font-size: " + fz(12) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; white-space: normal; }" +
       "h1, h2, h3, h4, h5, h6, p, div, span { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; }" +
       '@media print { body { width: ' + receiptBodyWidth + 'px !important; max-width: ' + receiptBodyWidth + 'px !important; } }' +
       '</style>' +
       '</head>' +
       '<body>' +
       '<div class="text-center mb-4">' +
-      '<h3 class="font-bold" style="margin:0 0 ' + Math.round(2*fs) + 'px 0; font-size: ' + fz(18) + 'px;">' + escapeHtml(generalSettings.storeName || '') + '</h3>' +
-      (receiptSettings.storeAddress ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px;">' + escapeHtml(receiptSettings.storeAddress) + '</div>' : '') +
-      (receiptSettings.phoneNumber ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px;">' + escapeHtml(receiptSettings.phoneNumber) + '</div>' : '') +
-      (receiptSettings.headerText ? '<div class="text-xs mt-2">' + escapeHtml(receiptSettings.headerText) + '</div>' : '') +
+      '<h3 class="font-bold" style="margin:0 0 ' + Math.round(2*fs) + 'px 0; font-size: ' + fz(18) + 'px; line-height: 1.2;">' + escapeHtml(generalSettings.storeName || '') + '</h3>' +
+      (receiptSettings.storeAddress ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px; line-height: 1.3;">' + escapeHtml(receiptSettings.storeAddress) + '</div>' : '') +
+      (receiptSettings.phoneNumber ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px; line-height: 1.3;">' + escapeHtml(receiptSettings.phoneNumber) + '</div>' : '') +
+      (receiptSettings.headerText ? '<div class="text-xs mt-2" style="line-height: 1.3;">' + escapeHtml(receiptSettings.headerText) + '</div>' : '') +
       '</div>' +
       '<div class="text-xs mb-4">' +
       'Date: ' + escapeHtml(format(new Date(order.created_at), 'MMM dd, yyyy HH:mm')) +

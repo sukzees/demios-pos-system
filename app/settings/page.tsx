@@ -2641,33 +2641,32 @@ export default function SettingsPage() {
                     </label>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="title-font-size">Title Font Size</Label>
-                    <select
+                    <Label htmlFor="title-font-size">Title Font Size (for Header & Total)</Label>
+                    <Input
                       id="title-font-size"
+                      type="number"
+                      min="8"
+                      max="48"
                       value={titleFontSize}
                       onChange={(e) => setTitleFontSize(Number(e.target.value))}
-                      className="w-full p-2 border rounded-md"
-                    >
-                      <option value={14}>14px (Small)</option>
-                      <option value={16}>16px (Medium)</option>
-                      <option value={18}>18px (Large)</option>
-                      <option value={20}>20px (Extra Large)</option>
-                      <option value={24}>24px (XXL)</option>
-                    </select>
+                      className="w-full"
+                      placeholder="e.g. 18"
+                    />
+                    <p className="text-xs text-zinc-500">Font size for header text and total amount (8-48px)</p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="body-font-size">Body Font Size</Label>
-                    <select
+                    <Input
                       id="body-font-size"
+                      type="number"
+                      min="6"
+                      max="32"
                       value={bodyFontSize}
                       onChange={(e) => setBodyFontSize(Number(e.target.value))}
-                      className="w-full p-2 border rounded-md"
-                    >
-                      <option value={10}>10px (Small)</option>
-                      <option value={12}>12px (Medium)</option>
-                      <option value={14}>14px (Large)</option>
-                      <option value={16}>16px (Extra Large)</option>
-                    </select>
+                      className="w-full"
+                      placeholder="e.g. 12"
+                    />
+                    <p className="text-xs text-zinc-500">Font size for general text items (6-32px)</p>
                   </div>
                   <Button className="mt-4 gap-2" onClick={handleSaveReceiptSettings}>
                     <Save className="h-4 w-4" />
