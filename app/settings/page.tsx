@@ -654,7 +654,8 @@ export default function SettingsPage() {
   const [localVoidBillPrinter, setLocalVoidBillPrinter] = useState(receiptSettings.voidBillPrinter || '');
   const [kitchenBillSize, setKitchenBillSize] = useState(receiptSettings.kitchenBillSize || '80mm');
   const [voidBillSize, setVoidBillSize] = useState(receiptSettings.voidBillSize || '80mm');
-  const [titleFontSize, setTitleFontSize] = useState(receiptSettings.titleFontSize || 18);
+  const [headerFontSize, setHeaderFontSize] = useState(receiptSettings.headerFontSize || 18);
+  const [totalFontSize, setTotalFontSize] = useState(receiptSettings.totalFontSize || 18);
   const [bodyFontSize, setBodyFontSize] = useState(receiptSettings.bodyFontSize || 12);
 
   // General settings
@@ -788,7 +789,8 @@ export default function SettingsPage() {
     setLocalVoidBillPrinter(receiptSettings.voidBillPrinter || '');
     setKitchenBillSize(receiptSettings.kitchenBillSize || '80mm');
     setVoidBillSize(receiptSettings.voidBillSize || '80mm');
-    setTitleFontSize(receiptSettings.titleFontSize || 18);
+    setHeaderFontSize(receiptSettings.headerFontSize || 18);
+    setTotalFontSize(receiptSettings.totalFontSize || 18);
     setBodyFontSize(receiptSettings.bodyFontSize || 12);
     setStoreName(generalSettings.storeName);
     setStoreLogo(generalSettings.storeLogo || '');
@@ -1416,7 +1418,8 @@ export default function SettingsPage() {
       voidBillPrinter: localVoidBillPrinter,
       kitchenBillSize: kitchenBillSize as '58mm' | '80mm',
       voidBillSize: voidBillSize as '58mm' | '80mm',
-      titleFontSize,
+      headerFontSize,
+      totalFontSize,
       bodyFontSize
     });
     alert(t.receiptSettingsSaved);
@@ -2641,18 +2644,32 @@ export default function SettingsPage() {
                     </label>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="title-font-size">Title Font Size (for Header & Total)</Label>
+                    <Label htmlFor="header-font-size">Header Font Size</Label>
                     <Input
-                      id="title-font-size"
+                      id="header-font-size"
                       type="number"
                       min="8"
                       max="48"
-                      value={titleFontSize}
-                      onChange={(e) => setTitleFontSize(Number(e.target.value))}
+                      value={headerFontSize}
+                      onChange={(e) => setHeaderFontSize(Number(e.target.value))}
                       className="w-full"
                       placeholder="e.g. 18"
                     />
-                    <p className="text-xs text-zinc-500">Font size for header text and total amount (8-48px)</p>
+                    <p className="text-xs text-zinc-500">Font size for header text (8-48px)</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="total-font-size">Total Font Size</Label>
+                    <Input
+                      id="total-font-size"
+                      type="number"
+                      min="8"
+                      max="48"
+                      value={totalFontSize}
+                      onChange={(e) => setTotalFontSize(Number(e.target.value))}
+                      className="w-full"
+                      placeholder="e.g. 18"
+                    />
+                    <p className="text-xs text-zinc-500">Font size for total amount (8-48px)</p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="body-font-size">Body Font Size</Label>

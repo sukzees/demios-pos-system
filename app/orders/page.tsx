@@ -889,14 +889,16 @@ export default function OrderHistoryPage() {
     const receiptBodyWidth = receiptPaperSize === '80mm' ? 576 : 384;
     const fs = receiptPaperSize === '80mm' ? 1.7 : 1.2;
     // Use custom font sizes from settings, with fallback to defaults
-    const titleFontSizeSetting = receiptSettings.titleFontSize || 18;
+    const headerFontSizeSetting = receiptSettings.headerFontSize || 18;
+    const totalFontSizeSetting = receiptSettings.totalFontSize || 18;
     const bodyFontSizeSetting = receiptSettings.bodyFontSize || 12;
-    const fz = (n: number) => {
-      // For title elements (header, total), use titleFontSize setting
-      // For body elements (items, general text), use bodyFontSize setting
-      if (n === 18 || n === 24 || n === 20 || n === 16) {
-        // These are typically used for titles/headers/totals
-        return Math.round(titleFontSizeSetting * fs / 18) + 2;
+    const fz = (n: number, type: 'header' | 'total' | 'body' = 'body') => {
+      // Apply specific font size based on element type
+      if (type === 'header') {
+        return Math.round(headerFontSizeSetting * fs / 18) + 2;
+      }
+      if (type === 'total') {
+        return Math.round(totalFontSizeSetting * fs / 18) + 2;
       }
       // Default to body font size for other elements
       return Math.round(bodyFontSizeSetting * fs / 12) + 2;
@@ -950,7 +952,7 @@ export default function OrderHistoryPage() {
       '</head>' +
       '<body>' +
       '<div class="text-center mb-4">' +
-      '<h3 class="font-bold" style="margin:0 0 ' + Math.round(2*fs) + 'px 0; font-size: ' + fz(18) + 'px; line-height: 1.2;">' + escapeHtml(generalSettings.storeName || '') + '</h3>' +
+      '<h3 class="font-bold" style="margin:0 0 ' + Math.round(2*fs) + 'px 0; font-size: ' + fz(18, 'header') + 'px; line-height: 1.2;">' + escapeHtml(generalSettings.storeName || '') + '</h3>' +
       (receiptSettings.storeAddress ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px; line-height: 1.3;">' + escapeHtml(receiptSettings.storeAddress) + '</div>' : '') +
       (receiptSettings.phoneNumber ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px; line-height: 1.3;">' + escapeHtml(receiptSettings.phoneNumber) + '</div>' : '') +
       (receiptSettings.headerText ? '<div class="text-xs mt-2" style="line-height: 1.3;">' + escapeHtml(receiptSettings.headerText) + '</div>' : '') +
@@ -990,17 +992,17 @@ export default function OrderHistoryPage() {
       '</div>' +
       '<div style="text-align: center; margin-top: ' + Math.round(10*fs) + 'px; border-top: 1px dashed #000; padding-top: ' + Math.round(10*fs) + 'px;">' +
       '<div style="display: flex; justify-content: center; align-items: center; gap: ' + Math.round(10*fs) + 'px; margin-bottom: ' + Math.round(12*fs) + 'px;">' +
-      '<div style="font-weight: bold; font-size: ' + fz(16) + 'px;">TOTAL</div>' +
-      '<div style="font-weight: bold; font-size: ' + fz(24) + 'px;">' + formatCurrency(totalAmount, currencySettings) + '</div>' +
+      '<div style="font-weight: bold; font-size: ' + fz(16, 'header') + 'px;">TOTAL</div>' +
+      '<div style="font-weight: bold; font-size: ' + fz(24, 'total') + 'px;">' + formatCurrency(totalAmount, currencySettings) + '</div>' +
       '</div>' +
       '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: ' + Math.round(10*fs) + 'px; text-align: center;">' +
       '<div>' +
       '<div style="font-size: ' + fz(13) + 'px; color: #666;">THB</div>' +
-      '<div style="font-weight: bold; font-size: ' + fz(20) + 'px;">฿' + (totalAmount / ((currencySettings as any).thbRate || 36.5)).toFixed(2) + '</div>' +
+      '<div style="font-weight: bold; font-size: ' + fz(20, 'total') + 'px;">฿' + (totalAmount / ((currencySettings as any).thbRate || 36.5)).toFixed(2) + '</div>' +
       '</div>' +
       '<div>' +
       '<div style="font-size: ' + fz(13) + 'px; color: #666;">USD</div>' +
-      '<div style="font-weight: bold; font-size: ' + fz(20) + 'px;">$' + (totalAmount / ((currencySettings as any).currencyRate || 1)).toFixed(2) + '</div>' +
+      '<div style="font-weight: bold; font-size: ' + fz(20, 'total') + 'px;">$' + (totalAmount / ((currencySettings as any).currencyRate || 1)).toFixed(2) + '</div>' +
       '</div>' +
       '</div>' +
       '</div>' +

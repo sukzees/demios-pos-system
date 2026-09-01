@@ -1690,7 +1690,15 @@ export default function PosPage() {
     const paperWidthMm = paperSize === '80mm' ? '80mm' : '58mm';
     const paperWidthPx = paperSize === '80mm' ? 576 : 384;
     const kitchenFs = paperSize === '80mm' ? 1.7 : 1.2;
-    const kfz = (n: number) => Math.round(n * kitchenFs) + 2; // font-size helper: scale + 2px
+    // Use custom font sizes from settings, with fallback to defaults
+    const headerFontSizeSetting = receiptSettings.headerFontSize || 18;
+    const bodyFontSizeSetting = receiptSettings.bodyFontSize || 12;
+    const kfz = (n: number, type: 'header' | 'body' = 'body') => {
+      if (type === 'header') {
+        return Math.round(headerFontSizeSetting * kitchenFs / 18) + 2;
+      }
+      return Math.round(bodyFontSizeSetting * kitchenFs / 12) + 2;
+    }; // font-size helper: scale + 2px
     
     // Simple template matching Settings preview
     const separator = paperSize === '80mm' 
@@ -1719,7 +1727,7 @@ body {
   line-height: 1.4;
 }
 .title {
-  font-size: ${kfz(16)}px;
+  font-size: ${kfz(16, 'header')}px;
   font-weight: bold;
   text-align: center;
   margin: ${Math.round(5*kitchenFs)}px 0;
@@ -1902,7 +1910,15 @@ ${note ? `<div class="order-note">${t.note}: ${note}</div><div class="separator"
     const paperWidthMm = paperSize === '80mm' ? '80mm' : '58mm';
     const paperWidthPx = paperSize === '80mm' ? 576 : 384;
     const cancelFs = paperSize === '80mm' ? 1.7 : 1.2;
-    const cfz = (n: number) => Math.round(n * cancelFs) + 2; // font-size helper: scale + 2px
+    // Use custom font sizes from settings, with fallback to defaults
+    const headerFontSizeSetting = receiptSettings.headerFontSize || 18;
+    const bodyFontSizeSetting = receiptSettings.bodyFontSize || 12;
+    const cfz = (n: number, type: 'header' | 'body' = 'body') => {
+      if (type === 'header') {
+        return Math.round(headerFontSizeSetting * cancelFs / 18) + 2;
+      }
+      return Math.round(bodyFontSizeSetting * cancelFs / 12) + 2;
+    }; // font-size helper: scale + 2px
 
     // Get cancel order text based on language
     const cancelTitle = currentLanguage === 'th' ? 'ยกเลิกรายการ' :
@@ -1935,7 +1951,7 @@ body {
   line-height: 1.4;
 }
 .title {
-  font-size: ${cfz(16)}px;
+  font-size: ${cfz(16, 'header')}px;
   font-weight: bold;
   text-align: center;
   margin: ${Math.round(5*cancelFs)}px 0;
