@@ -1,49 +1,28 @@
 ```
 # Dependencies
 node_modules/
-.pnpm-store/
-.yarn/
-.yarn-cache/
 
 # Build outputs
-.next/
 dist/
 build/
+.next/
 out/
-output/
-public/dist/
-static/chunks/
 
-# Environment variables
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.*
-
-# Next.js specific
-.next/cache/
-.next/static/
-.next/server/
-.next/standalone/
-.next/trace/
-
-# Temporary files
-*.tmp
-*.temp
+# Logs
 *.log
 
-# OS generated files
-.DS_Store
-Thumbs.db
+# Environment variables
+.env
+.env.local
+*.env.*
 
-# IDE specific
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Python (if applicable)
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -62,15 +41,27 @@ nosetests.xml
 coverage.xml
 *.cover
 *.log
-.git/modules/
-*.sublime-workspace
+.git/
+.mypy_cache/
 .pytest_cache/
 .hypothesis/
-.coverage*
-.eggs/
-.egg-info/
-.pyup.yml
-.isort.cfg
-.mypy_cache/
-```
+
+# Compiled Binary files
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Compressed files
+*.zip
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.gz
+*.rar
+*.7z
+
+# OS generated files
+.DS_Store
+Thumbs.db
 ```

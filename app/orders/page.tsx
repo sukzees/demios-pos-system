@@ -1181,8 +1181,13 @@ export default function OrderHistoryPage() {
   };
 
   const handleExportCsv = () => {
+    const hasNotes = filteredOrders.some((order) => {
+      const notes = (order as any).notes || '';
+      return typeof notes === 'string' && notes.trim() !== '';
+    });
+
     const rows: string[] = [];
-    rows.push([
+    const headerRow = [
       t.orderId,
       t.dateTime,
       t.status,
@@ -1190,11 +1195,19 @@ export default function OrderHistoryPage() {
       t.orderType,
       t.table,
       t.total,
-    ].map(escapeCsvCell).join(','));
+    ];
+    
+    if (hasNotes) {
+      headerRow.push('Note');
+    }
+    
+    rows.push(headerRow.map(escapeCsvCell).join(','));
 
     for (const order of filteredOrders) {
       const tableNumber = (order as any).table?.table_number || '-';
-      rows.push([
+      const orderNotes = (order as any).notes || '';
+      
+      const dataRow: string[] = [
         order.id,
         format(new Date(order.created_at), 'yyyy-MM-dd HH:mm:ss'),
         order.status,
@@ -1202,7 +1215,13 @@ export default function OrderHistoryPage() {
         (order as any).order_type || 'dine-in',
         tableNumber,
         Number(order.total_amount || 0).toFixed(2),
-      ].map(escapeCsvCell).join(','));
+      ];
+      
+      if (hasNotes) {
+        dataRow.push(typeof orderNotes === 'string' ? orderNotes : '');
+      }
+      
+      rows.push(dataRow.map(escapeCsvCell).join(','));
     }
 
     const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
