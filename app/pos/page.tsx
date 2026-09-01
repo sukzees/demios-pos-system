@@ -3432,11 +3432,11 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: ' + Math.round(10*fs) + 'px 0; margin: ' + Math.round(10*fs) + 'px 0; }' +
       '.space-y-1 > div { margin-bottom: ' + Math.round(4*fs) + 'px; }' +
       "table { width: 100%; border-collapse: collapse; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; table-layout: fixed; max-width: 100%; }" +
-      "th, td { font-size: " + fzBody(bodyFontSizeSetting) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; padding: 2px; max-width: 100%; }" +
-      "th:nth-child(1), td:nth-child(1) { width: 45%; }" +
+      "th, td { font-size: " + fzBody(bodyFontSizeSetting) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; padding: 3px 2px; max-width: 100%; line-height: 1.3; }" +
+      "th:nth-child(1), td:nth-child(1) { width: 50%; text-align: left; }" +
       "th:nth-child(2), td:nth-child(2) { width: 15%; text-align: right; }" +
-      "th:nth-child(3), td:nth-child(3) { width: 20%; text-align: right; }" +
-      "th:nth-child(4), td:nth-child(4) { width: 20%; text-align: right; }" +
+      "th:nth-child(3), td:nth-child(3) { width: 17.5%; text-align: right; }" +
+      "th:nth-child(4), td:nth-child(4) { width: 17.5%; text-align: right; }" +
       "h1, h2, h3, h4, h5, h6, p, div, span { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; max-width: 100%; }" +
       '@media print { @page { size: ' + receiptPageWidth + ' auto; margin: 3mm; } body { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; overflow-x: hidden; } table { width: 100% !important; max-width: 100% !important; } img { max-width: 100% !important; height: auto !important; } }' +
       '</style>' +
@@ -3486,7 +3486,7 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '</div>' +
       '<div style="text-align: center; margin-top: ' + Math.round(10*fs) + 'px; border-top: 1px dashed #000; padding-top: ' + Math.round(10*fs) + 'px;">' +
       '<div style="display: flex; justify-content: center; align-items: center; gap: ' + Math.round(10*fs) + 'px; margin-bottom: ' + Math.round(12*fs) + 'px;">' +
-      '<div style="font-weight: bold; font-size: ' + fzBody(14) + 'px;">' + t.total.toUpperCase() + '</div>' +
+      '<div style="font-weight: bold; font-size: ' + fzTotal(totalFontSizeSetting) + 'px;">' + t.total.toUpperCase() + '</div>' +
       '<div style="font-weight: bold; font-size: ' + fzTotal(totalFontSizeSetting) + 'px;">' + formatCurrency(printTotal) + '</div>' +
       '</div>' +
       '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: ' + Math.round(10*fs) + 'px; text-align: center;">' +
