@@ -204,6 +204,9 @@ export default function ReportsPage() {
   const [categoryData, setCategoryData] = useState(MOCK_CATEGORY_DATA);
   const [itemSalesData, setItemSalesData] = useState<{ name: string; quantity: number; sales: number }[]>([]);
   const [reportTab, setReportTab] = useState<'summary' | 'detailed'>('summary');
+  const [categoryPage, setCategoryPage] = useState(1);
+  const [itemPage, setItemPage] = useState(1);
+  const itemsPerPage = 10;
   const [detailedOrders, setDetailedOrders] = useState<Array<{
     id: string;
     created_at: string;
@@ -616,6 +619,26 @@ export default function ReportsPage() {
     load();
   }, [isSupabaseConfigured, dateRange, customDateFrom, customDateTo]);
 
+  // Reset pagination when data changes
+  useEffect(() => {
+    setCategoryPage(1);
+    setItemPage(1);
+  }, [categoryData.length, itemSalesData.length]);
+
+  // Calculate paginated data
+  const totalPagesCategory = Math.ceil(categoryData.length / itemsPerPage);
+  const totalPagesItem = Math.ceil(fullItemSales.length / itemsPerPage);
+  
+  const paginatedCategoryData = categoryData.slice(
+    (categoryPage - 1) * itemsPerPage,
+    categoryPage * itemsPerPage
+  );
+  
+  const paginatedItemData = fullItemSales.slice(
+    (itemPage - 1) * itemsPerPage,
+    itemPage * itemsPerPage
+  );
+
   return (
     <div className="flex-1 space-y-4 p-4 lg:p-8 pt-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -814,25 +837,60 @@ export default function ReportsPage() {
           <CardHeader className="bg-zinc-50/50 border-b border-zinc-100">
             <CardTitle className="text-zinc-800">{t.salesByCategory}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="h-[300px] w-full">
-              {mounted ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={categoryData} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e4e4e7" />
-                    <XAxis type="number" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => formatCurrencyTick(value, currencySettings)} />
-                    <YAxis dataKey="name" type="category" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} width={90} />
-                    <Tooltip
-                      cursor={{ fill: '#f4f4f5' }}
-                      contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    />
-                    <Bar dataKey="value" fill="#18181b" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center text-zinc-400">{t.loadingChart || 'Loading chart...'}</div>
-              )}
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-blue-50 bg-blue-50/20 text-left text-blue-600">
+                    <th className="p-4 font-semibold">{t.category}</th>
+                    <th className="p-4 font-semibold text-right">{t.sales}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedCategoryData.length === 0 ? (
+                    <tr>
+                      <td colSpan={2} className="p-8 text-center text-zinc-500">
+                        {t.noItemSales || 'No data for this period.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedCategoryData.map((row) => (
+                      <tr key={row.name} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
+                        <td className="p-4 font-medium">{row.name}</td>
+                        <td className="p-4 text-right font-medium">{formatCurrency(row.value, currencySettings)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
+            {totalPagesCategory > 1 && (
+              <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-3">
+                <span className="text-xs text-zinc-500">
+                  Page {categoryPage} of {totalPagesCategory}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={categoryPage === 1}
+                    onClick={() => setCategoryPage(categoryPage - 1)}
+                    className="h-8 text-xs"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={categoryPage === totalPagesCategory}
+                    onClick={() => setCategoryPage(categoryPage + 1)}
+                    className="h-8 text-xs"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -852,14 +910,14 @@ export default function ReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {itemSalesData.length === 0 ? (
+                {paginatedItemData.length === 0 ? (
                   <tr>
                     <td colSpan={3} className="p-8 text-center text-zinc-500">
                       {t.noItemSales || 'No item sales for this period.'}
                     </td>
                   </tr>
                 ) : (
-                  itemSalesData.map((row) => (
+                  paginatedItemData.map((row) => (
                     <tr key={row.name} className="border-b border-zinc-200 last:border-0 hover:bg-zinc-50/50">
                       <td className="p-4 font-medium">{row.name}</td>
                       <td className="p-4 text-right">{row.quantity}</td>
@@ -870,6 +928,33 @@ export default function ReportsPage() {
               </tbody>
             </table>
           </div>
+          {totalPagesItem > 1 && (
+            <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-3">
+              <span className="text-xs text-zinc-500">
+                Page {itemPage} of {totalPagesItem}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={itemPage === 1}
+                  onClick={() => setItemPage(itemPage - 1)}
+                  className="h-8 text-xs"
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={itemPage === totalPagesItem}
+                  onClick={() => setItemPage(itemPage + 1)}
+                  className="h-8 text-xs"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
       </>

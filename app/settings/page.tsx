@@ -654,6 +654,9 @@ export default function SettingsPage() {
   const [localVoidBillPrinter, setLocalVoidBillPrinter] = useState(receiptSettings.voidBillPrinter || '');
   const [kitchenBillSize, setKitchenBillSize] = useState(receiptSettings.kitchenBillSize || '80mm');
   const [voidBillSize, setVoidBillSize] = useState(receiptSettings.voidBillSize || '80mm');
+  const [headerFontSize, setHeaderFontSize] = useState(receiptSettings.headerFontSize || 18);
+  const [totalFontSize, setTotalFontSize] = useState(receiptSettings.totalFontSize || 18);
+  const [bodyFontSize, setBodyFontSize] = useState(receiptSettings.bodyFontSize || 12);
 
   // General settings
   const [storeName, setStoreName] = useState(generalSettings.storeName);
@@ -786,6 +789,9 @@ export default function SettingsPage() {
     setLocalVoidBillPrinter(receiptSettings.voidBillPrinter || '');
     setKitchenBillSize(receiptSettings.kitchenBillSize || '80mm');
     setVoidBillSize(receiptSettings.voidBillSize || '80mm');
+    setHeaderFontSize(receiptSettings.headerFontSize || 18);
+    setTotalFontSize(receiptSettings.totalFontSize || 18);
+    setBodyFontSize(receiptSettings.bodyFontSize || 12);
     setStoreName(generalSettings.storeName);
     setStoreLogo(generalSettings.storeLogo || '');
     setTaxRate(generalSettings.taxRate);
@@ -1411,7 +1417,10 @@ export default function SettingsPage() {
       receiptPrinter: localReceiptPrinter,
       voidBillPrinter: localVoidBillPrinter,
       kitchenBillSize: kitchenBillSize as '58mm' | '80mm',
-      voidBillSize: voidBillSize as '58mm' | '80mm'
+      voidBillSize: voidBillSize as '58mm' | '80mm',
+      headerFontSize,
+      totalFontSize,
+      bodyFontSize
     });
     alert(t.receiptSettingsSaved);
   };
@@ -2633,6 +2642,48 @@ export default function SettingsPage() {
                       />
                       <span className="text-sm font-medium text-zinc-700">Show Table Number on Receipt</span>
                     </label>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="header-font-size">Header Font Size</Label>
+                    <Input
+                      id="header-font-size"
+                      type="number"
+                      min="8"
+                      max="48"
+                      value={headerFontSize}
+                      onChange={(e) => setHeaderFontSize(Number(e.target.value))}
+                      className="w-full"
+                      placeholder="e.g. 18"
+                    />
+                    <p className="text-xs text-zinc-500">Font size for header text (8-48px)</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="total-font-size">Total Font Size</Label>
+                    <Input
+                      id="total-font-size"
+                      type="number"
+                      min="8"
+                      max="48"
+                      value={totalFontSize}
+                      onChange={(e) => setTotalFontSize(Number(e.target.value))}
+                      className="w-full"
+                      placeholder="e.g. 18"
+                    />
+                    <p className="text-xs text-zinc-500">Font size for total amount (8-48px)</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="body-font-size">Body Font Size</Label>
+                    <Input
+                      id="body-font-size"
+                      type="number"
+                      min="6"
+                      max="32"
+                      value={bodyFontSize}
+                      onChange={(e) => setBodyFontSize(Number(e.target.value))}
+                      className="w-full"
+                      placeholder="e.g. 12"
+                    />
+                    <p className="text-xs text-zinc-500">Font size for general text items (6-32px)</p>
                   </div>
                   <Button className="mt-4 gap-2" onClick={handleSaveReceiptSettings}>
                     <Save className="h-4 w-4" />

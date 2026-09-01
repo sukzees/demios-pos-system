@@ -1690,7 +1690,15 @@ export default function PosPage() {
     const paperWidthMm = paperSize === '80mm' ? '80mm' : '58mm';
     const paperWidthPx = paperSize === '80mm' ? 576 : 384;
     const kitchenFs = paperSize === '80mm' ? 1.7 : 1.2;
-    const kfz = (n: number) => Math.round(n * kitchenFs) + 2; // font-size helper: scale + 2px
+    // Use custom font sizes from settings, with fallback to defaults
+    const headerFontSizeSetting = receiptSettings.headerFontSize || 18;
+    const bodyFontSizeSetting = receiptSettings.bodyFontSize || 12;
+    const kfz = (n: number, type: 'header' | 'body' = 'body') => {
+      if (type === 'header') {
+        return Math.round(headerFontSizeSetting * kitchenFs / 18) + 2;
+      }
+      return Math.round(bodyFontSizeSetting * kitchenFs / 12) + 2;
+    }; // font-size helper: scale + 2px
     
     // Simple template matching Settings preview
     const separator = paperSize === '80mm' 
@@ -1719,7 +1727,7 @@ body {
   line-height: 1.4;
 }
 .title {
-  font-size: ${kfz(16)}px;
+  font-size: ${kfz(16, 'header')}px;
   font-weight: bold;
   text-align: center;
   margin: ${Math.round(5*kitchenFs)}px 0;
@@ -1902,7 +1910,15 @@ ${note ? `<div class="order-note">${t.note}: ${note}</div><div class="separator"
     const paperWidthMm = paperSize === '80mm' ? '80mm' : '58mm';
     const paperWidthPx = paperSize === '80mm' ? 576 : 384;
     const cancelFs = paperSize === '80mm' ? 1.7 : 1.2;
-    const cfz = (n: number) => Math.round(n * cancelFs) + 2; // font-size helper: scale + 2px
+    // Use custom font sizes from settings, with fallback to defaults
+    const headerFontSizeSetting = receiptSettings.headerFontSize || 18;
+    const bodyFontSizeSetting = receiptSettings.bodyFontSize || 12;
+    const cfz = (n: number, type: 'header' | 'body' = 'body') => {
+      if (type === 'header') {
+        return Math.round(headerFontSizeSetting * cancelFs / 18) + 2;
+      }
+      return Math.round(bodyFontSizeSetting * cancelFs / 12) + 2;
+    }; // font-size helper: scale + 2px
 
     // Get cancel order text based on language
     const cancelTitle = currentLanguage === 'th' ? 'ยกเลิกรายการ' :
@@ -1935,7 +1951,7 @@ body {
   line-height: 1.4;
 }
 .title {
-  font-size: ${cfz(16)}px;
+  font-size: ${cfz(16, 'header')}px;
   font-weight: bold;
   text-align: center;
   margin: ${Math.round(5*cancelFs)}px 0;
@@ -3368,11 +3384,16 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
     const receiptPageWidth = receiptPaperSize === '80mm' ? '80mm' : '58mm';
     const receiptBodyWidth = receiptPaperSize === '80mm' ? 576 : 384;
     const fs = receiptPaperSize === '80mm' ? 1.7 : 1.2;
-    const fz = (n: number) => Math.round(n * fs) + 2; // font-size helper: scale + 2px
+    const headerFontSizeSetting = receiptSettings.headerFontSize || 18;
+    const totalFontSizeSetting = receiptSettings.totalFontSize || 18;
+    const bodyFontSizeSetting = receiptSettings.bodyFontSize || 12;
+    const fzHeader = (n: number) => Math.round((n || headerFontSizeSetting) * fs); // use custom header font size
+    const fzTotal = (n: number) => Math.round((n || totalFontSizeSetting) * fs); // use custom total font size
+    const fzBody = (n: number) => Math.round((n || bodyFontSizeSetting) * fs); // use custom body font size
 
     const transferQrHtml = (receiptSettings.showQrCode !== false && bankForDisplay?.qrCodeImage)
       ? '<div style="text-align:center; margin-top: ' + Math.round(12*fs) + 'px; padding-top: ' + Math.round(10*fs) + 'px; border-top: 1px dotted #000;">' +
-      '<div class="font-bold" style="font-size: ' + fz(14) + 'px; margin-bottom: ' + Math.round(4*fs) + 'px;">' + t.scanToPay + '</div>' +
+      '<div class="font-bold" style="font-size: ' + fzBody(14) + 'px; margin-bottom: ' + Math.round(4*fs) + 'px;">' + t.scanToPay + '</div>' +
       '</div>'
       : '';
 
@@ -3404,25 +3425,31 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '.text-center { text-align: center; }' +
       '.mb-4 { margin-bottom: ' + Math.round(16*fs) + 'px; }' +
       '.mt-6 { margin-top: ' + Math.round(24*fs) + 'px; }' +
-      '.text-xs { font-size: ' + fz(12) + 'px; }' +
-      '.text-sm { font-size: ' + fz(14) + 'px; }' +
+      '.text-xs { font-size: ' + fzBody(10) + 'px; }' +
+      '.text-sm { font-size: ' + fzBody(12) + 'px; }' +
       '.font-bold { font-weight: bold; }' +
       '.flex { display: flex; justify-content: space-between; }' +
       '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: ' + Math.round(10*fs) + 'px 0; margin: ' + Math.round(10*fs) + 'px 0; }' +
       '.space-y-1 > div { margin-bottom: ' + Math.round(4*fs) + 'px; }' +
       "table { width: 100%; border-collapse: collapse; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; table-layout: fixed; max-width: 100%; }" +
-      "th, td { font-size: " + fz(12) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; padding: 2px; max-width: 100%; }" +
-      "th:nth-child(1), td:nth-child(1) { width: 45%; }" +
-      "th:nth-child(2), td:nth-child(2) { width: 15%; text-align: right; }" +
-      "th:nth-child(3), td:nth-child(3) { width: 20%; text-align: right; }" +
-      "th:nth-child(4), td:nth-child(4) { width: 20%; text-align: right; }" +
+      "th, td { font-size: " + fzBody(bodyFontSizeSetting) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; overflow-wrap: break-word; word-break: break-all; white-space: normal; padding: 3px 2px; line-height: 1.3; vertical-align: top; }" +
+      (receiptPaperSize === '80mm' 
+        ? "th:nth-child(1), td:nth-child(1) { width: 45%; text-align: left; }" +
+          "th:nth-child(2), td:nth-child(2) { width: 15%; text-align: right; }" +
+          "th:nth-child(3), td:nth-child(3) { width: 20%; text-align: right; }" +
+          "th:nth-child(4), td:nth-child(4) { width: 20%; text-align: right; }"
+        : "th:nth-child(1), td:nth-child(1) { width: 50%; text-align: left; }" +
+          "th:nth-child(2), td:nth-child(2) { width: 14%; text-align: right; }" +
+          "th:nth-child(3), td:nth-child(3) { width: 18%; text-align: right; }" +
+          "th:nth-child(4), td:nth-child(4) { width: 18%; text-align: right; }"
+      ) +
       "h1, h2, h3, h4, h5, h6, p, div, span { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; max-width: 100%; }" +
       '@media print { @page { size: ' + receiptPageWidth + ' auto; margin: 3mm; } body { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; overflow-x: hidden; } table { width: 100% !important; max-width: 100% !important; } img { max-width: 100% !important; height: auto !important; } }' +
       '</style>' +
       '</head>' +
       '<body style="width: ' + receiptBodyWidth + 'px; max-width: ' + receiptBodyWidth + 'px;">' +
       '<div class="text-center mb-4" style="max-width: 100%; overflow-x: hidden; width: 100%;">' +
-      '<h3 class="font-bold" style="margin:0 0 ' + Math.round(2*fs) + 'px 0; font-size: ' + fz(18) + 'px; word-wrap: break-word;">' + (generalSettings.storeName || '') + '</h3>' +
+      '<h3 class="font-bold" style="margin:0 0 ' + Math.round(2*fs) + 'px 0; font-size: ' + fzHeader(headerFontSizeSetting) + 'px; word-wrap: break-word;">' + (generalSettings.storeName || '') + '</h3>' +
       (receiptSettings.storeAddress ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px; word-wrap: break-word;">' + receiptSettings.storeAddress + '</div>' : '') +
       (receiptSettings.phoneNumber ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px; word-wrap: break-word;">' + receiptSettings.phoneNumber + '</div>' : '') +
       (receiptSettings.headerText ? '<div class="text-xs mt-2" style="word-wrap: break-word;">' + receiptSettings.headerText + '</div>' : '') +
@@ -3465,17 +3492,17 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '</div>' +
       '<div style="text-align: center; margin-top: ' + Math.round(10*fs) + 'px; border-top: 1px dashed #000; padding-top: ' + Math.round(10*fs) + 'px;">' +
       '<div style="display: flex; justify-content: center; align-items: center; gap: ' + Math.round(10*fs) + 'px; margin-bottom: ' + Math.round(12*fs) + 'px;">' +
-      '<div style="font-weight: bold; font-size: ' + fz(16) + 'px;">' + t.total.toUpperCase() + '</div>' +
-      '<div style="font-weight: bold; font-size: ' + fz(24) + 'px;">' + formatCurrency(printTotal) + '</div>' +
+      '<div style="font-weight: bold; font-size: ' + fzTotal(totalFontSizeSetting) + 'px;">' + t.total.toUpperCase() + '</div>' +
+      '<div style="font-weight: bold; font-size: ' + fzTotal(totalFontSizeSetting) + 'px;">' + formatCurrency(printTotal) + '</div>' +
       '</div>' +
       '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: ' + Math.round(10*fs) + 'px; text-align: center;">' +
       '<div>' +
-      '<div style="font-size: ' + fz(13) + 'px; color: #666;">THB</div>' +
-      '<div style="font-weight: bold; font-size: ' + fz(20) + 'px;">฿' + Math.round(printTotal / (currencySettings.thbRate || 36.5)).toLocaleString('en-US') + '</div>' +
+      '<div style="font-size: ' + fzTotal(totalFontSizeSetting * 0.7) + 'px; color: #666;">THB</div>' +
+      '<div style="font-weight: bold; font-size: ' + fzTotal(totalFontSizeSetting) + 'px;">฿' + Math.round(printTotal / (currencySettings.thbRate || 36.5)).toLocaleString('en-US') + '</div>' +
       '</div>' +
       '<div>' +
-      '<div style="font-size: ' + fz(13) + 'px; color: #666;">USD</div>' +
-      '<div style="font-weight: bold; font-size: ' + fz(20) + 'px;">$' + (printTotal / currencySettings.currencyRate).toFixed(2) + '</div>' +
+      '<div style="font-size: ' + fzTotal(totalFontSizeSetting * 0.7) + 'px; color: #666;">USD</div>' +
+      '<div style="font-weight: bold; font-size: ' + fzTotal(totalFontSizeSetting) + 'px;">$' + (printTotal / currencySettings.currencyRate).toFixed(2) + '</div>' +
       '</div>' +
       '</div>' +
       '</div>' +
