@@ -1,4 +1,3 @@
-```gitignore
 # Dependencies
 node_modules/
 
@@ -6,48 +5,79 @@ node_modules/
 dist/
 build/
 .next/
+out/
 
 # Environment variables
 .env
 .env.local
-.env.*
+*.env.*
 
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Logs
-*.log
-
-# Python specific
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+.python-version
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git/modules/
+*.sublime-workspace
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+
+# VSCode
+.vscode/
 
 # Temporary files
 *.tmp
 *.temp
+*.bak
+*.swp
+*.swo
 
 # OS generated files
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Icon?
+.directory
+.Trashes
+*.nib
+*~.nib
+.#*
+*#
+.\#*
+*~
+.DS_Store?
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.crdownload
 
-# Coverage reports
+# Logs
+*.log
+
+# Coverage
 coverage/
 htmlcov/
-*.coverage
+.coverage
 
-# Cache directories
-.cache/
-.mypy_cache/
-.pytest_cache/
-.nyc_output/
-coverage/
-
-# Compression files
+# Compressed files
 *.zip
 *.gz
 *.tar
@@ -70,4 +100,3 @@ coverage/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-```

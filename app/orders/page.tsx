@@ -895,13 +895,13 @@ export default function OrderHistoryPage() {
     const fz = (n: number, type: 'header' | 'total' | 'body' = 'body') => {
       // Apply specific font size based on element type
       if (type === 'header') {
-        return Math.round(headerFontSizeSetting * fs / 18) + 2;
+        return Math.round(headerFontSizeSetting * fs / 18);
       }
       if (type === 'total') {
-        return Math.round(totalFontSizeSetting * fs / 18) + 2;
+        return Math.round(totalFontSizeSetting * fs / 18);
       }
       // Default to body font size for other elements
-      return Math.round(bodyFontSizeSetting * fs / 12) + 2;
+      return Math.round(bodyFontSizeSetting * fs / 12);
     };
 
     const transferQrHtml = (receiptSettings.showQrCode !== false) && bankQrCodeImage
@@ -945,7 +945,10 @@ export default function OrderHistoryPage() {
       '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: ' + Math.round(10*fs) + 'px 0; margin: ' + Math.round(10*fs) + 'px 0; }' +
       '.space-y-1 > div { margin-bottom: ' + Math.round(4*fs) + 'px; }' +
       "table { width: 100%; border-collapse: collapse; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; table-layout: fixed; }" +
-      "th, td { font-size: " + fz(12) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; white-space: normal; }" +
+      "th, td { font-size: " + fz(12) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; white-space: normal; vertical-align: top; }" +
+      "th:first-child, td:first-child { width: 50%; text-align: left; }" +
+      "th:nth-child(2), td:nth-child(2), th:nth-child(3), td:nth-child(3) { width: 15%; text-align: right; }" +
+      "th:last-child, td:last-child { width: 20%; text-align: right; }" +
       "h1, h2, h3, h4, h5, h6, p, div, span { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; }" +
       '@media print { body { width: ' + receiptBodyWidth + 'px !important; max-width: ' + receiptBodyWidth + 'px !important; } }' +
       '</style>' +
