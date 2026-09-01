@@ -2640,6 +2640,35 @@ export default function SettingsPage() {
                       <span className="text-sm font-medium text-zinc-700">Show Table Number on Receipt</span>
                     </label>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="title-font-size">Title Font Size</Label>
+                    <select
+                      id="title-font-size"
+                      value={titleFontSize}
+                      onChange={(e) => setTitleFontSize(Number(e.target.value))}
+                      className="w-full p-2 border rounded-md"
+                    >
+                      <option value={14}>14px (Small)</option>
+                      <option value={16}>16px (Medium)</option>
+                      <option value={18}>18px (Large)</option>
+                      <option value={20}>20px (Extra Large)</option>
+                      <option value={24}>24px (XXL)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="body-font-size">Body Font Size</Label>
+                    <select
+                      id="body-font-size"
+                      value={bodyFontSize}
+                      onChange={(e) => setBodyFontSize(Number(e.target.value))}
+                      className="w-full p-2 border rounded-md"
+                    >
+                      <option value={10}>10px (Small)</option>
+                      <option value={12}>12px (Medium)</option>
+                      <option value={14}>14px (Large)</option>
+                      <option value={16}>16px (Extra Large)</option>
+                    </select>
+                  </div>
                   <Button className="mt-4 gap-2" onClick={handleSaveReceiptSettings}>
                     <Save className="h-4 w-4" />
                     {t.save}
