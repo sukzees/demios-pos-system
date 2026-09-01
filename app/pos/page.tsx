@@ -3464,7 +3464,7 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '<thead>' +
       '<tr>' +
       '<th style="text-align:left; padding-bottom: ' + Math.round(4*fs) + 'px;">' + t.item + '</th>' +
-      '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">' + t.unit + '</th>' +
+      '<th style="text-align:center; padding-bottom: ' + Math.round(4*fs) + 'px;">' + t.unit + '</th>' +
       '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">' + t.price + '</th>' +
       '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">' + t.total + '</th>' +
       '</tr>' +

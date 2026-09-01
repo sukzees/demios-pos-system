@@ -970,7 +970,7 @@ export default function OrderHistoryPage() {
       '<thead>' +
       '<tr>' +
       '<th style="text-align:left; padding-bottom: ' + Math.round(4*fs) + 'px;">Item</th>' +
-      '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">Unit</th>' +
+      '<th style="text-align:center; padding-bottom: ' + Math.round(4*fs) + 'px;">Unit</th>' +
       '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">Price</th>' +
       '<th style="text-align:right; padding-bottom: ' + Math.round(4*fs) + 'px;">Total</th>' +
       '</tr>' +
