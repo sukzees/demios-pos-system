@@ -3398,9 +3398,9 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '<meta charset="UTF-8">' +
       '<style>' +
       "@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;700&family=Noto+Sans+Lao:wght@400;500;700&display=swap');" +
-      `@page { size: ${receiptPageWidth} auto; margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }` +
+      `@page { size: ${receiptPageWidth} auto; margin: 3mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }` +
       "* { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; box-sizing: border-box; }" +
-      "body { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; padding: " + Math.round(8*fs) + "px; width: " + receiptBodyWidth + "px; max-width: " + receiptBodyWidth + "px; margin: 0 auto; color: #000; box-sizing: border-box; overflow-x: hidden; word-wrap: break-word; }" +
+      "body { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; padding: 0; width: 100%; max-width: 100%; margin: 0 auto; color: #000; box-sizing: border-box; overflow-x: hidden; word-wrap: break-word; }" +
       '.text-center { text-align: center; }' +
       '.mb-4 { margin-bottom: ' + Math.round(16*fs) + 'px; }' +
       '.mt-6 { margin-top: ' + Math.round(24*fs) + 'px; }' +
@@ -3410,18 +3410,18 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '.flex { display: flex; justify-content: space-between; }' +
       '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: ' + Math.round(10*fs) + 'px 0; margin: ' + Math.round(10*fs) + 'px 0; }' +
       '.space-y-1 > div { margin-bottom: ' + Math.round(4*fs) + 'px; }' +
-      "table { width: 100%; border-collapse: collapse; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; table-layout: fixed; }" +
-      "th, td { font-size: " + fz(12) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; padding: 2px; }" +
+      "table { width: 100%; border-collapse: collapse; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; table-layout: fixed; max-width: 100%; }" +
+      "th, td { font-size: " + fz(12) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; padding: 2px; max-width: 100%; }" +
       "th:nth-child(1), td:nth-child(1) { width: 45%; }" +
       "th:nth-child(2), td:nth-child(2) { width: 15%; text-align: right; }" +
       "th:nth-child(3), td:nth-child(3) { width: 20%; text-align: right; }" +
       "th:nth-child(4), td:nth-child(4) { width: 20%; text-align: right; }" +
       "h1, h2, h3, h4, h5, h6, p, div, span { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; max-width: 100%; }" +
-      '@media print { body { width: ' + receiptBodyWidth + 'px !important; max-width: ' + receiptBodyWidth + 'px !important; overflow-x: hidden; } table { width: 100% !important; } }' +
+      '@media print { @page { size: ' + receiptPageWidth + ' auto; margin: 3mm; } body { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; overflow-x: hidden; } table { width: 100% !important; max-width: 100% !important; } img { max-width: 100% !important; height: auto !important; } }' +
       '</style>' +
       '</head>' +
-      '<body>' +
-      '<div class="text-center mb-4" style="max-width: 100%; overflow-x: hidden;">' +
+      '<body style="width: ' + receiptBodyWidth + 'px; max-width: ' + receiptBodyWidth + 'px;">' +
+      '<div class="text-center mb-4" style="max-width: 100%; overflow-x: hidden; width: 100%;">' +
       '<h3 class="font-bold" style="margin:0 0 ' + Math.round(2*fs) + 'px 0; font-size: ' + fz(18) + 'px; word-wrap: break-word;">' + (generalSettings.storeName || '') + '</h3>' +
       (receiptSettings.storeAddress ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px; word-wrap: break-word;">' + receiptSettings.storeAddress + '</div>' : '') +
       (receiptSettings.phoneNumber ? '<div class="text-xs" style="margin-bottom:' + Math.round(2*fs) + 'px; word-wrap: break-word;">' + receiptSettings.phoneNumber + '</div>' : '') +
