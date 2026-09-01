@@ -3432,7 +3432,7 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: ' + Math.round(10*fs) + 'px 0; margin: ' + Math.round(10*fs) + 'px 0; }' +
       '.space-y-1 > div { margin-bottom: ' + Math.round(4*fs) + 'px; }' +
       "table { width: 100%; border-collapse: collapse; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; table-layout: fixed; max-width: 100%; }" +
-      "th, td { font-size: " + fzBody(bodyFontSize) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; padding: 2px; max-width: 100%; }" +
+      "th, td { font-size: " + fzBody(bodyFontSizeSetting) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; padding: 2px; max-width: 100%; }" +
       "th:nth-child(1), td:nth-child(1) { width: 45%; }" +
       "th:nth-child(2), td:nth-child(2) { width: 15%; text-align: right; }" +
       "th:nth-child(3), td:nth-child(3) { width: 20%; text-align: right; }" +
