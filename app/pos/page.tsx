@@ -3398,9 +3398,9 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '<meta charset="UTF-8">' +
       '<style>' +
       "@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;700&family=Noto+Sans+Lao:wght@400;500;700&display=swap');" +
-      `@page { size: ${receiptPageWidth} auto; margin: 0; }` +
+      `@page { size: ${receiptPageWidth} auto; margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }` +
       "* { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; }" +
-      "body { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; padding: " + Math.round(8*fs) + "px; width: " + receiptBodyWidth + "px; margin: 0 auto; color: #000; box-sizing: border-box; }" +
+      "body { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; padding: " + Math.round(8*fs) + "px; width: " + receiptBodyWidth + "px; max-width: " + receiptBodyWidth + "px; margin: 0 auto; color: #000; box-sizing: border-box; overflow-x: hidden; }" +
       '.text-center { text-align: center; }' +
       '.mb-4 { margin-bottom: ' + Math.round(16*fs) + 'px; }' +
       '.mt-6 { margin-top: ' + Math.round(24*fs) + 'px; }' +
@@ -3410,9 +3410,10 @@ ${cancelledItem.notes ? `<div class="item-note">${cancelledItem.notes}</div>` : 
       '.flex { display: flex; justify-content: space-between; }' +
       '.border-y { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: ' + Math.round(10*fs) + 'px 0; margin: ' + Math.round(10*fs) + 'px 0; }' +
       '.space-y-1 > div { margin-bottom: ' + Math.round(4*fs) + 'px; }' +
-      "table { width: 100%; border-collapse: collapse; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; }" +
-      "th, td { font-size: " + fz(12) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; }" +
+      "table { width: 100%; border-collapse: collapse; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; table-layout: fixed; }" +
+      "th, td { font-size: " + fz(12) + "px; font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; word-wrap: break-word; }" +
       "h1, h2, h3, h4, h5, h6, p, div, span { font-family: 'Noto Sans Thai', 'Noto Sans Lao', sans-serif; }" +
+      '@media print { body { width: ' + receiptBodyWidth + 'px !important; max-width: ' + receiptBodyWidth + 'px !important; } }' +
       '</style>' +
       '</head>' +
       '<body>' +
