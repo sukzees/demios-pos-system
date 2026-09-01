@@ -1,4 +1,4 @@
-```
+```gitignore
 # Dependencies
 node_modules/
 
@@ -8,19 +8,10 @@ build/
 .next/
 out/
 
-# Logs
-*.log
-
 # Environment variables
 .env
 .env.local
-*.env.*
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
+.env.*
 
 # Python
 __pycache__/
@@ -32,7 +23,7 @@ env/
 venv/
 .venv/
 pip-log.txt
-pip-delete-this-directory.txt
+pipenv.lock
 .tox/
 .coverage
 .coverage.*
@@ -41,27 +32,34 @@ nosetests.xml
 coverage.xml
 *.cover
 *.log
-.git/
-.mypy_cache/
+*.pot
+*.po
+*~
 .pytest_cache/
+.mypy_cache/
 .hypothesis/
 
-# Compiled Binary files
-*.exe
-*.dll
-*.so
-*.dylib
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# Compressed files
-*.zip
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.gz
-*.rar
-*.7z
-
-# OS generated files
+# OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+```
+
+Wait, let me reconsider this. The modified files are only `app/settings/page.tsx` and `lib/store.ts`, which are TypeScript/JSX source files. There are no build artifacts, dependency directories, or temporary files in the change list that would require ignoring.
+
+```gitignore
+
 ```

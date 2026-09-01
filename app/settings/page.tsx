@@ -654,6 +654,8 @@ export default function SettingsPage() {
   const [localVoidBillPrinter, setLocalVoidBillPrinter] = useState(receiptSettings.voidBillPrinter || '');
   const [kitchenBillSize, setKitchenBillSize] = useState(receiptSettings.kitchenBillSize || '80mm');
   const [voidBillSize, setVoidBillSize] = useState(receiptSettings.voidBillSize || '80mm');
+  const [titleFontSize, setTitleFontSize] = useState(receiptSettings.titleFontSize || 18);
+  const [bodyFontSize, setBodyFontSize] = useState(receiptSettings.bodyFontSize || 12);
 
   // General settings
   const [storeName, setStoreName] = useState(generalSettings.storeName);
@@ -786,6 +788,8 @@ export default function SettingsPage() {
     setLocalVoidBillPrinter(receiptSettings.voidBillPrinter || '');
     setKitchenBillSize(receiptSettings.kitchenBillSize || '80mm');
     setVoidBillSize(receiptSettings.voidBillSize || '80mm');
+    setTitleFontSize(receiptSettings.titleFontSize || 18);
+    setBodyFontSize(receiptSettings.bodyFontSize || 12);
     setStoreName(generalSettings.storeName);
     setStoreLogo(generalSettings.storeLogo || '');
     setTaxRate(generalSettings.taxRate);
@@ -1411,7 +1415,9 @@ export default function SettingsPage() {
       receiptPrinter: localReceiptPrinter,
       voidBillPrinter: localVoidBillPrinter,
       kitchenBillSize: kitchenBillSize as '58mm' | '80mm',
-      voidBillSize: voidBillSize as '58mm' | '80mm'
+      voidBillSize: voidBillSize as '58mm' | '80mm',
+      titleFontSize,
+      bodyFontSize
     });
     alert(t.receiptSettingsSaved);
   };

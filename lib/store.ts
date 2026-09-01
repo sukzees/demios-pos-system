@@ -576,6 +576,8 @@ interface PosState {
     kitchenBillSize?: '58mm' | '80mm';
     voidBillSize?: '58mm' | '80mm';
     showTableNumber?: boolean;
+    titleFontSize?: number;
+    bodyFontSize?: number;
   };
   currencySettings: {
     defaultCurrency: string;
@@ -643,7 +645,7 @@ interface PosState {
 
   login: (user: Employee) => void;
   logout: () => void;
-  updateReceiptSettings: (settings: Partial<{ headerText: string; footerText: string; storeAddress: string; phoneNumber: string; showBankDetail: boolean; showQrCode: boolean; receiptSize: '58mm' | '80mm'; enableVoidBill: boolean; autoPrintVoidBill: boolean; receiptPrinter: string; voidBillPrinter: string; kitchenBillSize: '58mm' | '80mm'; voidBillSize: '58mm' | '80mm'; showTableNumber: boolean }>) => void;
+  updateReceiptSettings: (settings: Partial<{ headerText: string; footerText: string; storeAddress: string; phoneNumber: string; showBankDetail: boolean; showQrCode: boolean; receiptSize: '58mm' | '80mm'; enableVoidBill: boolean; autoPrintVoidBill: boolean; receiptPrinter: string; voidBillPrinter: string; kitchenBillSize: '58mm' | '80mm'; voidBillSize: '58mm' | '80mm'; showTableNumber: boolean; titleFontSize?: number; bodyFontSize?: number }>) => void;
   updateCurrencySettings: (settings: { defaultCurrency: string; currencySymbol: string; currencyFormat: string; currencyRate: number; currencySymbolPosition: 'left' | 'right'; thbRate?: number }) => void;
   updateGeneralSettings: (settings: { storeName: string; storeLogo?: string; taxRate: number; timezone: string; language?: 'en' | 'lo' | 'th' }) => void;
   updateBankConfigs: (banks: { id: string; bankName: string; accountName: string; accountNumber: string; enabledForTransfer: boolean; qrCodeImage?: string }[]) => void;
@@ -758,7 +760,9 @@ export const usePosStore = create<PosState>()(
         voidBillPrinter: '',
         kitchenBillSize: '80mm',
         voidBillSize: '80mm',
-        showTableNumber: true
+        showTableNumber: true,
+        titleFontSize: 18,
+        bodyFontSize: 12
       },
       currencySettings: {
         defaultCurrency: "USD",
