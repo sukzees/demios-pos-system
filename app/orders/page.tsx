@@ -1275,11 +1275,26 @@ export default function OrderHistoryPage() {
       
       // If order has items, create one row per item
       if (orderItems.length > 0) {
+        // Calculate subtotal (before discount)
+        const subtotal = orderItems.reduce((sum, item) => {
+          return sum + (Number(item.price_at_time || 0) * Number(item.quantity || 0));
+        }, 0);
+        
+        // Calculate discount amount
+        const totalAmount = Number(order.total_amount || 0);
+        const discountAmount = Math.max(0, subtotal - totalAmount);
+        const discountRatio = subtotal > 0 ? discountAmount / subtotal : 0;
+        
         for (const item of orderItems) {
           const itemName = getOrderLineDisplayName(item);
           const quantity = item.quantity || 0;
-          const price = Number(item.price_at_time || 0);
-          const itemTotal = price * quantity;
+          const priceBeforeDiscount = Number(item.price_at_time || 0);
+          const itemSubtotal = priceBeforeDiscount * quantity;
+          
+          // Apply proportional discount to this item
+          const itemDiscount = itemSubtotal * discountRatio;
+          const itemTotal = itemSubtotal - itemDiscount;
+          const priceAfterDiscount = quantity > 0 ? itemTotal / quantity : priceBeforeDiscount;
           
           const dataRow: string[] = [
             order.id,
@@ -1290,7 +1305,7 @@ export default function OrderHistoryPage() {
             tableNumber,
             itemName,
             String(quantity),
-            price.toFixed(2),
+            priceAfterDiscount.toFixed(2),
             itemTotal.toFixed(2),
           ];
           
