@@ -1130,16 +1130,25 @@ export const usePosStore = create<PosState>()(
         if (!keyToUse) return;
 
         try {
+          // Set a client-side timeout of 25 seconds (slightly less than server timeout)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 25000);
+
           const response = await fetch('/api/license/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               license_key: keyToUse,
               machine_id: licenseInfo.machineId
-            })
+            }),
+            signal: controller.signal
           });
+          
+          clearTimeout(timeoutId);
+          
           const result = await response.json();
           
+          // Handle successful response (including cached local license)
           if (result.success && result.data) {
             const data = result.data;
             const toUtcDateTime = (value: number) => {
@@ -1219,10 +1228,18 @@ export const usePosStore = create<PosState>()(
                 licenseSyncAt: new Date().toISOString()
               });
             }
+          } else if (!response.ok) {
+            // Silent fail for background sync - don't throw error
+            console.warn('License sync failed (background):', result.error || response.statusText);
           }
-        } catch (error) {
-          console.error('License sync error:', error);
-          throw error;
+        } catch (error: any) {
+          // Silent fail for background sync (including timeout)
+          if (error.name === 'AbortError') {
+            console.warn('License sync timeout (background) - will retry later');
+          } else {
+            console.warn('License sync error (background):', error.message || error);
+          }
+          // Don't throw - let it retry on next interval
         }
       },
 
@@ -1256,21 +1273,6 @@ export const usePosStore = create<PosState>()(
             supabase.from('categories').select('*')
           ]);
 
-          console.log('[FETCH] Items from items table:', itemsRes.data?.length || 0);
-          console.log('[FETCH] Items from inventory_items table:', inventoryItemsRes.data?.length || 0);
-          console.log('[FETCH] Items from recipes table:', recipesRes.data?.length || 0);
-          
-          // Sample log for debugging
-          if (itemsRes.data && itemsRes.data.length > 0) {
-            console.log('[FETCH] Sample item from items table:', itemsRes.data[0]);
-          }
-          if (inventoryItemsRes.data && inventoryItemsRes.data.length > 0) {
-            console.log('[FETCH] Sample item from inventory_items table:', inventoryItemsRes.data[0]);
-          }
-          if (recipesRes.data && recipesRes.data.length > 0) {
-            console.log('[FETCH] Sample item from recipes table:', recipesRes.data[0]);
-          }
-
           // Combine items, inventory_items, and recipes for Items & Categories page
           // Add is_recipe flag to items (since items table no longer has is_recipe column)
           const allItems = [
@@ -1279,12 +1281,9 @@ export const usePosStore = create<PosState>()(
             ...(recipesRes.data || []).map(recipe => ({ ...recipe, is_recipe: true, itemSource: 'recipe' }))
           ];
 
-          console.log('[FETCH] Total combined items:', allItems.length);
-
           if (allItems.length > 0) set({ items: allItems });
           if (categoriesRes.data) set({ categories: categoriesRes.data });
         } catch (error) {
-          console.error('[FETCH] Error fetching data:', error);
           // Error fetching data
         }
       },

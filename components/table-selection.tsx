@@ -220,16 +220,21 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
 
   const handleSetTableAvailable = async (tableId: string) => {
     try {
-      // Update table status to available and clear current_order_id
-      await supabase
-        .from('tables')
-        .update({ 
-          status: 'available',
-          current_order_id: null,
-          is_merged: false,
-          merged_tables: null
-        })
-        .eq('id', tableId);
+      // Use API route to update table status with service role permissions
+      const response = await fetch('/api/tables/set-available', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ tableId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error('API error:', result);
+        throw new Error(result.error || result.details || 'Failed to update table status');
+      }
 
       // Clear cart for this table from savedCarts
       const cartKey = `table-${tableId}`;
@@ -248,7 +253,8 @@ export function TableSelection({ onSelectTable, onClose, canClose = true, onResu
       setConfirmDialog({ show: false, tableId: null });
     } catch (error) {
       console.error('Error setting table as available:', error);
-      alert('Failed to set table as available. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to set table as available.\n\nError: ${errorMessage}\n\nPlease check console for details.`);
     }
   };
 

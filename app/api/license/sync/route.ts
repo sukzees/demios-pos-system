@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+// Set maxDuration for Vercel/Next.js deployment (in seconds)
+export const maxDuration = 30; // 30 seconds max for this route
+export const dynamic = 'force-dynamic';
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseServiceRoleKey =
@@ -26,10 +30,6 @@ const serviceRoleRef = decodeJwtRef(supabaseServiceRoleKey);
 const shouldUseServiceRole = !!supabaseServiceRoleKey && !!projectRefFromUrl && serviceRoleRef === projectRefFromUrl;
 const supabaseServerKey = shouldUseServiceRole ? supabaseServiceRoleKey : supabaseAnonKey;
 
-if (supabaseServiceRoleKey && !shouldUseServiceRole) {
-    console.warn('SUPABASE_SERVICE_ROLE_KEY project ref does not match NEXT_PUBLIC_SUPABASE_URL project ref. Falling back to anon key.');
-}
-
 const supabase = createClient(supabaseUrl, supabaseServerKey, {
     auth: { persistSession: false }
 });
@@ -47,8 +47,10 @@ const ENV_LICENSE_KEY = (
     process.env.NEXT_PUBLIC_POS_LICENSE_KEY ||
     ''
 ).trim();
-const EXTERNAL_FETCH_TIMEOUT_MS = Number(process.env.LICENSE_EXTERNAL_TIMEOUT_MS || 20000);
-const EXTERNAL_FETCH_RETRIES = Number(process.env.LICENSE_EXTERNAL_RETRIES || 3);
+// Reduce timeout to 8 seconds (was 20 seconds)
+const EXTERNAL_FETCH_TIMEOUT_MS = Number(process.env.LICENSE_EXTERNAL_TIMEOUT_MS || 8000);
+// Reduce retries to 2 (was 3) to prevent long waits
+const EXTERNAL_FETCH_RETRIES = Number(process.env.LICENSE_EXTERNAL_RETRIES || 2);
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -117,7 +119,7 @@ async function fetchLocalLicense(licenseKey: string) {
             return data[0] as Record<string, any>;
         }
     } catch (error) {
-        console.error('Failed to fetch local license:', error);
+        // Failed to fetch local license
     }
 
     return null;
@@ -169,8 +171,6 @@ async function fetchJsonWithRetry(url: string, init: RequestInit, logLabel: stri
             });
 
             const data = await response.json().catch(() => ({}));
-            console.log(`${logLabel} attempt ${attempt} status:`, response.status);
-            console.log(`${logLabel} response:`, JSON.stringify(data, null, 2));
 
             if (!response.ok) {
                 throw new ExternalApiError(
@@ -187,10 +187,10 @@ async function fetchJsonWithRetry(url: string, init: RequestInit, logLabel: stri
             }
 
             lastError = new Error(getFetchErrorMessage(error));
-            console.warn(`${logLabel} attempt ${attempt} failed:`, error);
 
             if (attempt < EXTERNAL_FETCH_RETRIES) {
-                await delay(1000 * attempt);
+                // Shorter delay: 500ms * attempt (was 1000ms * attempt)
+                await delay(500 * attempt);
             }
         } finally {
             clearTimeout(timeoutId);
@@ -300,24 +300,53 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'License key is required' }, { status: 400 });
         }
 
+        // Try to fetch from local database first - if exists and valid, use it
+        const localLicense = await fetchLocalLicense(licenseKey);
+        if (localLicense && localLicense.expires_at) {
+            const expiresAt = new Date(localLicense.expires_at);
+            const now = new Date();
+            
+            // If local license is still valid for more than 1 day, return it immediately
+            const oneDayFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+            if (expiresAt > oneDayFromNow) {
+                return NextResponse.json({
+                    success: true,
+                    source: 'local_license_cached',
+                    syncedAt: new Date().toISOString(),
+                    data: localLicense,
+                    info: 'Using cached local license (still valid)'
+                });
+            }
+        }
+
+        // Try to sync from external API (with shorter timeout)
         let externalRow: Record<string, any>;
         try {
             externalRow = await fetchExternalLicenseByKey(licenseKey);
         } catch (error: any) {
-            if (error instanceof ExternalApiError && error.status === 404) {
-                const localLicense = await fetchLocalLicense(licenseKey);
-                if (localLicense) {
-                    return NextResponse.json({
-                        success: true,
-                        source: 'local_license_keys_fallback',
-                        syncedAt: new Date().toISOString(),
-                        data: localLicense,
-                        warning: 'License not found in verify-license API. Using local database record.'
-                    });
-                }
+            // If external API fails but we have a local license, fall back to it
+            if (localLicense) {
+                return NextResponse.json({
+                    success: true,
+                    source: 'local_license_fallback',
+                    syncedAt: new Date().toISOString(),
+                    data: localLicense,
+                    warning: 'External API unavailable. Using local database record.'
+                });
             }
+            
+            // If it's a 404, license doesn't exist
+            if (error instanceof ExternalApiError && error.status === 404) {
+                return NextResponse.json({
+                    error: 'License not found in verify-license API',
+                    status: 'not_found'
+                }, { status: 404 });
+            }
+            
+            // For other errors, throw to be caught by outer try-catch
             throw error;
         }
+        
         const normalizedRow = normalizeExternalLicense(externalRow);
 
         if (!normalizedRow.license_key) {
@@ -337,16 +366,21 @@ export async function POST(req: NextRequest) {
             data: normalizedRow
         });
     } catch (error: any) {
-        console.error('License sync error:', error);
+        // Provide more helpful error messages
+        const errorMessage = error?.message || 'Internal server error';
+        const isTimeout = /timed out|timeout|verify-license API|resolved|refused/i.test(errorMessage);
+        
         return NextResponse.json({
-            error: error?.message || 'Internal server error'
+            error: errorMessage,
+            tip: isTimeout 
+                ? 'The license verification server is not responding. Please try again later or contact support.'
+                : 'Failed to sync license. Please check your internet connection.'
         }, {
-            status:
-                error instanceof ExternalApiError && error.status === 404
-                    ? 404
-                    : /timed out|verify-license API|resolved|refused/i.test(String(error?.message || ''))
-                        ? 504
-                        : 500
+            status: error instanceof ExternalApiError && error.status === 404
+                ? 404
+                : isTimeout
+                    ? 504
+                    : 500
         });
     }
 }
